@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Feedback</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/feedback.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Back Header -->
+    <div class="subpage-header transparent-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.history.back()">
+            <span>‹</span> Back
+        </button>
+    </div>
+
+    <div class="feedback-container">
+
+        <div class="header-text">
+            <h1 class="page-title">Give Feedback</h1>
+            <p class="page-subtitle">Help us improving viewer experience</p>
+        </div>
+
+        <div class="feedback-card">
+            <div class="card-header">
+                <span class="header-icon">💬</span>
+                <div>
+                    <h2>Submit Feedback</h2>
+                    <p>Tell us about experience</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>User ID *</label>
+                <input type="text" class="input-field focusable" placeholder="e.g., CAS23894" tabindex="0">
+            </div>
+
+            <div class="form-group">
+                <label>How would you rate us?</label>
+                <div class="star-rating focusable" tabindex="0">
+                    <span class="star">☆</span>
+                    <span class="star">☆</span>
+                    <span class="star">☆</span>
+                    <span class="star">☆</span>
+                    <span class="star">☆</span>
+                </div>
+                <p class="rating-sub">Tap a star to rate</p>
+            </div>
+
+            <div class="form-group">
+                <label>Detailed Feedback *</label>
+                <textarea class="textarea-field focusable" placeholder="What did you like? what can we do better?"
+                    rows="5" tabindex="0"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button class="submit-btn focusable" tabindex="0">Submit</button>
+                <button class="cancel-btn focusable" tabindex="0" onclick="window.history.back()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/feedback.js"></script>
+</body>
+
+</html>

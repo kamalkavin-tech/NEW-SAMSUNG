@@ -1,1 +1,82 @@
-/* Notifications styles */
+/* Notifications CSS */
+
+.transparent-header {
+    background: transparent;
+    padding: 20px 40px;
+}
+
+.notifications-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    padding-top: 60px;
+}
+
+.notifications-card {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
+    padding: 40px;
+    width: 900px;
+    height: 600px;
+    /* approximates aspect ratio */
+    background: black;
+    /* Or very dark grey/transparent if glass */
+    position: relative;
+}
+
+.page-title {
+    font-size: 32px;
+    margin-bottom: 40px;
+    font-weight: bold;
+}
+
+.notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.notif-item {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-radius: 12px;
+    transition: background 0.2s;
+}
+
+.notif-item:focus {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.notif-icon-box {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    background: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 20px;
+    font-size: 20px;
+}
+
+.notif-content {
+    flex: 1;
+}
+
+.notif-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.notif-subtitle {
+    font-size: 14px;
+    color: #888;
+}
+
+.notif-time {
+    color: #888;
+    font-size: 14px;
+}

@@ -10,15 +10,14 @@
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body>
+<body class="channels-page">
 
     <!-- Header -->
     <div class="subpage-header">
         <div class="header-left">
-            <button class="back-btn focusable" tabindex="0" onclick="window.history.back()">
+            <button class="back-btn focusable" tabindex="0">
                 <span>‹</span> Back
             </button>
-            <div class="page-title">TV Channels</div>
         </div>
 
         <div class="header-right">
@@ -29,213 +28,26 @@
         </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="filters-bar">
-        <button class="filter-chip active focusable" tabindex="0">All</button>
-        <button class="filter-chip focusable" tabindex="0">Subscribed</button>
-        <button class="filter-chip focusable" tabindex="0">Entertainment</button>
-        <button class="filter-chip focusable" tabindex="0">Sports</button>
-        <button class="filter-chip focusable" tabindex="0">News</button>
-        <button class="filter-chip focusable" tabindex="0">Kids</button>
-        <button class="filter-chip focusable" tabindex="0">Language ⌄</button>
+    <!-- Page Title Row -->
+    <div class="page-title-container" style="padding: 0 48px; margin-top: 10px;">
+        <div class="page-title">TV Channels</div>
     </div>
 
-    <!-- Section 1: TV Channels (Live) -->
-    <div class="subpage-section">
-        <!-- The image just shows row of channels without section title for the first row, but implied -->
-        <div class="grid-5">
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon udaya-icon">
-                        <div class="live-badge">
-                            <div class="live-dot"></div>Live
-                        </div>
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">UDAYA</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Udhaya TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon colors-icon">
-                        <div class="live-badge">
-                            <div class="live-dot"></div>Live
-                        </div>
-                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Colors Super TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon zee-icon">
-                        <div class="live-badge">
-                            <div class="live-dot"></div>Live
-                        </div>
-                        <span class="zee-logo">ZEE</span>
-                        <span class="zee-kannada">ಕನ್ನಡ</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Zee-kanada</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon gemini-icon">
-                        <div class="live-badge">
-                            <div class="live-dot"></div>Live
-                        </div>
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">GEMINI</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Gemini TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon udaya-icon">
-                        <div class="live-badge">
-                            <div class="live-dot"></div>Live
-                        </div>
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">UDAYA</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Udhaya TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-        </div>
+    <!-- Filter Bar / Categories -->
+    <div id="category-container" class="filters-bar">
+        <!-- Categories will be loaded here dynamically -->
+        <div class="loading-spinner">Loading Categories...</div>
     </div>
 
-
-    <!-- Section 2: Mostly Viewed Channels -->
-    <div class="subpage-section">
-        <h2 class="section-label">Mostly Viewed Channels</h2>
-        <div class="grid-5">
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon colors-icon">
-                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Colors Super TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon zee-icon">
-                        <span class="zee-logo">ZEE</span>
-                        <span class="zee-kannada">ಕನ್ನಡ</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Zee-kanada</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon gemini-icon">
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">GEMINI</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Gemini TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon udaya-icon">
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">UDAYA</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Udhaya TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon colors-icon">
-                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Colors Super TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Section 3: Others Channels -->
-    <div class="subpage-section">
-        <h2 class="section-label">Others Channels</h2>
-        <div class="grid-5">
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon zee-icon">
-                        <span class="zee-logo">ZEE</span>
-                        <span class="zee-kannada">ಕನ್ನಡ</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Zee-kanada</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon gemini-icon">
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">GEMINI</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Gemini TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon udaya-icon">
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">UDAYA</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Udhaya TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon colors-icon">
-                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Colors Super TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon zee-icon">
-                        <span class="zee-logo">ZEE</span>
-                        <span class="zee-kannada">ಕನ್ನಡ</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Zee-kanada</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-        </div>
+    <!-- Main Content Area / Channel Grid -->
+    <div id="channel-grid-container" class="subpage-section">
+        <!-- Channels will be loaded here dynamically -->
+        <div class="loading-spinner">Loading Channels...</div>
     </div>
 
     <!-- Specific JS for this page -->
+    <!-- Specific JS for this page -->
+    <script src="js/api.js"></script>
     <script src="js/channels.js"></script>
 </body>
 

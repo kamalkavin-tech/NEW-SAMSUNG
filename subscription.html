@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Subscription</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/subscription.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Back Header -->
+    <div class="subpage-header transparent-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
+            <span>‹</span> Back
+        </button>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="subscription-layout">
+
+        <!-- Left Sidebar -->
+        <aside class="sub-sidebar">
+            <div class="sidebar-item active focusable" tabindex="0">
+                <span class="icon">✉</span> Make Payment
+            </div>
+            <div class="sidebar-item focusable" tabindex="0">
+                <span class="icon">📺</span> Expiring channels
+            </div>
+            <div class="sidebar-item focusable" tabindex="0">
+                <span class="icon">💸</span> Payment History
+            </div>
+        </aside>
+
+        <!-- Right Content -->
+        <main class="sub-content">
+            <div class="content-header">
+                <h1 class="page-main-title">Subscription and Billing</h1>
+                <p class="page-subtitle">Here Your subscription Detailes</p>
+                <h2 class="section-heading">Make Payment</h2>
+            </div>
+
+            <!-- Top Row: Plan & Methods -->
+            <div class="billing-row">
+                <!-- Plan Info -->
+                <div class="plan-card">
+                    <h3>Premium Plan</h3>
+                    <p class="bill-date">Next Billing date: 27 Dec 2025</p>
+                    <p class="plan-price">$19.99/ Month</p>
+
+                    <button class="pay-btn focusable" tabindex="0">Make Payment Now</button>
+                    <div class="manage-link focusable" tabindex="0">Manage Subscription</div>
+                </div>
+
+                <!-- Methods -->
+                <div class="methods-card">
+                    <h3>Select Payment Method</h3>
+                    <div class="method-list">
+                        <button class="method-item focusable" tabindex="0">
+                            <span>Debit Card</span> <span class="arrow">›</span>
+                        </button>
+                        <button class="method-item focusable" tabindex="0">
+                            <span>Credit Cad</span> <span class="arrow">›</span>
+                        </button>
+                        <button class="method-item focusable" tabindex="0">
+                            <span>UPI method</span> <span class="arrow">›</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Explore Options -->
+            <div class="section-spacer"></div>
+            <h2 class="section-heading-sm">Explore more channel options</h2>
+            <div class="explore-grid">
+                <div class="explore-card focusable" tabindex="0">
+                    <div class="ex-icon">💾</div>
+                    <div class="ex-text">Package Channel<br>Selection</div>
+                </div>
+                <div class="explore-card focusable" tabindex="0">
+                    <div class="ex-icon">▶</div>
+                    <div class="ex-text">Single Channel<br>Selection</div>
+                </div>
+                <div class="explore-card focusable" tabindex="0">
+                    <div class="ex-icon">👥</div>
+                    <div class="ex-text">Group<br>Selection</div>
+                </div>
+            </div>
+
+            <!-- Expiring Channels -->
+            <div class="section-spacer"></div>
+            <h2 class="section-heading-sm">Expiring Channels</h2>
+            <div class="expiring-list">
+                <!-- Item 1 -->
+                <div class="expiring-item focusable" tabindex="0">
+                    <div class="channel-info">
+                        <div class="ch-logo text-logo colors">colors</div>
+                        <div class="ch-details">
+                            <div class="ch-name">Colors TV</div>
+                            <div class="ch-expiry">Expires in 3 days</div>
+                        </div>
+                    </div>
+                    <button class="action-btn cancel focusable" tabindex="0">Cancel</button>
+                </div>
+
+                <!-- Item 2 (Active/Renewing) -->
+                <div class="expiring-panel active">
+                    <div class="qr-box">
+                        <div class="qr-code">
+                            <!-- Simple QR mockup using CSS or SVG -->
+                            <svg width="60" height="60" viewBox="0 0 100 100" fill="none" stroke="currentColor"
+                                stroke-width="4">
+                                <rect x="10" y="10" width="30" height="30" />
+                                <rect x="60" y="10" width="30" height="30" />
+                                <rect x="10" y="60" width="30" height="30" />
+                                <path d="M60 60 H90 V90 H60 Z" />
+                                <path d="M45 10 V90" stroke-dasharray="5 5" />
+                                <path d="M10 45 H90" stroke-dasharray="5 5" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="panel-details">
+                        <h3>Renew Colors TV for $9.99</h3>
+                        <p>Scan the QR Code with your mobile device's camera or a payment app to complete the renewal
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Item 3 -->
+                <div class="expiring-item focusable" tabindex="0">
+                    <div class="channel-info">
+                        <div class="ch-logo img-logo">
+                            <div class="sun-logo"></div>
+                        </div>
+                        <div class="ch-details">
+                            <div class="ch-name">Gemini TV</div>
+                            <div class="ch-expiry">Expires in 6 days</div>
+                        </div>
+                    </div>
+                    <button class="action-btn renew focusable" tabindex="0">Renew</button>
+                </div>
+
+                <!-- Item 4 -->
+                <div class="expiring-item focusable" tabindex="0">
+                    <div class="channel-info">
+                        <div class="ch-logo img-logo">
+                            <div class="sun-logo"></div>
+                        </div>
+                        <div class="ch-details">
+                            <div class="ch-name">Udhaya TV</div>
+                            <div class="ch-expiry">Expires in 9 days</div>
+                        </div>
+                    </div>
+                    <button class="action-btn renew focusable" tabindex="0">Renew</button>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="js/subscription.js"></script>
+</body>
+
+</html>

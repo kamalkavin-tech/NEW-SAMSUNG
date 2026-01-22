@@ -20,6 +20,7 @@
 
     <!-- REQUIRED for API + IPTV -->
     <access origin="*" subdomains="true"/>
+    <access origin="http://124.40.244.211" subdomains="true"/>
 
     <!-- Network -->
     <tizen:privilege name="http://tizen.org/privilege/internet"/>

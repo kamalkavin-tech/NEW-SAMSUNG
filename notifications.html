@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Notifications</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/notifications.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Back Header -->
+    <div class="subpage-header transparent-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
+            <span>‹</span> Back
+        </button>
+    </div>
+
+    <div class="notifications-container">
+        <div class="notifications-card">
+            <h1 class="page-title">Notifications</h1>
+
+            <div class="notification-list">
+                <!-- New Episode -->
+                <div class="notif-item focusable" tabindex="0">
+                    <div class="notif-icon-box play">
+                        <span class="icon">▶</span>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-title">New episode: Peacemaker S3E2 is now available</div>
+                        <div class="notif-subtitle">New episode alert</div>
+                    </div>
+                    <div class="notif-time">5 mins ago</div>
+                </div>
+
+                <!-- Recommendation -->
+                <div class="notif-item focusable" tabindex="0">
+                    <div class="notif-icon-box like">
+                        <span class="icon">👍</span>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-title">Watch: The Boys, you might like this...</div>
+                        <div class="notif-subtitle">Content Recommendation</div>
+                    </div>
+                    <div class="notif-time">2 hrs ago</div>
+                </div>
+
+                <!-- Subscription -->
+                <div class="notif-item focusable" tabindex="0">
+                    <div class="notif-icon-box sub">
+                        <span class="icon">🎟</span>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-title">Colors TV subscription is ending in 2 days</div>
+                        <div class="notif-subtitle">Subscription Reminder</div>
+                    </div>
+                    <div class="notif-time">yesterday</div>
+                </div>
+
+                <!-- Security -->
+                <div class="notif-item focusable" tabindex="0">
+                    <div class="notif-icon-box security">
+                        <span class="icon">🛡</span>
+                    </div>
+                    <div class="notif-content">
+                        <div class="notif-title">Password reset Successful</div>
+                        <div class="notif-subtitle">Security alert</div>
+                    </div>
+                    <div class="notif-time">2 days ago</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/notifications.js"></script>
+</body>
+
+</html>

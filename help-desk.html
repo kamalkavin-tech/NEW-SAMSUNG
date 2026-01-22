@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Help Desk</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/help-desk.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Back Header -->
+    <div class="subpage-header transparent-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
+            <span>‹</span> Back
+        </button>
+    </div>
+
+    <div class="help-container">
+
+        <div class="help-header-text">
+            <h1 class="page-title">Help Desk</h1>
+            <p class="page-subtitle">Having troubles with your stream? Raise a complaint and we'll fix it</p>
+        </div>
+
+        <div class="help-content-row">
+            <!-- Left: Raise Complaint -->
+            <div class="help-card form-card">
+                <div class="card-header">
+                    <span class="header-icon">💬</span>
+                    <div>
+                        <h2>Raise a complaint</h2>
+                        <p>Please provide details about your issue</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>User ID *</label>
+                        <input type="text" class="input-field focusable" placeholder="e.g., CAS23894" tabindex="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Mobile no *</label>
+                        <input type="text" class="input-field focusable" placeholder="e.g., 9876543210" tabindex="0">
+                    </div>
+                </div>
+
+                <div class="form-group col-span">
+                    <label>Describe your issue *</label>
+                    <textarea class="textarea-field focusable" placeholder="e.g., Buffering issue in HD Channels"
+                        rows="4" tabindex="0"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button class="submit-btn focusable" tabindex="0">Submit</button>
+                    <button class="cancel-btn focusable" tabindex="0">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Right: Recent Activity -->
+            <div class="help-card activity-card">
+                <div class="activity-header">
+                    <h2>Recent Activity</h2>
+                    <span class="view-all focusable" tabindex="0">View All</span>
+                </div>
+
+                <div class="activity-list">
+                    <!-- Item 1 -->
+                    <div class="activity-item">
+                        <div class="status-badge resolved">Resolved</div>
+                        <span class="activity-date">Dec 12, 25</span>
+                        <div class="activity-title">Login Authentication Error</div>
+                        <div class="activity-desc">Unable to login to ...</div>
+                    </div>
+
+                    <!-- Item 2 -->
+                    <div class="activity-item">
+                        <div class="status-badge pending">Pending</div>
+                        <span class="activity-date">Today</span>
+                        <div class="activity-title">Subscription Issue</div>
+                        <div class="activity-desc">Premium sports pack ...</div>
+                    </div>
+
+                    <!-- Item 3 -->
+                    <div class="activity-item">
+                        <div class="status-badge closed">Closed</div>
+                        <span class="activity-date">Yesterday</span>
+                        <div class="activity-title">Feedback Submission</div>
+                        <div class="activity-desc">Good service quality ...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Banner -->
+        <div class="feedback-banner">
+            <div>
+                <h2>We value your opinion!</h2>
+                <p>Help us improve your viewing experience</p>
+            </div>
+            <button class="give-feedback-btn focusable" tabindex="0" onclick="window.location.href='feedback.html'">Give
+                FeedBack</button>
+        </div>
+    </div>
+
+    <script src="js/help-desk.js"></script>
+</body>
+
+</html>

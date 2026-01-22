@@ -68,24 +68,22 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 30px 60px;
+    padding: 30px 48px;
+    /* Matched 48px spec */
     background: transparent;
+    margin-top: 10px;
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 20px;
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 20px;
+    gap: 15px;
 }
 
 .page-title {
-    font-size: 32px;
-    font-weight: bold;
-    color: var(--text-main);
+    font-size: 34px;
+    font-weight: 600;
+    color: white;
+    margin-left: 0;
+    /* Align left */
 }

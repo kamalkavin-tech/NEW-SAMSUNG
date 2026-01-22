@@ -108,28 +108,48 @@
 }
 
 .filter-chip {
-    background: var(--bg-card);
-    color: var(--text-sec);
-    padding: 10px 25px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1f1f1f;
+    /* Default Dark */
+    color: #bfbfbf;
+    /* Muted Text */
+    height: 42px;
+    /* Fixed Height */
+    padding: 0 24px;
+    /* Horizontal Padding */
+    border-radius: 22px;
+    /* Pill Shape */
+    border: none;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 500;
     white-space: nowrap;
-    transition: all 0.3s;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .filter-chip.active {
-    background: #1e3a8a;
+    background: #3b5cff;
+    /* Accent Blue */
     color: white;
-    border-color: #1e3a8a;
+    font-weight: 600;
+    border: none;
 }
 
-.filter-chip:hover,
 .filter-chip:focus {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-    transform: translateY(-2px);
+    transform: scale(1.05);
+    /* Subtle grow */
+    box-shadow: 0 0 0 2px white;
+    /* Focus ring for accessibility */
+    background: #333;
+    /* Slightly lighter on focus if not active */
+    outline: none;
+}
+
+.filter-chip.active:focus {
+    background: #3b5cff;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
 }
 
 .get-otp-btn {

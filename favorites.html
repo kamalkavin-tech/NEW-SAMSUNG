@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Favorites</title>
+    <!-- Base Styles -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/favorites.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="subpage-header">
+        <div class="header-left">
+            <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
+                <span>‹</span> Back
+            </button>
+            <div class="page-title">Favorite TV Channels</div>
+        </div>
+
+        <div class="header-right">
+            <!-- Optional: Search or other icons if needed, keeping empty or minimal to match image -->
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filters-bar">
+        <button class="filter-chip active focusable" tabindex="0">All</button>
+        <button class="filter-chip focusable" tabindex="0">Subscribed</button>
+        <button class="filter-chip focusable" tabindex="0">Entertainment</button>
+        <button class="filter-chip focusable" tabindex="0">Sports</button>
+        <button class="filter-chip focusable" tabindex="0">News</button>
+        <button class="filter-chip focusable" tabindex="0">Kids</button>
+        <button class="filter-chip focusable" tabindex="0">Language ⌄</button>
+    </div>
+
+    <!-- Favorites Grid -->
+    <div class="subpage-section">
+        <div class="grid-5" id="favoritesGrid">
+            <!-- Udaya TV -->
+            <div class="channel-group">
+                <div class="channel-card focusable" tabindex="0">
+                    <div class="channel-icon udaya-icon">
+                        <div class="sun-logo"></div>
+                        <span class="channel-name">UDAYA</span>
+                        <div class="heart-icon active">❤</div>
+                    </div>
+                </div>
+                <div class="card-title-bottom">Udhaya TV</div>
+                <div class="card-subtitle-bottom">live Channels</div>
+            </div>
+
+            <!-- Colors Super -->
+            <div class="channel-group">
+                <div class="channel-card focusable" tabindex="0">
+                    <div class="channel-icon colors-icon">
+                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
+                        <div class="heart-icon active">❤</div>
+                    </div>
+                </div>
+                <div class="card-title-bottom">Colors Super TV</div>
+                <div class="card-subtitle-bottom">live Channels</div>
+            </div>
+
+            <!-- Zee Kannada -->
+            <div class="channel-group">
+                <div class="channel-card focusable" tabindex="0">
+                    <div class="channel-icon zee-icon">
+                        <span class="zee-logo">ZEE</span>
+                        <span class="zee-kannada">ಕನ್ನಡ</span>
+                        <div class="heart-icon active">❤</div>
+                    </div>
+                </div>
+                <div class="card-title-bottom">Zee-kanada</div>
+                <div class="card-subtitle-bottom">live Channels</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/favorites.js"></script>
+</body>
+
+</html>

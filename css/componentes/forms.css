@@ -39,22 +39,38 @@
 }
 
 .subpage-search {
-    background: var(--bg-search);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 30px;
-    padding: 12px 25px;
-    width: 300px;
+    background: #1c1c1c;
+    /* Dark Gray from spec */
+    border: none;
+    border-radius: 22px;
+    /* Matched 22px radius */
+    padding: 0 20px;
+    /* Internal padding */
+    width: 420px;
+    /* Matched 420px width */
+    height: 44px;
+    /* Matched 44px height */
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+}
+
+.subpage-search span {
+    color: #9a9a9a;
+    font-size: 18px;
 }
 
 .subpage-search input {
     background: transparent;
     border: none;
-    color: var(--text-main);
+    color: white;
     outline: none;
     width: 100%;
+    font-size: 16px;
+}
+
+.subpage-search input::placeholder {
+    color: #666;
 }
 
 .phone-input-container {

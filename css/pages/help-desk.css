@@ -1,0 +1,225 @@
+/* Help Desk CSS */
+
+.transparent-header {
+    background: transparent;
+    padding: 20px 40px;
+    position: absolute;
+    top: 0;
+    width: 100%;
+}
+
+.help-container {
+    padding: 80px 100px 40px 100px;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.help-header-text {
+    margin-bottom: 30px;
+}
+
+.page-title {
+    font-size: 36px;
+    margin-bottom: 10px;
+}
+
+.page-subtitle {
+    font-size: 16px;
+    color: #aaa;
+}
+
+.help-content-row {
+    display: flex;
+    gap: 40px;
+    flex: 1;
+}
+
+.help-card {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 30px;
+    background: transparent;
+}
+
+/* Form Card */
+.form-card {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-header {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.header-icon {
+    font-size: 30px;
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.form-group.col-span {
+    width: 100%;
+}
+
+.input-field,
+.textarea-field {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    padding: 15px;
+    border-radius: 25px;
+    color: white;
+    font-family: inherit;
+}
+
+.textarea-field {
+    border-radius: 15px;
+    resize: none;
+}
+
+.input-field:focus,
+.textarea-field:focus {
+    border-color: #2b4cff;
+    outline: none;
+}
+
+.form-actions {
+    margin-top: auto;
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.submit-btn {
+    background: #2b4cff;
+    color: white;
+    border: none;
+    padding: 12px 40px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.cancel-btn {
+    background: #333;
+    color: white;
+    border: none;
+    padding: 12px 40px;
+    border-radius: 25px;
+    cursor: pointer;
+}
+
+.submit-btn:focus,
+.cancel-btn:focus {
+    transform: scale(1.05);
+    border: 1px solid white;
+}
+
+
+/* Activity Card */
+.activity-card {
+    flex: 2;
+}
+
+.activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.view-all {
+    color: #888;
+    cursor: pointer;
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.activity-item {
+    position: relative;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: black;
+    margin-bottom: 5px;
+}
+
+.resolved {
+    background: #d0f0c0;
+}
+
+.pending {
+    background: #fff9c4;
+}
+
+.closed {
+    background: #eee;
+}
+
+.activity-date {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 12px;
+    color: #888;
+}
+
+.activity-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.activity-desc {
+    color: #888;
+    font-size: 13px;
+}
+
+/* Feedback Banner */
+.feedback-banner {
+    margin-top: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 20px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.give-feedback-btn {
+    background: transparent;
+    border: 1px solid #666;
+    color: white;
+    padding: 10px 30px;
+    border-radius: 25px;
+    cursor: pointer;
+}
+
+.give-feedback-btn:focus {
+    border-color: white;
+    background: rgba(255, 255, 255, 0.1);
+}

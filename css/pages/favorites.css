@@ -1,1 +1,22 @@
-/* Styles for favorites page if created */
+/* Favorites Page Specific Styles */
+
+.heart-icon {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: red;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.channel-icon {
+    position: relative;
+    /* Ensure specific icon containers are relative for absolute positioning of heart */
+}

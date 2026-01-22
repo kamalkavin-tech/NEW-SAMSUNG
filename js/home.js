@@ -1,4 +1,4 @@
-/* ================================
+    /* ================================
    BBNL IPTV - HOME PAGE SCRIPT
    ================================ */
 
@@ -185,6 +185,38 @@ function handleClick(element) {
             if (firstMenuItem) firstMenuItem.focus();
         }
         return;
+    }
+
+    // Menu Items Navigation Logic (for Remote 'Enter' key)
+    if (element.classList.contains('menu-item')) {
+        if (element.innerText.includes('Home')) {
+            window.location.href = 'home.html';
+            return;
+        }
+        if (element.innerText.includes('Live Channels') || element.innerText.includes('TV Channels')) {
+            window.location.href = 'channels.html';
+            return;
+        }
+        if (element.innerText.includes('Subscription')) {
+            window.location.href = 'subscription.html';
+            return;
+        }
+        if (element.innerText.includes('Favorites')) {
+            window.location.href = 'favorites.html';
+            return;
+        }
+        if (element.innerText.includes('Notification')) {
+            window.location.href = 'notifications.html';
+            return;
+        }
+        if (element.innerText.includes('Get Complaint')) {
+            window.location.href = 'help-desk.html';
+            return;
+        }
+        if (element.innerText.includes('Get Feedback')) {
+            window.location.href = 'feedback.html';
+            return;
+        }
     }
 
     // Close Menu if Backdrop Clicked (this needs separate event listener, but for now specific check)

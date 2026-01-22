@@ -1,6 +1,41 @@
 /* Remote Control specific styles */
+
+/* Base transition for all focusable elements */
+.focusable {
+    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        box-shadow 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        border-color 0.25s ease;
+    will-change: transform, box-shadow;
+}
+
+/* Professional Highlight for Focus State */
 .focusable:focus {
     outline: none;
-    /* Often handled by component specific focus styles, 
-       but global remote focus indicator can go here if needed */
+
+    /* "Pop" effect - Scale up */
+    transform: scale(1.08);
+    /* Slightly larger for clear selection */
+
+    /* High-contrast multi-layer shadow to simulate a glowing border without layout shift */
+    box-shadow:
+        0 0 0 4px #ffffff,
+        /* Solid white ring */
+        0 20px 40px rgba(0, 0, 0, 0.6),
+        /* Deep drop shadow for depth */
+        0 0 20px rgba(255, 255, 255, 0.3);
+    /* Subtle outer glow */
+
+    /* Ensure element is above everything else */
+    z-index: 999;
+    position: relative;
+
+    /* Optional: Ensure border doesn't double wash if existing borders are present */
+    border-color: transparent;
+}
+
+/* Specific adjustment for large cards to prevent too much growth */
+.app-card:focus,
+.channel-card:focus {
+    /* Slightly less scale for big cards to avoid screen overflow */
+    transform: scale(1.05);
 }
