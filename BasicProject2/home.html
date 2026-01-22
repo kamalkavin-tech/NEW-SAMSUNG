@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL IPTV - Home</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-left">
+            <div class="logo">
+                <span class="logo-icon">📺</span>
+                <span class="logo-text">BBNL</span>
+            </div>
+            <button class="menu-btn focusable" tabindex="0">☰</button>
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Search for movies, TV shows..." class="search-input">
+            </div>
+        </div>
+        <div class="nav-right">
+
+            <div class="nav-item">
+                <span>Dark Mode</span>
+                <div id="darkModeModeToggle" class="toggle-switch focusable" tabindex="0">
+                    <div class="toggle-circle"></div>
+                </div>
+            </div>
+            <div class="nav-item">
+                <span class="wifi-icon">📶</span>
+                <span>Network</span>
+            </div>
+            <button class="settings-btn focusable" tabindex="0">⚙️</button>
+            <div class="profile-pic">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%234a90e2'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='white' font-size='18' font-family='Arial'%3EU%3C/text%3E%3C/svg%3E"
+                    alt="Profile">
+            </div>
+        </div>
+
+        <!-- Side Menu Overlay -->
+        <div id="sideMenu" class="side-menu-overlay">
+            <div class="glass-menu">
+                <div class="menu-brand">
+                    <span class="logo-icon">📺</span>
+                    <span class="logo-text">BBNL</span>
+                </div>
+
+                <div class="menu-list">
+                    <button class="menu-item active focusable" tabindex="0">
+                        <span class="icon">🏠</span> Home
+                    </button>
+                    <button class="menu-item focusable" tabindex="0" onclick="window.location.href='channels.html'">
+                        <span class="icon">📺</span> Live Channels
+                    </button>
+                    <button class="menu-item focusable" tabindex="0">
+                        <span class="icon">🎬</span> Movies
+                    </button>
+                    <button class="menu-item focusable" tabindex="0">
+                        <span class="icon">💳</span> Subscription
+                    </button>
+                    <button class="menu-item focusable" tabindex="0">
+                        <span class="icon">🔔</span> Notification
+                    </button>
+
+                    <div class="menu-divider"></div>
+
+                    <div class="menu-section-label">Help Desk</div>
+                    <button class="menu-item sub-item focusable" tabindex="0">
+                        <span class="icon">💬</span> Get Complaint
+                    </button>
+                    <button class="menu-item sub-item focusable" tabindex="0">
+                        <span class="icon">📝</span> Get Feedback
+                    </button>
+                </div>
+            </div>
+            <!-- Click outside to close area -->
+            <div class="menu-backdrop" id="menuBackdrop"></div>
+        </div>
+    </nav>
+
+    <!-- Hero Banner -->
+    <section class="hero-banner">
+        <div class="hero-content">
+            <h1 class="hero-title">The Batman</h1>
+            <p class="hero-subtitle">Superhero • 2022</p>
+            <p class="hero-description">
+                noir-inspired reboot of the iconic superhero,<br>
+                directed by Matt Reeves and starring Robert<br>
+                Pattinson as a younger, more emotionally raw<br>
+                Bruce Wayne. Set during Batman's second<br>
+                year of crime-fighting.
+            </p>
+            <div class="hero-tags">
+                <span class="tag">Sci-fi</span>
+                <span class="tag">Thriller</span>
+                <span class="tag">Drama</span>
+            </div>
+            <div class="hero-buttons">
+                <button class="btn-watch focusable" tabindex="0">Watch Now</button>
+                <button class="btn-add focusable" tabindex="0">+</button>
+            </div>
+        </div>
+        <div class="hero-image">
+            <!-- Batman silhouette will be in CSS background -->
+        </div>
+    </section>
+
+    <!-- Your OTT Apps Section -->
+    <section class="content-section">
+        <h2 class="section-title">Your OTT Apps</h2>
+        <div class="apps-grid">
+            <div class="app-card focusable" tabindex="0" data-app="jiohotstar">
+                <div class="app-icon jiohotstar-icon">
+                    <span class="star-icon">✦</span>
+                    <span class="app-name">JioHotstar</span>
+                </div>
+                <p class="app-label">Streaming Services</p>
+            </div>
+            <div class="app-card focusable" tabindex="0" data-app="prime">
+                <div class="app-icon prime-icon">
+                    <span class="prime-text">prime<br>video</span>
+                </div>
+                <p class="app-label">Streaming Services</p>
+            </div>
+            <div class="app-card focusable" tabindex="0" data-app="netflix">
+                <div class="app-icon netflix-icon">
+                    <span class="netflix-text">NETFLIX</span>
+                </div>
+                <p class="app-label">Streaming Services</p>
+            </div>
+            <div class="app-card focusable" tabindex="0" data-app="appletv">
+                <div class="app-icon appletv-icon">
+                    <span class="apple-logo">🍎</span>
+                    <span class="tv-text">tv</span>
+                </div>
+                <p class="app-label">Streaming Services</p>
+            </div>
+            <div class="app-card view-all focusable" tabindex="0">
+                <div class="app-icon view-all-icon">
+                    <span class="arrow">→</span>
+                </div>
+                <p class="app-label">View All Ott<br>Streaming Services</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live TV Channels Section -->
+    <section class="content-section">
+        <h2 class="section-title">Live TV Channels</h2>
+        <div class="channels-grid">
+            <div class="channel-card focusable" tabindex="0" data-channel="udaya">
+                <div class="channel-icon udaya-icon">
+                    <div class="sun-logo"></div>
+                    <span class="channel-name">UDAYA</span>
+                </div>
+                <p class="channel-label">Udaya TV<br>live Channels</p>
+            </div>
+            <div class="channel-card focusable" tabindex="0" data-channel="colors">
+                <div class="channel-icon colors-icon">
+                    <span class="colors-text">colors<br><strong>SUPER</strong></span>
+                </div>
+                <p class="channel-label">Colors Super TV<br>live Channels</p>
+            </div>
+            <div class="channel-card focusable" tabindex="0" data-channel="zee">
+                <div class="channel-icon zee-icon">
+                    <span class="zee-logo">ZEE</span>
+                    <span class="zee-kannada">ಕನ್ನಡ</span>
+                </div>
+                <p class="channel-label">Zee-kanada<br>live Channels</p>
+            </div>
+            <div class="channel-card focusable" tabindex="0" data-channel="gemini">
+                <div class="channel-icon gemini-icon">
+                    <div class="sun-logo"></div>
+                    <span class="channel-name">GEMINI</span>
+                </div>
+                <p class="channel-label">Gemini TV<br>live Channels</p>
+            </div>
+            <div class="channel-card view-all focusable" tabindex="0">
+                <div class="channel-icon view-all-icon">
+                    <span class="arrow">→</span>
+                </div>
+                <p class="channel-label">View All<br>Channels<br>Live Channels</p>
+            </div>
+        </div>
+    </section>
+
+    <script src="js/home.js"></script>
+</body>
+
+</html>

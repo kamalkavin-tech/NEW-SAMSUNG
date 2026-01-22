@@ -1,0 +1,6 @@
+/* Remote Control specific styles */
+.focusable:focus {
+    outline: none;
+    /* Often handled by component specific focus styles, 
+       but global remote focus indicator can go here if needed */
+}

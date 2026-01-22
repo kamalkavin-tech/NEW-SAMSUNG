@@ -1,0 +1,133 @@
+/* Auth / Login Page Styles */
+.login-container,
+.auth-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-title,
+.auth-title,
+.verify-title {
+    font-size: 56px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.login-subtitle,
+.auth-subtitle {
+    font-size: 18px;
+    color: #8899a6;
+    margin-bottom: 50px;
+    text-align: center;
+}
+
+/* Steps */
+.steps-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 50px;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    color: #666;
+}
+
+.step.active {
+    color: #3b6cff;
+    font-weight: 600;
+}
+
+.step-dot {
+    font-size: 12px;
+}
+
+.step-line {
+    color: #444;
+    letter-spacing: 2px;
+    font-size: 16px;
+}
+
+.country-code {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    cursor: pointer;
+    color: white;
+}
+
+.number-pad {
+    margin-top: 30px;
+    width: 100%;
+}
+
+.number-pad-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.logo-circle {
+    width: 140px;
+    height: 140px;
+    background: linear-gradient(135deg, #101c3d 0%, #050a1a 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 40px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.logo-emoji {
+    font-size: 70px;
+}
+
+.brand-title {
+    font-size: 90px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.brand-subtitle {
+    font-size: 32px;
+    color: #8899a6;
+    margin-bottom: 70px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.version-tag {
+    position: absolute;
+    bottom: 30px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.2);
+    font-family: monospace;
+}
+
+.landing {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+}
+
+.resend-text {
+    font-size: 18px;
+    color: #8899a6;
+    text-align: center;
+}
