@@ -1,0 +1,86 @@
+/* Apps Page Styles */
+.apps-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 25px;
+}
+
+/* Specific App Brands */
+.jiohotstar-icon {
+    background: linear-gradient(135deg, #6b2fb5 0%, #a855f7 100%);
+    flex-direction: column;
+    gap: 10px;
+    color: white;
+}
+
+.star-icon {
+    font-size: 48px;
+}
+
+.app-name {
+    font-size: 22px;
+}
+
+.prime-icon {
+    background: linear-gradient(135deg, #00a8e1 0%, #0080b3 100%);
+    border-bottom: 3px solid #00d9ff;
+    color: white;
+}
+
+.prime-text {
+    font-size: 28px;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.netflix-icon {
+    background: #000;
+}
+
+.netflix-text {
+    font-size: 36px;
+    color: #e50914;
+    font-weight: 900;
+    letter-spacing: 2px;
+}
+
+.appletv-icon {
+    background: #000;
+    flex-direction: column;
+    gap: 5px;
+    color: white;
+}
+
+.apple-logo {
+    font-size: 42px;
+}
+
+.tv-text {
+    font-size: 32px;
+    font-weight: 600;
+}
+
+.view-all-icon {
+    background: var(--bg-tag);
+    color: var(--text-main);
+}
+
+.arrow {
+    font-size: 48px;
+    font-weight: bold;
+}
+
+.app-label {
+    padding: 15px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-sec);
+    background: var(--bg-label);
+    transition: background 0.3s, color 0.3s;
+    line-height: 1.4;
+}
+
+.view-all .app-label {
+    font-size: 13px;
+    line-height: 1.4;
+}

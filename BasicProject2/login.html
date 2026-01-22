@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Login</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <h1 class="login-title">Welcome Back</h1>
+            <p class="login-subtitle">Sign in to continue to your profile</p>
+
+            <!-- Steps Indicator -->
+            <div class="steps-indicator">
+                <div class="step active">
+                    <span class="step-dot">●</span>
+                    <span class="step-text">Phone</span>
+                </div>
+                <div class="step-line">······</div>
+                <div class="step inactive">
+                    <span class="step-dot">○</span>
+                    <span class="step-text">Verify</span>
+                </div>
+            </div>
+
+            <!-- Phone Number Label -->
+            <label class="input-label">Phone Number</label>
+
+            <!-- Phone Input Container -->
+            <div class="phone-input-container">
+                <div class="country-code focusable" tabindex="0">
+                    <span class="code-text">+91</span>
+                    <span class="dropdown-arrow">▼</span>
+                </div>
+                <div class="input-divider"></div>
+                <input type="tel" id="phoneInput" class="phone-input focusable" placeholder="Enter 10 Digit Number"
+                    maxlength="10" inputmode="numeric" pattern="[0-9]*" tabindex="0">
+            </div>
+
+            <!-- Get OTP Button -->
+            <button id="getOtpBtn" class="get-otp-btn focusable" tabindex="0">Get OTP</button>
+
+            <!-- Device Info -->
+            <div class="device-info">
+                <p id="deviceIdText">Device ID: Loading...</p>
+                <p id="ipAddressText">IP: Loading...</p>
+                <p id="macAddressText">MAC: Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+
+</html>

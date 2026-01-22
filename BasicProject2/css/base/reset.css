@@ -1,0 +1,16 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg-body);
+    color: var(--text-main);
+    font-family: 'Inter', Arial, Helvetica, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto;
+    transition: background 0.3s, color 0.3s;
+}
