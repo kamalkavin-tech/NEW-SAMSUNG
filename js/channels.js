@@ -226,9 +226,11 @@ function renderSection(container, titleText, channels) {
         card.tabIndex = 0;
         card.dataset.url = streamLink;
         card.dataset.name = chName;
+        card.dataset.logo = chLogo; // Store Logo
 
         // --- LOGO / ICON AREA ---
         const iconDiv = document.createElement("div");
+
         iconDiv.className = "channel-icon";
 
         // Add Live Badge
@@ -381,6 +383,10 @@ function focusGrid() {
 
 function moveFocus(step) {
     const all = Array.from(document.querySelectorAll(".focusable"));
+    // Filter active set based on where we are?
+    // Actually, keeping strict indices is safer if 'focusable' order is logical.
+
+    // However, for scrolling, we need to ensure the CONTAINER scrolls.
     const idx = all.indexOf(document.activeElement);
 
     if (idx === -1 && all.length > 0) {
@@ -388,15 +394,20 @@ function moveFocus(step) {
         return;
     }
 
-    // Simple linear navigation for now, restricting wrapping if needed, but linear is often okay for simple implementation.
-    // However, crossing between Sidebar (start of DOM) and Grid (end of DOM) linearly is confusing.
-    // We need to filter 'all' based on current container? 
-    // Let's rely on the DOM order: Sidebar items -> Grid items.
-
     let next = idx + step;
     if (next >= 0 && next < all.length) {
-        all[next].focus();
-        all[next].scrollIntoView({ block: "center", behavior: "smooth" });
+        const target = all[next];
+        target.focus();
+
+        // Smart Scroll:
+        // Center the element in the viewport vertically
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+
+        // Additional Check: If inside sidebar, ensure sidebar scrolls
+        if (target.closest('.filters-bar')) {
+            // Sidebar auto-scroll logic usually handled by scrollIntoView, but strictly forcing it:
+            // target.closest('.filters-bar').scrollTop = ...
+        }
     }
 }
 
@@ -405,8 +416,16 @@ function handleEnter(el) {
     if (el.classList.contains('back-btn')) { window.location.href = "home.html"; return; }
     if (el.classList.contains('filter-chip')) { el.click(); return; }
     if (el.classList.contains('channel-card')) {
-        console.log("Play Channel:", el.dataset.name, el.dataset.url);
-        alert("Playing: " + el.dataset.name);
+        console.log("Play Channel:", el.dataset.name);
+
+        // Construct Channel Object
+        const channel = {
+            channel_name: el.dataset.name,
+            streamlink: el.dataset.url,
+            logo_url: el.dataset.logo
+        };
+
+        BBNL_API.playChannel(channel);
         return;
     }
 }

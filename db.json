@@ -1,0 +1,75 @@
+{
+    "login": [
+        {
+            "id": 1,
+            "userid": "testiser1",
+            "mobile": "7800000001",
+            "status": "success",
+            "message": "OTP Sent"
+        }
+    ],
+    "loginOtp": [
+        {
+            "id": 1,
+            "userid": "testiser1",
+            "mobile": "7800000001",
+            "bbnl_authenticated": true,
+            "session_token": "mock-session-123"
+        }
+    ],
+    "chnl_categlist": [
+        {
+            "body": [
+                {
+                    "categories": [
+                        {
+                            "id": "1",
+                            "category_name": "Entertainment",
+                            "grid": "1"
+                        },
+                        {
+                            "id": "2",
+                            "category_name": "News",
+                            "grid": "2"
+                        },
+                        {
+                            "id": "3",
+                            "category_name": "Sports",
+                            "grid": "3"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "chnl_data": [
+        {
+            "body": [
+                {
+                    "id": "101",
+                    "channel_name": "Colors Super TV",
+                    "grid": "1",
+                    "streamlink": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+                    "logo_url": "https://upload.wikimedia.org/wikipedia/en/thumb/9/91/Colors_Super_logo.png/180px-Colors_Super_logo.png"
+                },
+                {
+                    "id": "102",
+                    "channel_name": "BBC News",
+                    "grid": "2",
+                    "streamlink": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+                }
+            ]
+        }
+    ],
+    "iptvads": [
+        {
+            "body": [
+                {
+                    "id": "1",
+                    "adpath": "https://via.placeholder.com/1920x1080.png?text=Ad+1",
+                    "displayarea": "homepage"
+                }
+            ]
+        }
+    ]
+}

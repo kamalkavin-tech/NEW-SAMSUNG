@@ -277,8 +277,9 @@ function handleOK() {
         console.log("Get OTP clicked - Phone number:", val);
 
         if (val.length === 10) {
-            console.log("Navigating to verify.html");
-            window.location.href = "verify.html";
+            // Mock Success - Directly Navigate
+            const userIdToUse = "testiser1";
+            window.location.href = "verify.html?mobile=" + val + "&userid=" + userIdToUse;
         } else {
             alert("Please enter 10 digits");
         }
@@ -452,20 +453,39 @@ function startCountdown() {
 
 function resendOTP() {
     console.log("Resending OTP...");
-    // Clear current OTP
-    otpCode = ["", "", "", "", "", ""];
-    for (var i = 1; i <= 6; i++) { // Changed 0 to 1 based on IDs otp1..otp6
-        var digitEl = document.getElementById('otp' + i);
-        if (digitEl) {
-            digitEl.value = '';
+
+    // Get User Context from URL or Storage
+    const urlParams = new URLSearchParams(window.location.search);
+    const mobile = urlParams.get('mobile') || "7800000001";
+    const userid = urlParams.get('userid') || "testiser1";
+
+    const resendLink = document.getElementById('resendLink');
+    if (resendLink) resendLink.innerText = "Sending...";
+
+    // Call API
+    AuthAPI.resendOTP(userid, mobile).then(response => {
+        console.log("Resend Response:", response);
+        if (resendLink) resendLink.innerText = "Resend OTP";
+
+        // Restart timer on success (or always?)
+        // Assuming success if no error thrown
+        startCountdown();
+
+        // Clear Inputs
+        otpCode = ["", "", "", "", "", ""];
+        for (var i = 1; i <= 6; i++) {
+            var digitEl = document.getElementById('otp' + i);
+            if (digitEl) digitEl.value = '';
         }
-    }
-    currentOtpIndex = 0;
-    if (focusables.length > 0) focusables[0].focus();
+        currentOtpIndex = 0;
+        if (focusables.length > 0) focusables[0].focus();
 
-    // Restart timer
-    startCountdown();
+        alert("OTP sent successfully!");
 
-    console.log("OTP resent successfully!");
+    }).catch(e => {
+        console.error("Resend Failed", e);
+        if (resendLink) resendLink.innerText = "Resend OTP";
+        alert("Failed to resend OTP");
+    });
 }
 
