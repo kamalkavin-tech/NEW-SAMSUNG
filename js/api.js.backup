@@ -1,5 +1,5 @@
 /**
- * BBNL Samsung TV Project API Service - FIXED VERSION
+ * BBNL Samsung TV Project API Service
  * Implements endpoints as per BBNL API Documentation.
  */
 
@@ -13,6 +13,7 @@ const API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
 // Default headers for all API requests
 const DEFAULT_HEADERS = {
     "Content-Type": "application/json",
+    // Match headers used in Postman: Basic auth + device headers
     "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
     "devmac": "26:F2:AE:D8:3F:99",
     "devslno": "FOFI20191129000336"
@@ -22,13 +23,6 @@ const DEFAULT_HEADERS = {
 const DEFAULT_USER = {
     userid: "testiser1",
     mobile: "7800000001"
-};
-
-// API Configuration Object
-const API_CONFIG = {
-    BASE_URL: API_BASE_URL_PROD,
-    HEADERS: DEFAULT_HEADERS,
-    DEFAULT_USER: DEFAULT_USER
 };
 
 // API Endpoints
@@ -50,8 +44,8 @@ const API_ENDPOINTS = {
     TRP_DATA: `${API_BASE_URL_PROD}/trpdata`,
     APP_VERSION: `${API_BASE_URL_PROD}/appversion`
 };
+// Device info (will be updated by initiali zeDeviceInfo)
 
-// Device info (will be updated by initializeDeviceInfo)
 const DEVICE_INFO = {
     ip_address: "103.5.132.130",
     mac_address: "26:F2:AE:D8:3F:99",
@@ -97,6 +91,7 @@ async function apiCall(endpoint, payload) {
 }
 
 function mapBBNLError(msg) {
+    // Basic mapping, extend as needed
     if (!msg) return "Unknown Error";
     if (msg.includes("Invalid OTP")) return "The OTP you entered is incorrect.";
     if (msg.includes("User not found")) return "User account not found.";
@@ -111,18 +106,13 @@ const DeviceInfo = {
         try {
             if (typeof webapis !== 'undefined' && webapis.network) {
                 const ip = webapis.network.getIp();
-                // const mac = webapis.network.getMac();  // DISABLED: Don't auto-detect MAC
+                const mac = webapis.network.getMac();
 
                 if (ip) DEVICE_INFO.ip_address = ip;
-
-                // IMPORTANT: Don't overwrite MAC address
-                // We're using the registered MAC: 26:F2:AE:D8:3F:99
-                // If you enable auto-detection, it will cause "User ID already registered" error
-
-                // if (mac) {
-                //     DEVICE_INFO.mac_address = mac;
-                //     DEFAULT_HEADERS["devmac"] = mac;
-                // }
+                if (mac) {
+                    DEVICE_INFO.mac_address = mac;
+                    DEFAULT_HEADERS["devmac"] = mac;
+                }
             }
             console.log("[DeviceInfo] Initialized:", DEVICE_INFO);
         } catch (e) {
@@ -136,7 +126,7 @@ const DeviceInfo = {
 };
 
 // ==========================================
-// AUTH API (UNCHANGED - DO NOT MODIFY)
+// AUTH API
 // ==========================================
 const AuthAPI = {
     requestOTP: async function (userid, mobile) {
@@ -177,7 +167,12 @@ const AuthAPI = {
     },
 
     resendOTP: async function (userid, mobile, email, deviceData = {}) {
+        // Uses /loginOtp endpoint for resending, as per specific user request
         const device = DeviceInfo.getDeviceInfo();
+
+        // Merge provided deviceData or fallback to defaults matching usage
+        // Note: The user provided specific hardcoded IP/MAC in the prompt example.
+        // We will prioritize passed args, then device info, then defaults.
 
         const payload = {
             userid: userid || DEFAULT_USER.userid,
@@ -208,7 +203,7 @@ const AuthAPI = {
 
     logout: function () {
         localStorage.removeItem("bbnl_user");
-        window.location.href = "login.html";
+        window.location.href = "login.html"; // Adjust path as needed
     },
 
     requireAuth: function () {
@@ -219,13 +214,14 @@ const AuthAPI = {
 };
 
 // ==========================================
-// CHANNELS API (FIXED)
+// CHANNELS API
 // ==========================================
 const ChannelsAPI = {
     getCategories: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
+        // Allow fetch even if user is null (for testing/mock)
         const payload = {
             userid: user ? user.userid : DEFAULT_USER.userid,
             mobile: user ? user.mobile : DEFAULT_USER.mobile,
@@ -233,14 +229,7 @@ const ChannelsAPI = {
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Categories with payload:", payload);
         const response = await apiCall(API_ENDPOINTS.CHANNEL_CATEGORIES, payload);
-
-        // Handle error responses
-        if (response.error) {
-            console.error("[ChannelsAPI] Error getting categories:", response);
-            return [];
-        }
 
         // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
@@ -249,13 +238,11 @@ const ChannelsAPI = {
             }
             return response.body;
         }
-
         // Fallback for direct array or other structures
         if (Array.isArray(response)) return response;
         if (response.categories) return response.categories;
 
-        console.warn("[ChannelsAPI] Unexpected response format:", response);
-        return [];
+        return response;
     },
 
     getChannelData: async function () {
@@ -269,14 +256,7 @@ const ChannelsAPI = {
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Channel Data with payload:", payload);
         const response = await apiCall(API_ENDPOINTS.CHANNEL_DATA, payload);
-
-        // Handle error responses
-        if (response.error) {
-            console.error("[ChannelsAPI] Error getting channel data:", response);
-            return [];
-        }
 
         // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
@@ -284,30 +264,18 @@ const ChannelsAPI = {
         }
         if (Array.isArray(response)) return response;
 
-        console.warn("[ChannelsAPI] Unexpected response format:", response);
-        return [];
+        return response;
     },
 
-    getCategoryList: async function () {
-        return this.getCategories();
-    },
-
-    getChannelList: async function () {
-        return this.getChannelData();
-    },
-
+    // Aliases for compatibility
+    getCategoryList: async function () { return this.getCategories(); },
+    getChannelList: async function () { return this.getChannelData(); },
     getLanguageList: async function () {
         const user = AuthAPI.getUserData();
-        const device = DeviceInfo.getDeviceInfo();
-
         const payload = {
             userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
-            ip_address: device.ip_address,
-            mac_address: device.mac_address
+            mobile: user ? user.mobile : DEFAULT_USER.mobile
         };
-
-        console.log("[ChannelsAPI] Getting Language List with payload:", payload);
         return await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload);
     },
 
@@ -328,6 +296,7 @@ const ChannelsAPI = {
     playChannel: function (channel) {
         const url = this.getStreamUrl(channel);
         if (url) {
+            // Encode Channel Data to pass to player
             const data = encodeURIComponent(JSON.stringify(channel));
             window.location.href = `player.html?data=${data}`;
         } else {
@@ -338,22 +307,22 @@ const ChannelsAPI = {
 };
 
 // ==========================================
-// ADS API (FIXED)
+// ADS API
 // ==========================================
 const AdsAPI = {
     getIPTVAds: async function (options = {}) {
         const user = AuthAPI.getUserData();
         const payload = {
-            userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
+            userid: user ? user.userid : "testiser1",
+            mobile: user ? user.mobile : "7800000001",
             adclient: options.adclient || "fofi",
             srctype: options.srctype || "image",
-            displayarea: options.displayarea || "homepage",
+            displayarea: options.displayarea || "homepage", // Default to 'homepage' as requested
             displaytype: options.displaytype || "multiple"
         };
 
-        console.log("[AdsAPI] Getting IPTV Ads with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload);
+        // Use the specific endpoint for ads
+        const response = await apiCall("/iptvads", payload, true); // true = use ADS_BASE_URL
 
         if (response && response.body && Array.isArray(response.body)) {
             return response.body;
@@ -366,13 +335,14 @@ const AdsAPI = {
     },
 
     getChannelListAds: async function () {
-        return this.getIPTVAds({ displayarea: 'homepage' });
+        return this.getIPTVAds({ displayarea: 'homepage' }); // Adjusted to homepage based on new default
     },
 
-    getAdsByArea: async function (displayarea, srctype) {
+    getAdsByArea: async function (displayarea, srctype, multiple) {
         return this.getIPTVAds({ displayarea, srctype });
     },
 
+    // UI Helper for Ads
     createSlider: function (containerId, ads, interval = 5000) {
         const container = document.getElementById(containerId);
         if (!container || !ads || ads.length === 0) return;
@@ -380,9 +350,10 @@ const AdsAPI = {
         container.innerHTML = "";
         let currentIndex = 0;
 
+        // Create Slide Elements
         ads.forEach((ad, index) => {
             const img = document.createElement("img");
-            img.src = ad.adpath;
+            img.src = ad.adpath; // As per doc response body
             img.className = "ad-slide";
             img.style.display = index === 0 ? "block" : "none";
             img.style.width = "100%";
@@ -391,6 +362,7 @@ const AdsAPI = {
             container.appendChild(img);
         });
 
+        // Rotation Logic
         if (ads.length > 1) {
             setInterval(() => {
                 const slides = container.querySelectorAll(".ad-slide");
@@ -403,53 +375,17 @@ const AdsAPI = {
 };
 
 // ==========================================
-// GLOBAL EXPORT
+// GLOBAL EXPORT (Legacy Support)
 // ==========================================
-// Create BBNL_API object and expose it globally
+// We expose a unified BBNL_API object to maintain compatibility with existing 'channels.js'
+// which expects BBNL_API.getCategoryList(), etc.
 const BBNL_API = {
-    // Auth Methods
-    requestOTP: AuthAPI.requestOTP.bind(AuthAPI),
-    verifyOTP: AuthAPI.verifyOTP.bind(AuthAPI),
-    resendOTP: AuthAPI.resendOTP.bind(AuthAPI),
-    setSession: AuthAPI.setSession.bind(AuthAPI),
-    getUserData: AuthAPI.getUserData.bind(AuthAPI),
-    isAuthenticated: AuthAPI.isAuthenticated.bind(AuthAPI),
-    logout: AuthAPI.logout.bind(AuthAPI),
-    requireAuth: AuthAPI.requireAuth.bind(AuthAPI),
-
-    // Channel Methods
-    getCategories: ChannelsAPI.getCategories.bind(ChannelsAPI),
-    getChannelData: ChannelsAPI.getChannelData.bind(ChannelsAPI),
-    getCategoryList: ChannelsAPI.getCategoryList.bind(ChannelsAPI),
-    getChannelList: ChannelsAPI.getChannelList.bind(ChannelsAPI),
-    getLanguageList: ChannelsAPI.getLanguageList.bind(ChannelsAPI),
-    getSubscribedChannels: ChannelsAPI.getSubscribedChannels.bind(ChannelsAPI),
-    getChannelsByGrid: ChannelsAPI.getChannelsByGrid.bind(ChannelsAPI),
-    getStreamUrl: ChannelsAPI.getStreamUrl.bind(ChannelsAPI),
-    playChannel: ChannelsAPI.playChannel.bind(ChannelsAPI),
-
-    // Ads Methods
-    getIPTVAds: AdsAPI.getIPTVAds.bind(AdsAPI),
-    getVideoAds: AdsAPI.getVideoAds.bind(AdsAPI),
-    getChannelListAds: AdsAPI.getChannelListAds.bind(AdsAPI),
-    getAdsByArea: AdsAPI.getAdsByArea.bind(AdsAPI),
-    createSlider: AdsAPI.createSlider.bind(AdsAPI),
-
-    // Device Methods
-    initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
-    getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
-
-    // Configuration
-    API_CONFIG: API_CONFIG
+    ...AuthAPI,
+    ...ChannelsAPI,
+    ...AdsAPI,
+    ...DeviceInfo,
+    API_CONFIG
 };
-
-// Make it available globally
-if (typeof window !== 'undefined') {
-    window.BBNL_API = BBNL_API;
-    console.log("[BBNL_API] Successfully initialized and exposed globally");
-}
 
 // Auto-initialize device info on load
 DeviceInfo.initializeDeviceInfo();
-
-console.log("[BBNL_API] API Service loaded successfully");
