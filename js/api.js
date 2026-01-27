@@ -4,81 +4,89 @@
  */
 
 // ==========================================
-// CONFIGURATION & BASE URLS
+// API CONFIGURATION
 // ==========================================
-// Helper to determine BASE_URL safely
-const getBaseUrl = () => {
-    // On Tizen TV or local file opening, hostname might be empty or localhost.
-    // We must use the Host PC's IP address so the Tizen Emulator/TV can reach the server.
-    // Host IP detected: 10.127.234.19
-    const hostname = window.location.hostname || "10.127.234.19";
-    // If hostname is 'localhost' (e.g. Chrome on PC), it still works (localhost -> 127.0.0.1).
-    // If hostname is empty (file:// on Tizen), we return the IP.
-    return `http://${hostname === 'localhost' ? '10.127.234.19' : hostname}:3000`;
+
+// Base URL for API endpoints
+const API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
+
+// Default headers for all API requests
+const DEFAULT_HEADERS = {
+    "Content-Type": "application/json",
+    // Match headers used in Postman: Basic auth + device headers
+    "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
+    "devmac": "26:F2:AE:D8:3F:99",
+    "devslno": "FOFI20191129000336"
 };
 
-const API_CONFIG = {
-    // Test Server URL
-    BASE_URL: "http://124.40.244.211/netmon/cabletvapis",
-    ADS_BASE_URL: "http://124.40.244.211/netmon/cabletvapis",
-    HEADERS: {
-        "Content-Type": "application/json",
-        "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=", // Provided in example
-        "devmac": "68:1D:EF:14:6C:21", // Default/Fallback
-        "devslno": "FOFI20191129000336" // Default/Fallback
-    },
-    // Device info will be overwritten by initializeDeviceInfo
-    DEVICE_INFO: {
-        ip_address: "192.168.101.110",
-        mac_address: "68:1D:EF:14:6C:21",
-        devslno: "FOFI20191129000336"
-    }
+// Default user information
+const DEFAULT_USER = {
+    userid: "testiser1",
+    mobile: "7800000001"
+};
+
+// API Endpoints
+const API_ENDPOINTS = {
+    LOGIN: `${API_BASE_URL_PROD}/login`,
+    RESEND_OTP: `${API_BASE_URL_PROD}/loginOtp`,
+    ADD_MACADDRESS: `${API_BASE_URL_PROD}/addmacnew`,
+    USER_LOGOUT: `${API_BASE_URL_PROD}/userLogout`,
+    CHANNEL_CATEGORIES: `${API_BASE_URL_PROD}/chnl_categlist`,
+    CHANNEL_LANGUAGELIST: `${API_BASE_URL_PROD}/chnl_langlist`,
+    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,
+    CHANNEL_EXPIRING: `${API_BASE_URL_PROD}/expiringchnl_list`,
+    HOME_ADS: `${API_BASE_URL_PROD}/iptvads`,
+    STREAM_ADS: `${API_BASE_URL_PROD}/streamAds`,
+    OTT_APPS: `${API_BASE_URL_PROD}/allowedapps`,
+    RAISE_TICKET: `${API_BASE_URL_PROD}/raiseTicket`,
+    FEED_BACK: `${API_BASE_URL_PROD}/feedback`,
+    APP_LOCK: `${API_BASE_URL_PROD}/applock`,
+    TRP_DATA: `${API_BASE_URL_PROD}/trpdata`,
+    APP_VERSION: `${API_BASE_URL_PROD}/appversion`
+};
+// Device info (will be updated by initiali zeDeviceInfo)
+
+const DEVICE_INFO = {
+    ip_address: "103.5.132.130",
+    mac_address: "26:F2:AE:D8:3F:99",
+    device_name: "rk3368_box_",
+    device_type: "FOFI_LG",
+    devslno: "FOFI20191129000336"
 };
 
 // ==========================================
 // API HELPER
 // ==========================================
-async function apiCall(endpoint, payload, isAds = false) {
-    const baseUrl = isAds ? API_CONFIG.ADS_BASE_URL : API_CONFIG.BASE_URL;
-    const url = `${baseUrl}${endpoint}`;
+async function apiCall(endpoint, payload) {
+    const url = endpoint; // endpoint is now full URL from API_ENDPOINTS
 
-    console.log(`[API] Req: ${url}`, payload);
+    console.log(`[API] Request: ${url}`, payload);
 
     try {
         const response = await fetch(url, {
-            method: "POST", // JSON Server will treat this as 'Create' and return the object
-            headers: API_CONFIG.HEADERS,
+            method: "POST",
+            headers: DEFAULT_HEADERS,
             body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            // If 404 on localhost, try GET as fallback for "read" endpoints simulated as files
-            if (url.includes("localhost") && response.status === 404) {
-                console.warn("Mock Server: POST failed, trying GET...");
-                const getResp = await fetch(url, { method: "GET" });
-                if (getResp.ok) {
-                    let data = await getResp.json();
-                    // If array, take first item
-                    if (Array.isArray(data) && data.length > 0) return data[0];
-                    return data;
-                }
-            }
-            throw new Error(`HTTP Error: ${response.status}`);
+            throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
         }
 
         const data = await response.json();
-        console.log(`[API] Res: ${url}`, data);
-
-        // JSON-Server returns directly the object created or the list.
-        // For our static db.json lists (login, etc), querying them usually via GET.
-        // But the code sends POST. 
-        // We will rely on the "POST" creating a dummy record which returns the record.
-        // This is sufficient for "Success" signals.
+        console.log(`[API] Response: ${url}`, data);
 
         return data;
     } catch (error) {
         console.error(`[API] Error: ${url}`, error);
-        return { error: true, message: error.message };
+        return {
+            error: true,
+            message: error.message,
+            status: {
+                err_code: -1,
+                err_msg: error.message
+            }
+        };
     }
 }
 
@@ -99,21 +107,21 @@ const DeviceInfo = {
             if (typeof webapis !== 'undefined' && webapis.network) {
                 const ip = webapis.network.getIp();
                 const mac = webapis.network.getMac();
-                if (ip) API_CONFIG.DEVICE_INFO.ip_address = ip;
+
+                if (ip) DEVICE_INFO.ip_address = ip;
                 if (mac) {
-                    API_CONFIG.DEVICE_INFO.mac_address = mac;
-                    API_CONFIG.HEADERS["devmac"] = mac;
+                    DEVICE_INFO.mac_address = mac;
+                    DEFAULT_HEADERS["devmac"] = mac;
                 }
             }
-            // Add Tizen ID fetching if needed
-            console.log("Device Info Initialized:", API_CONFIG.DEVICE_INFO);
+            console.log("[DeviceInfo] Initialized:", DEVICE_INFO);
         } catch (e) {
-            console.warn("Tizen WebAPIs not available, using mock device info.");
+            console.warn("[DeviceInfo] Tizen WebAPIs not available, using defaults");
         }
     },
 
     getDeviceInfo: function () {
-        return API_CONFIG.DEVICE_INFO;
+        return DEVICE_INFO;
     }
 };
 
@@ -126,18 +134,33 @@ const AuthAPI = {
         const payload = {
             userid: userid,
             mobile: mobile,
+            mac_address: device.mac_address,
+            device_name: device.device_name,
             ip_address: device.ip_address,
-            mac_address: device.mac_address
+            device_type: device.device_type,
+            getuserdet: ""
         };
-        return await apiCall("/login", payload);
+        console.log("[AuthAPI] Requesting OTP Payload:", payload);
+        return await apiCall(API_ENDPOINTS.LOGIN, payload);
     },
 
     verifyOTP: async function (userid, mobile, otpcode) {
-        // ... (existing verify logic) ...
-        const payload = { userid, mobile, otpcode };
-        const response = await apiCall("/loginOtp", payload);
+        const device = DeviceInfo.getDeviceInfo();
 
-        if (response && response.userid) {
+        const payload = {
+            userid: userid,
+            mobile: mobile,
+            otpcode: otpcode,
+            mac_address: device.mac_address,
+            device_name: device.device_name,
+            ip_address: device.ip_address,
+            device_type: device.device_type
+        };
+
+        console.log("[AuthAPI] Verifying OTP Payload:", payload);
+        const response = await apiCall(API_ENDPOINTS.RESEND_OTP, payload);
+
+        if (response && response.status && response.status.err_code === 0) {
             this.setSession(response);
         }
         return response;
@@ -152,17 +175,17 @@ const AuthAPI = {
         // We will prioritize passed args, then device info, then defaults.
 
         const payload = {
-            userid: userid || "testiser1",
-            mobile: mobile || "7800000001",
-            email: email || "sureshs@bbnl.co.in", // Default from request
-            mac_address: deviceData.mac_address || device.mac_address || "26:F2:AE:D8:3F:99",
-            device_name: deviceData.device_name || "rk3368_box",
-            ip_address: deviceData.ip_address || device.ip_address || "124.40.244.233",
-            device_type: deviceData.device_type || "FOFI"
+            userid: userid || DEFAULT_USER.userid,
+            mobile: mobile || DEFAULT_USER.mobile,
+            email: email || "sureshs@bbnl.co.in",
+            mac_address: deviceData.mac_address || device.mac_address,
+            device_name: deviceData.device_name || device.device_name,
+            ip_address: deviceData.ip_address || device.ip_address,
+            device_type: deviceData.device_type || device.device_type
         };
 
         console.log("[AuthAPI] Resending OTP Payload:", payload);
-        return await apiCall("/loginOtp", payload);
+        return await apiCall(API_ENDPOINTS.RESEND_OTP, payload);
     },
 
     setSession: function (data) {
@@ -200,13 +223,13 @@ const ChannelsAPI = {
 
         // Allow fetch even if user is null (for testing/mock)
         const payload = {
-            userid: user ? user.userid : "testuser1", // Fixed typo: 'testiser1' -> 'testuser1'
-            mobile: user ? user.mobile : "7800000001",
+            userid: user ? user.userid : DEFAULT_USER.userid,
+            mobile: user ? user.mobile : DEFAULT_USER.mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
         };
 
-        const response = await apiCall("/chnl_categlist", payload);
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_CATEGORIES, payload);
 
         // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
@@ -227,13 +250,13 @@ const ChannelsAPI = {
         const device = DeviceInfo.getDeviceInfo();
 
         const payload = {
-            userid: user ? user.userid : "testiser1",
-            mobile: user ? user.mobile : "7800000001",
+            userid: user ? user.userid : DEFAULT_USER.userid,
+            mobile: user ? user.mobile : DEFAULT_USER.mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
         };
 
-        const response = await apiCall("/chnl_data", payload);
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_DATA, payload);
 
         // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
@@ -248,10 +271,12 @@ const ChannelsAPI = {
     getCategoryList: async function () { return this.getCategories(); },
     getChannelList: async function () { return this.getChannelData(); },
     getLanguageList: async function () {
-        // Not in doc but was in previous API, keeping for compatibility
         const user = AuthAPI.getUserData();
-        const payload = { userid: user ? user.userid : "test", mobile: user ? user.mobile : "00" };
-        return await apiCall("/chnl_langlist", payload);
+        const payload = {
+            userid: user ? user.userid : DEFAULT_USER.userid,
+            mobile: user ? user.mobile : DEFAULT_USER.mobile
+        };
+        return await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload);
     },
 
     getSubscribedChannels: function (channels) {

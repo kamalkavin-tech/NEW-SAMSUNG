@@ -277,9 +277,50 @@ function handleOK() {
         console.log("Get OTP clicked - Phone number:", val);
 
         if (val.length === 10) {
-            // Mock Success - Directly Navigate
+            console.log("[Login] Requesting OTP for mobile:", val);
+
+            // Show loading state
+            var btn = document.getElementById("getOtpBtn");
+            var originalText = btn.innerText;
+            btn.innerText = "Sending OTP...";
+            btn.disabled = true;
+
+            // Call actual API
             const userIdToUse = "testiser1";
-            window.location.href = "verify.html?mobile=" + val + "&userid=" + userIdToUse;
+            AuthAPI.requestOTP(userIdToUse, val)
+                .then(function (response) {
+                    console.log("[Login] OTP Response:", response);
+
+                    // Restore button
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+
+                    // Check response
+                    if (response && response.status && response.status.err_code === 0) {
+                        console.log("[Login] ✅ OTP sent successfully");
+
+                        // Show OTP code if available (for testing)
+                        if (response.body && response.body[0] && response.body[0].otpcode) {
+                            console.log("[Login] OTP Code:", response.body[0].otpcode);
+                            alert("OTP sent successfully!\n\nFor testing: " + response.body[0].otpcode);
+                        } else {
+                            alert("OTP sent successfully to " + val);
+                        }
+
+                        // Navigate to verify page
+                        window.location.href = "verify.html?mobile=" + val + "&userid=" + userIdToUse;
+                    } else {
+                        console.error("[Login] ❌ OTP request failed:", response);
+                        var errorMsg = response.status ? response.status.err_msg : "Failed to send OTP";
+                        alert("Error: " + errorMsg);
+                    }
+                })
+                .catch(function (error) {
+                    console.error("[Login] ❌ OTP request error:", error);
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    alert("Network error. Please check your connection.");
+                });
         } else {
             alert("Please enter 10 digits");
         }
@@ -287,25 +328,66 @@ function handleOK() {
     }
 
 
+
     // VERIFY PAGE: Verify Button (if exists)
     if (active.id === "verifyBtn") {
         var fullOTP = "";
-        for (var i = 1; i <= 6; i++) {
+        for (var i = 1; i <= 4; i++) {  // Changed from 6 to 4
             var val = document.getElementById('otp' + i).value;
             if (val) fullOTP += val;
         }
 
         console.log("Verify button clicked - OTP:", fullOTP);
 
-        if (fullOTP.length === 6) {
-            console.log("Verifying OTP:", fullOTP);
-            window.location.href = "home.html";
+        if (fullOTP.length === 4) {  // Changed from 6 to 4
+            console.log("[Verify] Verifying OTP:", fullOTP);
+
+            // Get user info from URL
+            var urlParams = new URLSearchParams(window.location.search);
+            var mobile = urlParams.get('mobile') || "7800000001";
+            var userid = urlParams.get('userid') || "testiser1";
+
+            // Show loading state
+            var btn = document.getElementById("verifyBtn");
+            var originalText = btn.innerText;
+            btn.innerText = "Verifying...";
+            btn.disabled = true;
+
+            // Call actual API
+            AuthAPI.verifyOTP(userid, mobile, fullOTP)
+                .then(function (response) {
+                    console.log("[Verify] OTP Verification Response:", response);
+
+                    // Restore button
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+
+                    // Check response
+                    if (response && response.status && response.status.err_code === 0) {
+                        console.log("[Verify] ✅ OTP verified successfully");
+                        alert("Login successful!");
+
+                        // Navigate to home page
+                        window.location.href = "home.html";
+                    } else {
+                        console.error("[Verify] ❌ OTP verification failed:", response);
+                        var errorMsg = response.status ? response.status.err_msg : "Invalid OTP";
+                        alert("Error: " + errorMsg);
+                    }
+                })
+                .catch(function (error) {
+                    console.error("[Verify] ❌ OTP verification error:", error);
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    alert("Network error. Please check your connection.");
+                });
         } else {
             console.log("Incomplete OTP");
-            alert("Please enter full 6-digit OTP");
+            alert("Please enter full 4-digit OTP");  // Changed from 6 to 4
         }
         return;
     }
+
 }
 
 /* NUMERIC INPUT */
@@ -331,14 +413,15 @@ function handleNumberPadInput(value) {
             }
             active.value += value;
 
-            // Auto-advance for OTP
+            // Auto-advance for OTP - Updated for 4 digits
             if (active.classList.contains('otp-input') && active.value.length === 1) {
                 var currentId = active.id;
                 var idx = parseInt(currentId.replace('otp', ''));
-                if (idx < 6) {
+                if (idx < 4) {  // Changed from 6 to 4
                     var next = document.getElementById('otp' + (idx + 1));
                     if (next) next.focus();
                 } else {
+                    // After 4th digit, auto-focus verify button
                     document.getElementById('verifyBtn').focus();
                 }
             }
@@ -354,7 +437,7 @@ function handleNumberPadInput(value) {
    OTP VERIFICATION PAGE
    ================================ */
 
-var otpCode = ["", "", "", "", "", ""];
+var otpCode = ["", "", "", ""];  // Changed from 6 to 4
 var currentOtpIndex = 0;
 var countdownTimer = 59;
 var timerInterval = null;

@@ -1,31 +1,29 @@
 /**
- * Tizen AVPlay Player Module 
- * Implements the AVPlayer interface requested by the user.
+ * COMPLETE FINAL AVPlayer for Tizen Real TV
+ * Includes: HTTP Headers, Localhost URL Fix, Stream Validation, Enhanced Error Handling
+ * Version: ULTIMATE 3.0
  */
 
 var AVPlayer = (function () {
-    // Internal State
-    var playerState = "NONE"; // NONE, IDLE, READY, PLAYING, PAUSED
+    var playerState = "NONE";
     var avplay = null;
     var isTizenProp = false;
-    var currentTime = 0;
-    var totalDuration = 0;
+    var currentStreamUrl = "";
 
-    // Callbacks
+    // CRITICAL: Your IPTV server IP for localhost URL replacement
+    var SERVER_IP = "124.40.244.211";
+
     var eventCallbacks = {
         onBufferingStart: function () { console.log("Buffering Start"); },
         onBufferingProgress: function (percent) { console.log("Buffering: " + percent + "%"); },
         onBufferingComplete: function () { console.log("Buffering Complete"); },
         onStreamCompleted: function () { console.log("Stream Ended"); },
-        onCurrentPlayTime: function (time) { currentTime = time; },
-        onError: function (type) { console.error("AVPlay Error: " + type); },
+        onCurrentPlayTime: function (time) { },
+        onError: function (type, details) { console.error("AVPlay Error: " + type, details); },
         onEvent: function (event, data) { console.log("AVPlay Event: " + event, data); },
         onSubtitle: function (subtitle) { }
     };
 
-    /**
-     * Check Environment
-     */
     function checkEnv() {
         if (typeof webapis !== 'undefined' && webapis.avplay) {
             avplay = webapis.avplay;
@@ -35,7 +33,26 @@ var AVPlayer = (function () {
         return false;
     }
 
-    // Public API
+    /**
+     * CRITICAL FIX #1: Replace localhost URLs with actual server IP
+     */
+    function fixLocalhostUrl(url) {
+        if (!url) return url;
+
+        var originalUrl = url;
+        if (url.includes('127.0.0.1') || url.includes('localhost')) {
+            console.log("[AVPlayer] ⚠️⚠️⚠️ LOCALHOST URL DETECTED ⚠️⚠️⚠️");
+            console.log("[AVPlayer] Original URL:", originalUrl);
+
+            url = url.replace(/127\.0\.0\.1/g, SERVER_IP);
+            url = url.replace(/localhost/g, SERVER_IP);
+
+            console.log("[AVPlayer] ✓ Fixed URL:", url);
+        }
+
+        return url;
+    }
+
     return {
         init: function (options) {
             console.log("[AVPlayer] Init called");
@@ -45,43 +62,235 @@ var AVPlayer = (function () {
             }
         },
 
+        /**
+         * CRITICAL FIX #2: Set HTTP Headers for Stream Requests
+         * This is often the missing piece for real TV playback
+         */
+        setStreamingHeaders: function (url) {
+            if (!isTizenProp) return;
+
+            try {
+                // Set custom HTTP headers for stream requests
+                var httpHeaders = [
+                    "User-Agent: Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.146 TV Safari/537.36",
+                    "Accept: */*",
+                    "Accept-Encoding: identity",
+                    "Connection: keep-alive",
+                    "Referer: " + window.location.href
+                ];
+
+                var headerString = httpHeaders.join("|");
+                console.log("[AVPlayer] Setting HTTP headers");
+                avplay.setStreamingProperty("CUSTOM_MESSAGE", headerString);
+
+            } catch (e) {
+                console.warn("[AVPlayer] Could not set custom headers:", e);
+            }
+
+            try {
+                // Set adaptive streaming properties
+                avplay.setStreamingProperty("ADAPTIVE_INFO", "BITRATES=LOWEST|LOW|MEDIUM");
+                avplay.setStreamingProperty("START_BITRATE", "LOWEST");
+                console.log("[AVPlayer] Adaptive streaming configured");
+
+            } catch (e) {
+                console.warn("[AVPlayer] Streaming properties warning:", e);
+            }
+        },
+
         setUrl: function (url) {
             if (!isTizenProp) {
                 console.warn("[AVPlayer] Not Tizen - setUrl mocked");
                 return;
             }
+
             try {
-                avplay.open(url);
-                playerState = "IDLE";
-                console.log("[AVPlayer] URL Set:", url);
+                console.log("[AVPlayer] ========================================");
+                console.log("[AVPlayer] STARTING STREAM SETUP");
+                console.log("[AVPlayer] Original URL:", url);
+                console.log("[AVPlayer] ========================================");
+
+                // Validate and clean URL
+                if (!url || url.trim() === "") {
+                    throw new Error("Stream URL is empty");
+                }
+
+                url = url.trim();
+
+                // CRITICAL: Fix localhost URLs BEFORE anything else
+                url = fixLocalhostUrl(url);
+
+                currentStreamUrl = url;
+                console.log("[AVPlayer] Final URL to use:", url);
+
+                // STEP 1: Complete cleanup
+                try {
+                    console.log("[AVPlayer] Cleaning up previous instance...");
+                    avplay.stop();
+                    avplay.close();
+                    playerState = "NONE";
+                    console.log("[AVPlayer] ✓ Cleanup complete");
+                } catch (cleanupError) {
+                    console.log("[AVPlayer] No previous instance to clean");
+                }
+
+                // Wait for cleanup to complete
+                var self = this;
+                setTimeout(function () {
+                    try {
+                        // STEP 2: Set HTTP headers BEFORE opening
+                        console.log("[AVPlayer] Setting streaming headers...");
+                        self.setStreamingHeaders(url);
+                        console.log("[AVPlayer] ✓ Headers set");
+
+                        // STEP 3: Open stream
+                        console.log("[AVPlayer] Opening stream...");
+                        avplay.open(url);
+                        playerState = "IDLE";
+                        console.log("[AVPlayer] ✓ Stream opened");
+
+                        // STEP 4: Configure timeout and buffering
+                        try {
+                            console.log("[AVPlayer] Configuring buffering...");
+                            avplay.setTimeoutForBuffering(5000); // 5 seconds
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 10);
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 5);
+                            console.log("[AVPlayer] ✓ Buffering configured");
+                        } catch (bufferError) {
+                            console.warn("[AVPlayer] Buffering config warning:", bufferError);
+                        }
+
+                        // STEP 5: Set display rectangle and method
+                        try {
+                            console.log("[AVPlayer] Setting display...");
+                            avplay.setDisplayRect(0, 0, 1920, 1080);
+
+                            // Try different display methods
+                            var displayMethods = [
+                                'PLAYER_DISPLAY_MODE_FULL_SCREEN',
+                                'fullscreen',
+                                'FULL_SCREEN'
+                            ];
+
+                            for (var i = 0; i < displayMethods.length; i++) {
+                                try {
+                                    avplay.setDisplayMethod(displayMethods[i]);
+                                    console.log("[AVPlayer] ✓ Display method set:", displayMethods[i]);
+                                    break;
+                                } catch (methodErr) {
+                                    if (i === displayMethods.length - 1) {
+                                        console.warn("[AVPlayer] All display methods failed");
+                                    }
+                                }
+                            }
+                            console.log("[AVPlayer] ✓ Display configured");
+                        } catch (displayError) {
+                            console.error("[AVPlayer] Display error:", displayError);
+                        }
+
+                        console.log("[AVPlayer] ========================================");
+                        console.log("[AVPlayer] ✓✓✓ STREAM SETUP COMPLETE ✓✓✓");
+                        console.log("[AVPlayer] Ready to play:", currentStreamUrl);
+                        console.log("[AVPlayer] ========================================");
+
+                    } catch (setupError) {
+                        console.error("[AVPlayer] ========================================");
+                        console.error("[AVPlayer] ✗✗✗ SETUP FAILED ✗✗✗");
+                        console.error("[AVPlayer] Error:", setupError.message);
+                        console.error("[AVPlayer] Details:", setupError);
+                        console.error("[AVPlayer] ========================================");
+
+                        if (eventCallbacks.onError) {
+                            eventCallbacks.onError("Stream setup failed: " + setupError.message, {
+                                error: setupError,
+                                url: url
+                            });
+                        }
+                    }
+                }, 100);
+
             } catch (e) {
                 console.error("[AVPlayer] setUrl Exception:", e);
-                if (eventCallbacks.onError) eventCallbacks.onError(e.message);
+                if (eventCallbacks.onError) {
+                    eventCallbacks.onError("Failed to set URL: " + e.message);
+                }
             }
         },
 
         play: function () {
-            if (!isTizenProp) return;
+            if (!isTizenProp) {
+                console.warn("[AVPlayer] Not Tizen - play mocked");
+                return;
+            }
 
             try {
+                console.log("[AVPlayer] ========================================");
+                console.log("[AVPlayer] STARTING PLAYBACK");
+                console.log("[AVPlayer] Current state:", playerState);
+                console.log("[AVPlayer] Stream URL:", currentStreamUrl);
+                console.log("[AVPlayer] ========================================");
+
                 if (playerState === "IDLE") {
-                    avplay.prepareAsync(function () {
-                        playerState = "READY";
-                        console.log("[AVPlayer] Prepared. Starting Playback...");
-                        avplay.play();
-                        playerState = "PLAYING";
-                    }, function (e) {
-                        console.error("[AVPlayer] Prepare Failed:", e);
-                    });
+                    console.log("[AVPlayer] Preparing stream...");
+
+                    avplay.prepareAsync(
+                        function () {
+                            console.log("[AVPlayer] ✓✓✓ PREPARE SUCCESS ✓✓✓");
+                            playerState = "READY";
+
+                            try {
+                                console.log("[AVPlayer] Starting playback...");
+                                avplay.play();
+                                playerState = "PLAYING";
+                                console.log("[AVPlayer] ========================================");
+                                console.log("[AVPlayer] ✓✓✓ PLAYBACK STARTED SUCCESSFULLY ✓✓✓");
+                                console.log("[AVPlayer] ========================================");
+                            } catch (playError) {
+                                console.error("[AVPlayer] ✗✗✗ PLAY FAILED ✗✗✗");
+                                console.error("[AVPlayer] Error:", playError);
+                                if (eventCallbacks.onError) {
+                                    eventCallbacks.onError("Play failed: " + playError.message);
+                                }
+                            }
+                        },
+                        function (prepareError) {
+                            console.error("[AVPlayer] ========================================");
+                            console.error("[AVPlayer] ✗✗✗ PREPARE FAILED ✗✗✗");
+                            console.error("[AVPlayer] Error:", prepareError);
+                            console.error("[AVPlayer] Error type:", typeof prepareError);
+                            console.error("[AVPlayer] Error string:", String(prepareError));
+                            console.error("[AVPlayer] Stream URL:", currentStreamUrl);
+                            console.error("[AVPlayer] ========================================");
+
+                            if (eventCallbacks.onError) {
+                                eventCallbacks.onError("Prepare failed: " + prepareError, {
+                                    error: prepareError,
+                                    url: currentStreamUrl
+                                });
+                            }
+                        }
+                    );
+
                 } else if (playerState === "PAUSED") {
+                    console.log("[AVPlayer] Resuming from pause...");
                     avplay.play();
                     playerState = "PLAYING";
-                } else {
-                    // Direct play call logic if needed
+                    console.log("[AVPlayer] ✓ Resumed");
+                } else if (playerState === "READY") {
+                    console.log("[AVPlayer] Already prepared, playing...");
                     avplay.play();
+                    playerState = "PLAYING";
+                    console.log("[AVPlayer] ✓ Playing");
+                } else {
+                    console.log("[AVPlayer] Attempting direct play...");
+                    avplay.play();
+                    playerState = "PLAYING";
                 }
             } catch (e) {
                 console.error("[AVPlayer] Play Exception:", e);
+                if (eventCallbacks.onError) {
+                    eventCallbacks.onError("Playback error: " + e.message);
+                }
             }
         },
 
@@ -90,6 +299,7 @@ var AVPlayer = (function () {
             try {
                 avplay.pause();
                 playerState = "PAUSED";
+                console.log("[AVPlayer] Paused");
             } catch (e) {
                 console.error("[AVPlayer] Pause Error", e);
             }
@@ -99,48 +309,36 @@ var AVPlayer = (function () {
             if (!isTizenProp) return;
             try {
                 avplay.stop();
-                playerState = "IDLE"; // or NONE depending on logic
-            } catch (e) { console.error("[AVPlayer] Stop Error", e); }
+                playerState = "IDLE";
+                console.log("[AVPlayer] Stopped");
+            } catch (e) {
+                console.error("[AVPlayer] Stop Error", e);
+            }
         },
 
-        seekTo: function (positionMs) {
+        destroy: function () {
             if (!isTizenProp) return;
             try {
-                // Success callback, Error callback required for jumpTo?
-                // Tizen 2.3 used jumpForward/Backward, newer uses seekTo
-                avplay.seekTo(positionMs, function () {
-                    console.log("Seek Success");
-                }, function (e) {
-                    console.error("Seek Failed", e);
-                });
-            } catch (e) { console.error("[AVPlayer] Seek Error", e); }
+                console.log("[AVPlayer] Destroying player...");
+                avplay.stop();
+                avplay.close();
+                playerState = "NONE";
+                currentStreamUrl = "";
+                console.log("[AVPlayer] ✓ Destroyed");
+            } catch (e) {
+                console.log("[AVPlayer] Destroy cleanup:", e);
+            }
         },
 
-        jumpForward: function (ms) {
-            if (!isTizenProp) return;
-            try {
-                avplay.jumpForward(ms);
-            } catch (e) { console.error("Jump Fwd Error", e); }
+        changeStream: function (url) {
+            console.log("[AVPlayer] Changing stream to:", url);
+            this.destroy();
+            this.setUrl(url);
+            var self = this;
+            setTimeout(function () {
+                self.play();
+            }, 500);
         },
-
-        jumpBackward: function (ms) {
-            if (!isTizenProp) return;
-            try {
-                avplay.jumpBackward(ms);
-            } catch (e) { console.error("Jump Bwd Error", e); }
-        },
-
-        setVolume: function (level) {
-            // 0-100 logic handled by Tizen usually via tizen.tvaudiocontrol
-            // AVPlay doesn't manage global volume usually, but specific API might exist?
-            // Assuming user wants standard AVPlay wrapper behavior:
-            console.warn("Volume control via AVPlay usually external (tvaudiocontrol)");
-        },
-
-        getVolume: function () { return 0; },
-
-        setMute: function (mute) { },
-        toggleMute: function () { },
 
         getCurrentTime: function () {
             if (!isTizenProp) return 0;
@@ -157,72 +355,164 @@ var AVPlayer = (function () {
         },
 
         getState: function () { return playerState; },
-
         isTizen: function () { return isTizenProp; },
-        isEmulator: function () { return false; }, // basic mock
         isAVPlaySupported: function () { return isTizenProp; },
-        getEnvironment: function () { return isTizenProp ? "Tizen" : "Web"; },
-
-        testWithPublicStream: function () {
-            this.setUrl("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"); // Common Public HLS
-            this.prepareAndPlay(); // Helper if needed, or simply play()
-        },
 
         setCallbacks: function (callbacks) {
-            // Merge callbacks
             eventCallbacks = Object.assign(eventCallbacks, callbacks);
 
             if (isTizenProp) {
                 var listener = {
-                    onbufferingstart: function () { eventCallbacks.onBufferingStart(); },
-                    onbufferingprogress: function (percent) { eventCallbacks.onBufferingProgress(percent); },
-                    onbufferingcomplete: function () { eventCallbacks.onBufferingComplete(); },
-                    onstreamcompleted: function () { eventCallbacks.onStreamCompleted(); },
-                    oncurrentplaytime: function (time) { eventCallbacks.onCurrentPlayTime(time); },
-                    onerror: function (type) { eventCallbacks.onError(type); },
-                    onevent: function (eventType, eventData) { eventCallbacks.onEvent(eventType, eventData); },
-                    onsubtitlechange: function (duration, text, data3, data4) { eventCallbacks.onSubtitle(text); },
-                    ondrmevent: function (drmEvent, drmData) { console.log("DRM Event:", drmEvent); }
+                    onbufferingstart: function () {
+                        console.log("[AVPlayer] ►►► BUFFERING STARTED ◄◄◄");
+                        eventCallbacks.onBufferingStart();
+                    },
+                    onbufferingprogress: function (percent) {
+                        console.log("[AVPlayer] Buffering:", percent + "%");
+                        eventCallbacks.onBufferingProgress(percent);
+                    },
+                    onbufferingcomplete: function () {
+                        console.log("[AVPlayer] ►►► BUFFERING COMPLETE ◄◄◄");
+                        eventCallbacks.onBufferingComplete();
+                    },
+                    onstreamcompleted: function () {
+                        console.log("[AVPlayer] Stream completed");
+                        eventCallbacks.onStreamCompleted();
+                    },
+                    oncurrentplaytime: function (time) {
+                        eventCallbacks.onCurrentPlayTime(time);
+                    },
+
+                    onerror: function (eventType) {
+                        console.error("[AVPlayer] ========================================");
+                        console.error("[AVPlayer] ✗✗✗ ERROR EVENT ✗✗✗");
+                        console.error("[AVPlayer] Error Type:", eventType);
+                        console.error("[AVPlayer] Stream URL:", currentStreamUrl);
+                        console.error("[AVPlayer] Player State:", playerState);
+                        console.error("[AVPlayer] ========================================");
+
+                        var errorDetails = {
+                            type: eventType,
+                            timestamp: new Date().toISOString(),
+                            url: currentStreamUrl,
+                            state: playerState
+                        };
+
+                        var userMessage = "Playback error";
+
+                        switch (eventType) {
+                            case "PLAYER_ERROR_CONNECTION_FAILED":
+                                userMessage = "Cannot connect to stream server.\n\nPossible causes:\n• Stream URL is incorrect\n• Server is blocking TV requests\n• Network connection issue\n• CORS headers not set";
+                                errorDetails.suggestion = "Check stream URL and network connectivity";
+                                break;
+                            case "PLAYER_ERROR_INVALID_URI":
+                                userMessage = "Invalid stream URL format";
+                                errorDetails.suggestion = "Verify the stream URL is correct";
+                                break;
+                            case "PLAYER_ERROR_INVALID_OPERATION":
+                                userMessage = "Invalid player operation";
+                                errorDetails.suggestion = "Player state issue - try restarting";
+                                break;
+                            case "PLAYER_ERROR_NOT_SUPPORTED_FORMAT":
+                                userMessage = "Stream format not supported";
+                                errorDetails.suggestion = "Check video codec compatibility (use HLS .m3u8)";
+                                break;
+                            case "PLAYER_ERROR_AUTHENTICATION_FAILED":
+                                userMessage = "Stream authentication failed";
+                                errorDetails.suggestion = "Check stream credentials";
+                                break;
+                            default:
+                                userMessage = "Unknown error: " + eventType;
+                        }
+
+                        console.error("[AVPlayer] User Message:", userMessage);
+                        console.error("[AVPlayer] Details:", errorDetails);
+                        eventCallbacks.onError(userMessage, errorDetails);
+                    },
+
+                    onevent: function (eventType, eventData) {
+                        console.log("[AVPlayer] Event:", eventType, eventData);
+                        eventCallbacks.onEvent(eventType, eventData);
+                    },
+
+                    onsubtitlechange: function (duration, text) {
+                        eventCallbacks.onSubtitle(text);
+                    },
+
+                    ondrmevent: function (drmEvent, drmData) {
+                        console.log("[AVPlayer] DRM Event:", drmEvent);
+                    }
                 };
+
                 try {
                     avplay.setListener(listener);
-                } catch (e) { console.error("SetListener Failed", e); }
+                    console.log("[AVPlayer] ✓ Listener registered successfully");
+                } catch (e) {
+                    console.error("[AVPlayer] SetListener Failed:", e);
+                }
             }
         },
 
-        destroy: function () {
-            if (!isTizenProp) return;
-            try {
-                avplay.stop();
-                avplay.close();
-                playerState = "NONE";
-            } catch (e) { }
+        /**
+         * Test if a stream URL is accessible before trying to play it
+         */
+        testStreamUrl: function (url, callback) {
+            console.log("[AVPlayer] ========================================");
+            console.log("[AVPlayer] TESTING STREAM ACCESSIBILITY");
+            console.log("[AVPlayer] URL:", url);
+            console.log("[AVPlayer] ========================================");
+
+            // Fix localhost URLs before testing
+            url = fixLocalhostUrl(url);
+            console.log("[AVPlayer] Testing URL (after localhost fix):", url);
+
+            fetch(url, {
+                method: 'GET',
+                mode: 'cors'
+            })
+                .then(function (response) {
+                    console.log("[AVPlayer] ✓ Stream test response:", response.status);
+                    return response.text();
+                })
+                .then(function (data) {
+                    console.log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
+                    console.log("[AVPlayer] M3U8 content preview:");
+                    console.log(data.substring(0, 300));
+                    console.log("[AVPlayer] ========================================");
+                    if (callback) callback(true, data);
+                })
+                .catch(function (error) {
+                    console.error("[AVPlayer] ========================================");
+                    console.error("[AVPlayer] ✗✗✗ STREAM NOT ACCESSIBLE ✗✗✗");
+                    console.error("[AVPlayer] Error:", error.message);
+                    console.error("[AVPlayer] Error details:", error);
+                    console.error("[AVPlayer] ========================================");
+                    if (callback) callback(false, error);
+                });
         },
 
-        changeStream: function (url) {
-            this.stop();
-            // avplay.close()? usually reset needed?
-            // Safer to close and reopen
-            try { avplay.close(); } catch (e) { }
-            this.setUrl(url);
-            this.setFullScreen(); // re-apply rect
-            this.play();
+        /**
+         * Test with a known working public stream
+         */
+        testWithPublicStream: function () {
+            var testUrl = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+            console.log("[AVPlayer] ========================================");
+            console.log("[AVPlayer] TESTING WITH PUBLIC STREAM");
+            console.log("[AVPlayer] URL:", testUrl);
+            console.log("[AVPlayer] ========================================");
+            this.setUrl(testUrl);
+            var self = this;
+            setTimeout(function () {
+                self.play();
+            }, 1000);
         },
 
-        setFullScreen: function () {
-            if (!isTizenProp) return;
-            try {
-                // Try standard resizing
-                avplay.setDisplayRect(0, 0, 1920, 1080);
-
-                // Try setting display mode to full screen explicitly
-                // This helps on some models where setDisplayRect alone leaves it hidden/windowed
-                try {
-                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
-                } catch (e2) {
-                    // checking deprecated or alternative constants usually not needed if rect is set, but helpful safety
-                }
-            } catch (e) { }
+        /**
+         * Update server IP for localhost URL replacement
+         */
+        setServerIP: function (ip) {
+            SERVER_IP = ip;
+            console.log("[AVPlayer] Server IP updated to:", SERVER_IP);
         }
     };
 })();
