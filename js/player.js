@@ -158,9 +158,7 @@ async function loadChannelList(lookupName = null) {
     try {
         // We reuse the API used in channels page
         let response = await BBNL_API.getChannelList();
-        if (response && response.body && Array.isArray(response.body)) {
-            response = response.body;
-        }
+
         if (Array.isArray(response)) {
             allChannels = response;
             console.log("Player: Loaded " + allChannels.length + " channels for zapping.");

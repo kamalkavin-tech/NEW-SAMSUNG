@@ -29,15 +29,7 @@ async function initPage() {
         // Fetch Categories
         let catResponse = await BBNL_API.getCategoryList();
 
-        // --- REAL API PARSING LOGIC START ---
-        if (catResponse && catResponse.body && Array.isArray(catResponse.body)) {
-            if (catResponse.body.length > 0 && catResponse.body[0].categories) {
-                catResponse = catResponse.body[0].categories;
-            } else {
-                catResponse = catResponse.body;
-            }
-        }
-        // --- REAL API PARSING LOGIC END ---
+
 
         if (Array.isArray(catResponse)) {
             renderCategories(catResponse);
@@ -121,12 +113,15 @@ async function loadChannels() {
 
     try {
         let response = await BBNL_API.getChannelList();
-
-        // --- REAL API PARSING LOGIC START ---
-        if (response && response.body && Array.isArray(response.body)) {
-            response = response.body;
+        console.log("[Channels Page] Raw channel response:", response);
+        if (Array.isArray(response)) {
+            console.log(`[Channels Page] Channels fetched: ${response.length}`);
+            console.log('[Channels Page] Sample channels:', response.slice(0, 6));
+        } else {
+            console.log('[Channels Page] Channel response is not array:', response);
         }
-        // --- REAL API PARSING LOGIC END ---
+
+
 
         if (Array.isArray(response)) {
             allChannels = response;
@@ -147,6 +142,7 @@ function filterAndRenderChannels(filterId) {
 
     // Filter Logic
     let displayChannels = allChannels;
+    console.log('[Channels Page] filterAndRenderChannels()', { currentCategory, filterId, totalChannels: Array.isArray(allChannels) ? allChannels.length : 0 });
 
     // If a specific ID is provided (from category 'grid' property), use it.
     if (filterId && currentCategory !== "All") {
@@ -160,7 +156,10 @@ function filterAndRenderChannels(filterId) {
     }
 
     if (displayChannels.length === 0) {
-        container.innerHTML = '<div class="empty-label">No channels found</div>';
+        const fetchedCount = Array.isArray(allChannels) ? allChannels.length : 0;
+        container.innerHTML = '<div class="empty-label">No channels found</div>' +
+            '<div class="debug-small" style="color:#999; margin-top:8px; font-size:13px;">Fetched ' + fetchedCount + ' channels</div>';
+        console.log('[Channels Page] No channels to display. allChannels length =', fetchedCount, ' displayChannels sample=', Array.isArray(allChannels) ? allChannels.slice(0,4) : allChannels);
         refreshFocusables();
         return;
     }

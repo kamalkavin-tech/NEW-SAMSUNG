@@ -20,7 +20,7 @@ const DEFAULT_HEADERS = {
 
 // Default user information
 const DEFAULT_USER = {
-    userid: "testiser1",
+    userid: "testuser1",
     mobile: "7800000001"
 };
 
@@ -63,15 +63,17 @@ const DEVICE_INFO = {
 // ==========================================
 // API HELPER
 // ==========================================
-async function apiCall(endpoint, payload) {
-    const url = endpoint; // endpoint is now full URL from API_ENDPOINTS
+async function apiCall(endpoint, payload, customHeaders) {
+    const url = endpoint;
+    const headers = Object.assign({}, DEFAULT_HEADERS, customHeaders || {});
 
     console.log(`[API] Request: ${url}`, payload);
+    console.log('[API] Request Headers:', headers);
 
     try {
         const response = await fetch(url, {
             method: "POST",
-            headers: DEFAULT_HEADERS,
+            headers: headers,
             body: JSON.stringify(payload)
         });
 
@@ -121,9 +123,11 @@ const DeviceInfo = {
 
                 // if (mac) {
                 //     DEVICE_INFO.mac_address = mac;
-                //     DEFAULT_HEADERS["devmac"] = mac;
+                    //     DEFAULT_HEADERS["devmac"] = mac;
                 // }
             }
+            // Ensure default headers reflect the device MAC
+            DEFAULT_HEADERS["devmac"] = DEVICE_INFO.mac_address;
             console.log("[DeviceInfo] Initialized:", DEVICE_INFO);
         } catch (e) {
             console.warn("[DeviceInfo] Tizen WebAPIs not available, using defaults");
@@ -152,6 +156,20 @@ const AuthAPI = {
         };
         console.log("[AuthAPI] Requesting OTP Payload:", payload);
         return await apiCall(API_ENDPOINTS.LOGIN, payload);
+    },
+
+    addMacAddress: async function (userid, mobile) {
+        const device = DeviceInfo.getDeviceInfo();
+        const payload = {
+            userid: userid,
+            mobile: mobile,
+            mac_address: device.mac_address,
+            device_name: device.device_name,
+            ip_address: device.ip_address,
+            device_type: device.device_type
+        };
+        console.log("[AuthAPI] Adding MAC Address Payload:", payload);
+        return await apiCall(API_ENDPOINTS.ADD_MACADDRESS, payload);
     },
 
     verifyOTP: async function (userid, mobile, otpcode) {
@@ -234,12 +252,17 @@ const ChannelsAPI = {
         };
 
         console.log("[ChannelsAPI] Getting Categories with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_CATEGORIES, payload);
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_CATEGORIES, payload, { "devmac": device.mac_address });
 
         // Handle error responses
         if (response.error) {
             console.error("[ChannelsAPI] Error getting categories:", response);
             return [];
+        }
+
+        // Handle array-wrapped response: [{ body: ... }] or [{ categories: ... }]
+        if (Array.isArray(response) && response.length > 0 && (response[0].body || response[0].categories)) {
+            response = response[0];
         }
 
         // Normalize Nested Response
@@ -270,12 +293,17 @@ const ChannelsAPI = {
         };
 
         console.log("[ChannelsAPI] Getting Channel Data with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_DATA, payload);
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_DATA, payload, { "devmac": device.mac_address });
 
         // Handle error responses
         if (response.error) {
             console.error("[ChannelsAPI] Error getting channel data:", response);
             return [];
+        }
+
+        // Handle array-wrapped response: [{ body: ... }]
+        if (Array.isArray(response) && response.length > 0 && response[0].body) {
+            response = response[0];
         }
 
         // Normalize Nested Response
@@ -308,7 +336,13 @@ const ChannelsAPI = {
         };
 
         console.log("[ChannelsAPI] Getting Language List with payload:", payload);
-        return await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload);
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, { "devmac": device.mac_address });
+
+        // Handle array-wrapped response
+        if (Array.isArray(response) && response.length > 0) {
+            return response[0].body || response[0];
+        }
+        return response.body || response;
     },
 
     getSubscribedChannels: function (channels) {
@@ -343,17 +377,24 @@ const ChannelsAPI = {
 const AdsAPI = {
     getIPTVAds: async function (options = {}) {
         const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
         const payload = {
             userid: user ? user.userid : DEFAULT_USER.userid,
             mobile: user ? user.mobile : DEFAULT_USER.mobile,
             adclient: options.adclient || "fofi",
             srctype: options.srctype || "image",
             displayarea: options.displayarea || "homepage",
-            displaytype: options.displaytype || "multiple"
+            displaytype: options.displaytype || "multiple",
+            mac_address: device.mac_address
         };
 
         console.log("[AdsAPI] Getting IPTV Ads with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload);
+        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload, { "devmac": device.mac_address });
+
+        // Handle array-wrapped response: [{ body: ... }]
+        if (Array.isArray(response) && response.length > 0 && response[0].body) {
+            response = response[0];
+        }
 
         if (response && response.body && Array.isArray(response.body)) {
             return response.body;
@@ -409,6 +450,7 @@ const AdsAPI = {
 const BBNL_API = {
     // Auth Methods
     requestOTP: AuthAPI.requestOTP.bind(AuthAPI),
+    addMacAddress: AuthAPI.addMacAddress.bind(AuthAPI),
     verifyOTP: AuthAPI.verifyOTP.bind(AuthAPI),
     resendOTP: AuthAPI.resendOTP.bind(AuthAPI),
     setSession: AuthAPI.setSession.bind(AuthAPI),
@@ -446,6 +488,10 @@ const BBNL_API = {
 // Make it available globally
 if (typeof window !== 'undefined') {
     window.BBNL_API = BBNL_API;
+    window.AuthAPI = AuthAPI;
+    window.ChannelsAPI = ChannelsAPI;
+    window.AdsAPI = AdsAPI;
+    window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
 }
 
