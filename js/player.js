@@ -40,39 +40,16 @@ function fixLocalhostUrl(url) {
         console.log("Original URL:", originalUrl);
         console.log("Fixed URL:", url);
 
-        if (typeof DebugHelper !== 'undefined') {
-            DebugHelper.log("⚠️ Localhost URL fixed", "127.0.0.1 → " + PLAYER_CONFIG.SERVER_IP);
-        }
     }
 
     return url;
 }
 
+// Track if we've hidden the loading indicator for current stream
+var hasHiddenLoadingIndicator = false;
 
 window.onload = function () {
     console.log("=== Player Initialized ===");
-
-    // Initialize Debug Helper if available
-    if (typeof DebugHelper !== 'undefined') {
-        DebugHelper.createDebugOverlay();
-        DebugHelper.log("Player page loaded");
-
-        // Check environment
-        var env = DebugHelper.checkEnvironment();
-
-        // Get device info
-        var deviceInfo = DebugHelper.getDeviceInfo();
-
-        // Test API connection
-        DebugHelper.testAPIConnection(function (error, data) {
-            if (error) {
-                DebugHelper.log("API Connection Test FAILED", error.message);
-                alert("API Connection Error: " + error.message + "\n\nPlease check your network connection.");
-            } else {
-                DebugHelper.log("API Connection Test SUCCESS");
-            }
-        });
-    }
 
     // Initialize AVPlayer
     if (typeof AVPlayer !== 'undefined') {
@@ -80,26 +57,38 @@ window.onload = function () {
             callbacks: {
                 onBufferingStart: () => {
                     console.log("Buffering...");
-                    if (typeof DebugHelper !== 'undefined') DebugHelper.log("Buffering started");
+                    showBufferingIndicator();
+                    hasHiddenLoadingIndicator = false; // Reset flag on new buffering
                 },
                 onBufferingComplete: () => {
                     console.log("Buffering Done");
-                    if (typeof DebugHelper !== 'undefined') DebugHelper.log("Buffering complete");
+                    hideBufferingIndicator();
+                    hasHiddenLoadingIndicator = true;
                 },
                 onError: (e) => {
                     console.error("Player Error:", e);
-                    if (typeof DebugHelper !== 'undefined') DebugHelper.log("Player Error", e);
+                    hideBufferingIndicator(); // Hide on error
+                    hasHiddenLoadingIndicator = true;
                     alert("Playback Error: " + e + "\n\nPlease check the stream URL or try another channel.");
                 },
                 onStreamCompleted: () => {
                     console.log("Playback Finished");
-                    if (typeof DebugHelper !== 'undefined') DebugHelper.log("Stream completed");
+                },
+                onCurrentPlayTime: (time) => {
+                    // Update timeline with current playback position (in milliseconds)
+                    updateTimeline(time);
+
+                    // CRITICAL: Hide loading indicator once playback starts
+                    if (!hasHiddenLoadingIndicator && time > 0) {
+                        console.log("✓ Playback started (time > 0), hiding loading indicator");
+                        hideBufferingIndicator();
+                        hasHiddenLoadingIndicator = true;
+                    }
                 }
             }
         });
     } else {
         console.error("AVPlayer Module not loaded!");
-        if (typeof DebugHelper !== 'undefined') DebugHelper.log("AVPlayer NOT FOUND - Critical Error");
         alert("Critical Error: AVPlayer module not loaded!");
     }
 
@@ -192,9 +181,6 @@ async function loadChannelList(lookupName = null) {
 
 function setupPlayer(channel) {
     console.log("=== Setting up player for channel ===", channel);
-    if (typeof DebugHelper !== 'undefined') {
-        DebugHelper.log("Setting up player", channel.chtitle || channel.channel_name);
-    }
 
     // Populate UI Elements
     const uiName = document.getElementById("ui-channel-name");
@@ -212,12 +198,20 @@ function setupPlayer(channel) {
     }
 
     // Standardize Logo
-    const logo = channel.logo_url || channel.chlogo;
+    const logo = channel.logo_url || channel.chlogo || channel.logo;
     if (uiLogo) {
-        if (logo) {
+        if (logo && logo.trim() !== "") {
+            console.log("Setting channel logo:", logo);
             uiLogo.src = logo;
+            uiLogo.onerror = function() {
+                // If logo fails to load, use a placeholder
+                console.warn("Logo failed to load:", logo);
+                this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23333' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='14'%3ETV%3C/text%3E%3C/svg%3E";
+            };
         } else {
-            uiLogo.src = ""; // Clear or set placeholder
+            // Use placeholder SVG for missing logo
+            console.log("No logo provided, using placeholder");
+            uiLogo.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23333' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='14'%3ETV%3C/text%3E%3C/svg%3E";
         }
     }
 
@@ -244,16 +238,10 @@ function setupPlayer(channel) {
     }
     console.log("========================");
 
-    if (typeof DebugHelper !== 'undefined') {
-        DebugHelper.log("Stream URL (raw)", streamUrl ? streamUrl.substring(0, 80) : "NULL");
-    }
 
     if (!streamUrl) {
         const errorMsg = "No Stream URL found for channel: " + chName;
         console.warn(errorMsg);
-        if (typeof DebugHelper !== 'undefined') {
-            DebugHelper.log("ERROR: No stream URL", channel);
-        }
         alert("Stream not available. Please login or check subscription.\n\nChannel: " + chName);
         return;
     }
@@ -267,47 +255,33 @@ function setupPlayer(channel) {
     console.log("Contains localhost:", fixedStreamUrl.includes('127.0.0.1') || fixedStreamUrl.includes('localhost'));
     console.log("========================");
 
-    if (typeof DebugHelper !== 'undefined') {
-        DebugHelper.log("Stream URL (fixed)", fixedStreamUrl.substring(0, 80));
-    }
 
     // Validate stream URL format (using fixed URL)
     if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
         const errorMsg = "Invalid stream URL format: " + streamUrl;
         console.error(errorMsg);
-        if (typeof DebugHelper !== 'undefined') {
-            DebugHelper.log("ERROR: Invalid URL format", streamUrl);
-        }
         alert("Invalid stream URL format.\n\nURL: " + streamUrl);
         return;
     }
 
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
         console.log("Using AVPlayer (Tizen mode)");
-        if (typeof DebugHelper !== 'undefined') {
-            DebugHelper.log("Using AVPlayer", "Tizen mode");
-        }
+
+        // Show loading indicator immediately
+        showBufferingIndicator();
 
         try {
             // Use the FIXED stream URL (with localhost replaced)
             AVPlayer.changeStream(fixedStreamUrl);
             console.log("AVPlayer.changeStream called successfully with URL:", fixedStreamUrl);
-            if (typeof DebugHelper !== 'undefined') {
-                DebugHelper.log("AVPlayer.changeStream called", fixedStreamUrl.substring(0, 80));
-            }
         } catch (error) {
             console.error("Error calling AVPlayer.changeStream:", error);
-            if (typeof DebugHelper !== 'undefined') {
-                DebugHelper.log("ERROR in changeStream", error.message);
-            }
+            hideBufferingIndicator();
             alert("Error starting playback: " + error.message + "\n\nURL: " + fixedStreamUrl.substring(0, 100));
         }
     } else {
         // Fallback or Test Mode
         console.warn("Non-Tizen Environment: Using Fallback HTML5 Video");
-        if (typeof DebugHelper !== 'undefined') {
-            DebugHelper.log("Using HTML5 fallback", "Not Tizen");
-        }
 
         const v = document.getElementById("video-player");
         if (v) {
@@ -315,9 +289,6 @@ function setupPlayer(channel) {
             v.src = fixedStreamUrl;
             v.play().catch(function (error) {
                 console.error("HTML5 video play error:", error);
-                if (typeof DebugHelper !== 'undefined') {
-                    DebugHelper.log("HTML5 play error", error.message);
-                }
             });
         }
     }
@@ -378,4 +349,194 @@ function handleKeydown(e) {
             case 412: AVPlayer.jumpBackward(10000); break;
         }
     }
+
+    // Show overlay on any key press
+    showOverlay();
 }
+
+// ==========================================
+// TIMELINE & PROGRESS BAR FUNCTIONALITY
+// ==========================================
+var isLiveStream = true; // Most IPTV channels are live streams
+var streamDuration = 0;
+var currentPlayTime = 0;
+
+function updateTimeline(timeInMilliseconds) {
+    currentPlayTime = timeInMilliseconds;
+
+    // For live streams, we don't show progress (or show as "LIVE")
+    // For VOD, calculate and show progress percentage
+
+    if (!isLiveStream && streamDuration > 0) {
+        var progressPercent = (timeInMilliseconds / streamDuration) * 100;
+        var progressBar = document.querySelector('.progress-bar-fill');
+        if (progressBar) {
+            progressBar.style.width = progressPercent + '%';
+        }
+
+        // Update time display
+        var programTime = document.getElementById('ui-program-time');
+        if (programTime) {
+            var currentTime = formatTime(timeInMilliseconds);
+            var totalTime = formatTime(streamDuration);
+            programTime.innerText = currentTime + ' / ' + totalTime;
+        }
+    } else {
+        // Live stream - show as LIVE
+        var progressBar = document.querySelector('.progress-bar-fill');
+        if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.classList.add('live');
+        }
+
+        var programTime = document.getElementById('ui-program-time');
+        if (programTime) {
+            programTime.innerHTML = '<span style="color: #ef4444;">●</span> LIVE';
+        }
+    }
+}
+
+function formatTime(milliseconds) {
+    var totalSeconds = Math.floor(milliseconds / 1000);
+    var hours = Math.floor(totalSeconds / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return hours + ':' + pad(minutes) + ':' + pad(seconds);
+    } else {
+        return minutes + ':' + pad(seconds);
+    }
+}
+
+function pad(num) {
+    return (num < 10 ? '0' : '') + num;
+}
+
+function showBufferingIndicator() {
+    // Reset the hidden flag when showing indicator for new stream
+    hasHiddenLoadingIndicator = false;
+
+    // Add a prominent loading indicator
+    var container = document.getElementById('player-container');
+    if (container && !document.getElementById('buffering-indicator')) {
+        // Add spinner CSS if not already added
+        if (!document.getElementById('spinner-styles')) {
+            var style = document.createElement('style');
+            style.id = 'spinner-styles';
+            style.textContent = `
+                .spinner {
+                    border: 4px solid rgba(255, 255, 255, 0.3);
+                    border-top: 4px solid #fff;
+                    border-radius: 50%;
+                    width: 50px;
+                    height: 50px;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        var bufferingDiv = document.createElement('div');
+        bufferingDiv.id = 'buffering-indicator';
+        bufferingDiv.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 30px 50px; border-radius: 15px; font-size: 22px; z-index: 9999; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.8);';
+        bufferingDiv.innerHTML = '<div style="margin-bottom: 15px;"><div class="spinner"></div></div><div style="font-size: 20px; font-weight: 600;">Loading Stream...</div><div style="font-size: 14px; color: #aaa; margin-top: 8px;">Please wait</div>';
+        container.appendChild(bufferingDiv);
+
+        // SAFETY TIMEOUT: Auto-hide after 8 seconds max (for ultra-fast mode)
+        setTimeout(function() {
+            if (!hasHiddenLoadingIndicator) {
+                console.log("⏱️ Safety timeout: Force hiding loading indicator after 8 seconds");
+                hideBufferingIndicator();
+                hasHiddenLoadingIndicator = true;
+            }
+        }, 8000); // 8 seconds max for ultra-fast mode
+    }
+}
+
+function hideBufferingIndicator() {
+    var indicator = document.getElementById('buffering-indicator');
+    if (indicator) {
+        indicator.remove();
+    }
+}
+
+// Make progress bar clickable for seeking (VOD only)
+document.addEventListener('DOMContentLoaded', function() {
+    var progressContainer = document.querySelector('.progress-container');
+    if (progressContainer) {
+        progressContainer.addEventListener('click', function(e) {
+            if (!isLiveStream && streamDuration > 0) {
+                var rect = this.getBoundingClientRect();
+                var clickX = e.clientX - rect.left;
+                var percentage = clickX / rect.width;
+                var seekTime = Math.floor(percentage * streamDuration);
+
+                // Seek to the clicked position
+                if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
+                    try {
+                        webapis.avplay.seekTo(seekTime, function() {
+                            console.log('Seeked to:', seekTime);
+                        }, function(err) {
+                            console.error('Seek error:', err);
+                        });
+                    } catch (e) {
+                        console.error('Seek failed:', e);
+                    }
+                }
+            }
+        });
+
+        // Make progress bar look clickable for VOD
+        if (!isLiveStream) {
+            progressContainer.style.cursor = 'pointer';
+        }
+    }
+});
+
+// ==========================================
+// OVERLAY AUTO-HIDE/SHOW FUNCTIONALITY
+// ==========================================
+var overlayTimeout;
+var OVERLAY_HIDE_DELAY = 5000; // Hide after 5 seconds of inactivity
+
+function showOverlay() {
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+
+        // Clear existing timeout
+        if (overlayTimeout) {
+            clearTimeout(overlayTimeout);
+        }
+
+        // Set new timeout to hide overlay
+        overlayTimeout = setTimeout(function() {
+            hideOverlay();
+        }, OVERLAY_HIDE_DELAY);
+    }
+}
+
+function hideOverlay() {
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay) {
+        overlay.classList.remove('visible');
+        overlay.classList.add('hidden');
+    }
+}
+
+// Show overlay on any user interaction
+document.addEventListener('keydown', showOverlay);
+document.addEventListener('mousemove', showOverlay);
+document.addEventListener('click', showOverlay);
+
+// Show overlay initially for 5 seconds when page loads
+setTimeout(function() {
+    showOverlay();
+}, 100);

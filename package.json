@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "anthropic": "^0.0.0",
     "server": "^1.0.42",
     "server.js": "^1.0.0"
   }

@@ -134,7 +134,7 @@ var AVPlayer = (function () {
                     console.log("[AVPlayer] No previous instance to clean");
                 }
 
-                // Wait for cleanup to complete
+                // Minimal delay for cleanup to complete
                 var self = this;
                 setTimeout(function () {
                     try {
@@ -149,13 +149,25 @@ var AVPlayer = (function () {
                         playerState = "IDLE";
                         console.log("[AVPlayer] ✓ Stream opened");
 
-                        // STEP 4: Configure timeout and buffering
+                        // STEP 4: Configure timeout and buffering (ULTRA-FAST START)
                         try {
-                            console.log("[AVPlayer] Configuring buffering...");
-                            avplay.setTimeoutForBuffering(5000); // 5 seconds
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 10);
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 5);
-                            console.log("[AVPlayer] ✓ Buffering configured");
+                            console.log("[AVPlayer] Configuring ULTRA-FAST buffering...");
+
+                            // AGGRESSIVE: Minimum buffering for instant start
+                            avplay.setTimeoutForBuffering(2000); // 2 seconds timeout (very fast)
+
+                            // CRITICAL: Reduce to MINIMUM buffer (1 second for play, 1 second for resume)
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
+
+                            // Try to set even more aggressive buffering if supported
+                            try {
+                                avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_BYTE", 1024 * 100); // 100KB min
+                            } catch (e) {
+                                console.log("[AVPlayer] Byte-based buffering not supported");
+                            }
+
+                            console.log("[AVPlayer] ✓ ULTRA-FAST buffering configured (1s initial)");
                         } catch (bufferError) {
                             console.warn("[AVPlayer] Buffering config warning:", bufferError);
                         }
@@ -163,26 +175,19 @@ var AVPlayer = (function () {
                         // STEP 5: Set display rectangle and method
                         try {
                             console.log("[AVPlayer] Setting display...");
+                            // Set display area (full screen dimensions)
                             avplay.setDisplayRect(0, 0, 1920, 1080);
 
-                            // Try different display methods
-                            var displayMethods = [
-                                'PLAYER_DISPLAY_MODE_FULL_SCREEN',
-                                'fullscreen',
-                                'FULL_SCREEN'
-                            ];
-
-                            for (var i = 0; i < displayMethods.length; i++) {
-                                try {
-                                    avplay.setDisplayMethod(displayMethods[i]);
-                                    console.log("[AVPlayer] ✓ Display method set:", displayMethods[i]);
-                                    break;
-                                } catch (methodErr) {
-                                    if (i === displayMethods.length - 1) {
-                                        console.warn("[AVPlayer] All display methods failed");
-                                    }
-                                }
+                            // Use AUTO_ASPECT_RATIO mode for full screen with proper aspect ratio
+                            // This fills the screen while allowing HTML overlays
+                            try {
+                                avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
+                                console.log("[AVPlayer] ✓ Display method set: AUTO_ASPECT_RATIO (full screen with overlay support)");
+                            } catch (methodErr) {
+                                console.warn("[AVPlayer] Could not set AUTO_ASPECT_RATIO mode, trying alternatives:", methodErr);
+                                // Fallback: don't set display method, use default
                             }
+
                             console.log("[AVPlayer] ✓ Display configured");
                         } catch (displayError) {
                             console.error("[AVPlayer] Display error:", displayError);
@@ -207,7 +212,7 @@ var AVPlayer = (function () {
                             });
                         }
                     }
-                }, 100);
+                }, 10); // ULTRA-FAST: Minimal 10ms delay for instant start
 
             } catch (e) {
                 console.error("[AVPlayer] setUrl Exception:", e);
@@ -231,6 +236,25 @@ var AVPlayer = (function () {
                 console.log("[AVPlayer] ========================================");
 
                 if (playerState === "IDLE") {
+                    // ULTRA-FAST MODE: For HLS streams, try direct play without prepare
+                    var isHLS = currentStreamUrl && (currentStreamUrl.includes('.m3u8') || currentStreamUrl.includes('.m3u'));
+
+                    if (isHLS) {
+                        console.log("[AVPlayer] ⚡ ULTRA-FAST MODE: HLS detected, attempting direct play...");
+                        try {
+                            avplay.play();
+                            playerState = "PLAYING";
+                            console.log("[AVPlayer] ========================================");
+                            console.log("[AVPlayer] ✓✓✓ INSTANT PLAYBACK STARTED (HLS) ✓✓✓");
+                            console.log("[AVPlayer] ========================================");
+                            return;
+                        } catch (directPlayError) {
+                            console.warn("[AVPlayer] Direct play failed, falling back to prepareAsync:", directPlayError);
+                            playerState = "IDLE"; // Reset state
+                        }
+                    }
+
+                    // Fallback: Standard prepare for non-HLS or if direct play failed
                     console.log("[AVPlayer] Preparing stream...");
 
                     avplay.prepareAsync(
@@ -337,7 +361,7 @@ var AVPlayer = (function () {
             var self = this;
             setTimeout(function () {
                 self.play();
-            }, 500);
+            }, 50); // ULTRA-FAST: 50ms delay for instant channel switching
         },
 
         getCurrentTime: function () {
@@ -352,6 +376,52 @@ var AVPlayer = (function () {
             try {
                 return avplay.getDuration();
             } catch (e) { return 0; }
+        },
+
+        jumpForward: function (milliseconds) {
+            if (!isTizenProp) return;
+            try {
+                var currentTime = this.getCurrentTime();
+                var newTime = currentTime + milliseconds;
+                avplay.jumpForward(milliseconds);
+                console.log("[AVPlayer] Jumped forward:", milliseconds, "ms to", newTime);
+            } catch (e) {
+                console.warn("[AVPlayer] Jump forward not supported:", e);
+            }
+        },
+
+        jumpBackward: function (milliseconds) {
+            if (!isTizenProp) return;
+            try {
+                var currentTime = this.getCurrentTime();
+                var newTime = Math.max(0, currentTime - milliseconds);
+                avplay.jumpBackward(milliseconds);
+                console.log("[AVPlayer] Jumped backward:", milliseconds, "ms to", newTime);
+            } catch (e) {
+                console.warn("[AVPlayer] Jump backward not supported:", e);
+            }
+        },
+
+        seekTo: function (milliseconds, successCallback, errorCallback) {
+            if (!isTizenProp) {
+                if (errorCallback) errorCallback("Not Tizen");
+                return;
+            }
+            try {
+                avplay.seekTo(milliseconds,
+                    function() {
+                        console.log("[AVPlayer] Seeked to:", milliseconds);
+                        if (successCallback) successCallback();
+                    },
+                    function(err) {
+                        console.error("[AVPlayer] Seek error:", err);
+                        if (errorCallback) errorCallback(err);
+                    }
+                );
+            } catch (e) {
+                console.error("[AVPlayer] Seek exception:", e);
+                if (errorCallback) errorCallback(e);
+            }
         },
 
         getState: function () { return playerState; },

@@ -96,44 +96,82 @@ function renderCategories(categories) {
     });
 }
 
-function handleCategorySelect(btn, categoryName, catId) {
+async function handleCategorySelect(btn, categoryName, catId) {
     // UI Update
     document.querySelectorAll(".filter-chip").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
 
     currentCategory = categoryName;
 
-    // Filter Channels
-    filterAndRenderChannels(catId);
+    // FETCH channels from API for this category
+    // If "All", fetch without filter. Otherwise, fetch with grid filter.
+    if (categoryName === "All") {
+        await loadChannels(); // Load all channels
+    } else {
+        await loadChannels({ grid: catId }); // Load channels for specific category
+    }
 }
 
-async function loadChannels() {
+async function loadChannels(options = {}) {
     const container = document.getElementById("channel-grid-container");
     container.innerHTML = '<div class="loading-label">Loading Channels...</div>';
 
     try {
-        let response = await BBNL_API.getChannelList();
-        console.log("[Channels Page] Raw channel response:", response);
-        if (Array.isArray(response)) {
-            console.log(`[Channels Page] Channels fetched: ${response.length}`);
-            console.log('[Channels Page] Sample channels:', response.slice(0, 6));
-        } else {
-            console.log('[Channels Page] Channel response is not array:', response);
-        }
+        // API returns ALL channels, filtering is done client-side in api.js
+        const apiOptions = {
+            grid: options.grid || "",       // Category filter (applied client-side)
+            langid: options.langid || "",   // Language filter (applied client-side)
+            search: options.search || ""    // Search term (applied client-side)
+        };
 
-
+        let response = await BBNL_API.getChannelList(apiOptions);
 
         if (Array.isArray(response)) {
+            console.log(`[Channels Page] Loaded ${response.length} channels`);
+
             allChannels = response;
-            filterAndRenderChannels();
+
+            // Always render all channels since filtering already happened in API
+            renderAllChannels(allChannels);
         } else {
             const debugMsg = response ? (response.message || JSON.stringify(response)) : "Null Response";
             container.innerHTML = '<div class="error-label" style="color:red; font-size:14px;">Error: ' + debugMsg + '</div>';
             console.error("Channel Load Failed", response);
         }
     } catch (e) {
+        console.error("[Channels Page] Exception:", e);
         container.innerHTML = '<div class="error-label" style="color:red;">Exception: ' + e.message + '</div>';
     }
+}
+
+function renderAllChannels(channels) {
+    const container = document.getElementById("channel-grid-container");
+    container.innerHTML = ""; // Clear existing
+
+    if (channels.length === 0) {
+        container.innerHTML = '<div class="empty-label">No channels found</div>';
+        refreshFocusables();
+        return;
+    }
+
+    // Render channels in sections
+    const topChannels = channels.slice(0, 5);
+    const mostlyViewed = channels.slice(5, 10);
+    const others = channels.slice(10);
+
+    if (topChannels.length > 0) {
+        renderSection(container, null, topChannels);
+    }
+
+    if (mostlyViewed.length > 0) {
+        renderSection(container, "Mostly Viewed Channels", mostlyViewed);
+    }
+
+    if (others.length > 0) {
+        renderSection(container, "Others Channels", others);
+    }
+
+    refreshFocusables();
 }
 
 function filterAndRenderChannels(filterId) {
@@ -142,8 +180,6 @@ function filterAndRenderChannels(filterId) {
 
     // Filter Logic
     let displayChannels = allChannels;
-    console.log('[Channels Page] filterAndRenderChannels()', { currentCategory, filterId, totalChannels: Array.isArray(allChannels) ? allChannels.length : 0 });
-
     // If a specific ID is provided (from category 'grid' property), use it.
     if (filterId && currentCategory !== "All") {
         displayChannels = allChannels.filter(ch => ch.grid == filterId);
@@ -157,9 +193,7 @@ function filterAndRenderChannels(filterId) {
 
     if (displayChannels.length === 0) {
         const fetchedCount = Array.isArray(allChannels) ? allChannels.length : 0;
-        container.innerHTML = '<div class="empty-label">No channels found</div>' +
-            '<div class="debug-small" style="color:#999; margin-top:8px; font-size:13px;">Fetched ' + fetchedCount + ' channels</div>';
-        console.log('[Channels Page] No channels to display. allChannels length =', fetchedCount, ' displayChannels sample=', Array.isArray(allChannels) ? allChannels.slice(0,4) : allChannels);
+        container.innerHTML = '<div class="empty-label">No channels found</div>';
         refreshFocusables();
         return;
     }
@@ -415,13 +449,23 @@ function handleEnter(el) {
     if (el.classList.contains('back-btn')) { window.location.href = "home.html"; return; }
     if (el.classList.contains('filter-chip')) { el.click(); return; }
     if (el.classList.contains('channel-card')) {
-        console.log("Play Channel:", el.dataset.name);
+        const streamUrl = el.dataset.url;
+        const channelName = el.dataset.name;
 
-        // Construct Channel Object
+        // Check if stream URL exists
+        if (!streamUrl || streamUrl.trim() === "") {
+            console.warn("No stream URL available for:", channelName);
+            alert("Stream not available for this channel");
+            return;
+        }
+
+        // Construct Channel Object (matching API response format)
         const channel = {
-            channel_name: el.dataset.name,
-            streamlink: el.dataset.url,
-            logo_url: el.dataset.logo
+            chtitle: channelName,          // Match API field name
+            channel_name: channelName,      // Keep for compatibility
+            streamlink: streamUrl,
+            chlogo: el.dataset.logo,
+            logo_url: el.dataset.logo       // Keep for compatibility
         };
 
         BBNL_API.playChannel(channel);

@@ -57,7 +57,7 @@ window.onload = function () {
 
 function loadHomeAds() {
     console.log("Loading Home Ads...");
-    AdsAPI.getChannelListAds().then(function (ads) {
+    AdsAPI.getHomeAds().then(function (ads) {
         console.log("Ads Fetched:", ads);
         if (ads && ads.length > 0) {
             updateHeroBanner(ads);

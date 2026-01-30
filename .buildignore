@@ -1,0 +1,72 @@
+# ============================================
+# TIZEN BUILD IGNORE FILE
+# ============================================
+# Files and folders listed here will NOT be
+# included in the .wgt package
+# ============================================
+
+# Exclude proxy server (development only)
+bbnl-proxy/
+bbnl-proxy/**
+
+# Exclude node modules (if accidentally created)
+node_modules/
+node_modules/**
+
+# Exclude package files
+package.json
+package-lock.json
+
+# Exclude environment files
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+
+# Exclude git files
+.git/
+.git/**
+.gitignore
+.gitattributes
+
+# Exclude IDE files
+.vscode/
+.vscode/**
+.idea/
+.idea/**
+*.swp
+*.swo
+
+# Exclude documentation
+README.md
+*.md
+docs/
+
+# Exclude build tools
+scripts/
+build-tools/
+
+# Exclude build artifacts
+.buildResult/
+.sign/
+*.log
+*.tmp
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Exclude backup files
+*.bak
+*~
+*.orig
+
+# Exclude test files
+__tests__/
+*.test.js
+*.spec.js
+
+# Exclude source maps
+*.map

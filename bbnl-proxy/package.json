@@ -1,14 +1,27 @@
 {
-    "name": "bbnl-proxy",
-    "version": "1.0.0",
-    "description": "BBNL API Proxy/Mock Server",
-    "main": "server.js",
-    "scripts": {
-        "start": "node server.js"
-    },
-    "dependencies": {
-        "body-parser": "^1.20.2",
-        "cors": "^2.8.5",
-        "express": "^4.18.2"
-    }
+  "name": "bbnl-proxy-server",
+  "version": "1.0.0",
+  "description": "BBNL IPTV Proxy Server for CORS bypass during development",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "proxy",
+    "cors",
+    "bbnl",
+    "iptv"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
 }

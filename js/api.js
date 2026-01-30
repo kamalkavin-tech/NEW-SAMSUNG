@@ -7,8 +7,28 @@
 // API CONFIGURATION
 // ==========================================
 
-// Base URL for API endpoints
-const API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
+// Base URLs for API endpoints
+// AUTO-DETECT: Use localhost proxy for browser testing, production for Tizen TV
+var IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+var API_BASE_URL_PROD;
+var API_BASE_URL_IPTV;
+
+if (IS_DEVELOPMENT) {
+    // Development: Use proxy server
+    API_BASE_URL_PROD = "http://localhost:3000";
+    API_BASE_URL_IPTV = "http://localhost:3000";
+} else {
+    // Production: Real servers
+    // Auth endpoints use /netmon/cabletvapis
+    // Channel endpoints use /netmon-iptv/cabletvapis
+    API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
+    API_BASE_URL_IPTV = "http://124.40.244.211/netmon-iptv/cabletvapis";
+}
+
+console.log("[API CONFIG] Mode: " + (IS_DEVELOPMENT ? 'DEVELOPMENT' : 'PRODUCTION'));
+console.log("[API CONFIG] Base URL (Prod): " + API_BASE_URL_PROD);
+console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
 
 // Default headers for all API requests
 const DEFAULT_HEADERS = {
@@ -20,9 +40,12 @@ const DEFAULT_HEADERS = {
 
 // Default user information
 const DEFAULT_USER = {
-    userid: "testuser1",
+    userid: "testiser1",
     mobile: "7800000001"
 };
+
+// Default language ID (Kannada = 9, as per client API)
+const DEFAULT_LANG_ID = "9";
 
 // API Configuration Object
 const API_CONFIG = {
@@ -33,14 +56,20 @@ const API_CONFIG = {
 
 // API Endpoints
 const API_ENDPOINTS = {
+    // Auth endpoints (old base URL)
     LOGIN: `${API_BASE_URL_PROD}/login`,
     RESEND_OTP: `${API_BASE_URL_PROD}/loginOtp`,
     ADD_MACADDRESS: `${API_BASE_URL_PROD}/addmacnew`,
     USER_LOGOUT: `${API_BASE_URL_PROD}/userLogout`,
+
+    // Channel endpoints - ALL use /netmon/ path (same as auth, categories, languages)
     CHANNEL_CATEGORIES: `${API_BASE_URL_PROD}/chnl_categlist`,
     CHANNEL_LANGUAGELIST: `${API_BASE_URL_PROD}/chnl_langlist`,
-    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,
+    CHANNEL_LIST: `${API_BASE_URL_PROD}/chnl_list`,        // Try /netmon/ path
+    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_list`,        // Alias for compatibility
     CHANNEL_EXPIRING: `${API_BASE_URL_PROD}/expiringchnl_list`,
+
+    // Other endpoints
     HOME_ADS: `${API_BASE_URL_PROD}/iptvads`,
     STREAM_ADS: `${API_BASE_URL_PROD}/streamAds`,
     OTT_APPS: `${API_BASE_URL_PROD}/allowedapps`,
@@ -53,8 +82,8 @@ const API_ENDPOINTS = {
 
 // Device info (will be updated by initializeDeviceInfo)
 const DEVICE_INFO = {
-    ip_address: "103.5.132.130",
-    mac_address: "26:F2:AE:D8:3F:99",
+    ip_address: "192.168.101.110",
+    mac_address: "26:F2:AE:D8:3F:99",   // Reverted to registered MAC (to avoid "already registered" error)
     device_name: "rk3368_box_",
     device_type: "FOFI_LG",
     devslno: "FOFI20191129000336"
@@ -66,6 +95,11 @@ const DEVICE_INFO = {
 async function apiCall(endpoint, payload, customHeaders) {
     const url = endpoint;
     const headers = Object.assign({}, DEFAULT_HEADERS, customHeaders || {});
+
+    // Enhanced debug logging
+    console.log("[API DEBUG] URL:", url);
+    console.log("[API DEBUG] Payload:", JSON.stringify(payload, null, 2));
+    console.log("[API DEBUG] Headers:", JSON.stringify(headers, null, 2));
 
     console.log(`[API] Request: ${url}`, payload);
     console.log('[API] Request Headers:', headers);
@@ -182,7 +216,8 @@ const AuthAPI = {
             mac_address: device.mac_address,
             device_name: device.device_name,
             ip_address: device.ip_address,
-            device_type: device.device_type
+            device_type: device.device_type,
+            getuserdet: ""
         };
 
         console.log("[AuthAPI] Verifying OTP Payload:", payload);
@@ -211,13 +246,28 @@ const AuthAPI = {
         return await apiCall(API_ENDPOINTS.RESEND_OTP, payload);
     },
 
-    setSession: function (data) {
-        localStorage.setItem("bbnl_user", JSON.stringify(data));
+    setSession: function (response) {
+        // Extract user data from response.body[0] and save it
+        if (response && response.body && response.body.length > 0) {
+            var userData = response.body[0];
+            localStorage.setItem("bbnl_user", JSON.stringify(userData));
+            console.log("[AuthAPI] Session saved for user:", userData.userid);
+        } else {
+            console.error("[AuthAPI] Invalid response structure for setSession:", response);
+        }
     },
 
     getUserData: function () {
         const data = localStorage.getItem("bbnl_user");
-        return data ? JSON.parse(data) : null;
+        if (data) {
+            try {
+                return JSON.parse(data);
+            } catch (e) {
+                console.error("[AuthAPI] Error parsing user data:", e);
+                return null;
+            }
+        }
+        return null;
     },
 
     isAuthenticated: function () {
@@ -244,15 +294,33 @@ const ChannelsAPI = {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
+        // Extract userid and mobile with proper fallback
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            if (user.userid) userid = user.userid;
+            if (user.mobile) mobile = user.mobile;
+        }
+
         const payload = {
-            userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
+            userid: userid,
+            mobile: mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
         };
 
         console.log("[ChannelsAPI] Getting Categories with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_CATEGORIES, payload, { "devmac": device.mac_address });
+        console.log("[ChannelsAPI] User data:", user);
+
+        const response = await apiCall(
+            API_ENDPOINTS.CHANNEL_CATEGORIES,
+            payload,
+            {
+                "devmac": device.mac_address,  // FIXED: Use device MAC dynamically
+                "devslno": device.devslno || "FOFI20191129000336"
+            }
+        );
 
         // Handle error responses
         if (response.error) {
@@ -281,62 +349,153 @@ const ChannelsAPI = {
         return [];
     },
 
-    getChannelData: async function () {
+    getChannelData: async function (options = {}) {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
+        // Extract userid and mobile with proper fallback
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            if (user.userid) userid = user.userid;
+            if (user.mobile) mobile = user.mobile;
+        }
+
+        console.log("[ChannelsAPI] User info - userid:", userid, "mobile:", mobile);
+        console.log("[ChannelsAPI] Full user data:", user);
+
+        // PRODUCTION API FORMAT (tested in Postman)
+        // Simple payload: userid, mobile, ip_address, mac_address only
         const payload = {
-            userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
+            userid: userid,
+            mobile: mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Channel Data with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_DATA, payload, { "devmac": device.mac_address });
+        console.log("[ChannelsAPI] Getting Channel List with payload:", payload);
+        console.log("[ChannelsAPI] Options (for client-side filtering):", options);
+
+        const response = await apiCall(
+            API_ENDPOINTS.CHANNEL_LIST,
+            payload,
+            {
+                "devmac": "68:1D:EF:14:6C:21",  // Use Postman header MAC (different from body MAC)
+                "devslno": device.devslno || "FOFI20191129000336"
+            }
+        );
+
+        console.log("[ChannelsAPI] Raw Response:", response);
 
         // Handle error responses
-        if (response.error) {
-            console.error("[ChannelsAPI] Error getting channel data:", response);
+        if (response && response.error) {
+            console.error("[ChannelsAPI] Error:", response.message);
             return [];
         }
 
-        // Handle array-wrapped response: [{ body: ... }]
-        if (Array.isArray(response) && response.length > 0 && response[0].body) {
-            response = response[0];
+        // Check for API error status
+        if (response && response.status && response.status.err_code !== 0) {
+            console.error("[ChannelsAPI] API Error:", response.status.err_msg);
+            return [];
         }
 
-        // Normalize Nested Response
+        // RESPONSE FORMAT: body[0].channels[]
+        let channels = [];
         if (response && response.body && Array.isArray(response.body)) {
-            return response.body;
+            if (response.body.length > 0 && response.body[0].channels) {
+                channels = response.body[0].channels;
+                console.log(`[ChannelsAPI] Successfully loaded ${channels.length} channels from API`);
+            }
         }
-        if (Array.isArray(response)) return response;
 
-        console.warn("[ChannelsAPI] Unexpected response format:", response);
-        return [];
+        if (channels.length === 0) {
+            console.warn("[ChannelsAPI] No channels returned. Raw response:", response);
+            return [];
+        }
+
+        // CLIENT-SIDE FILTERING (API returns all channels, we filter them here)
+        var filteredChannels = channels;
+
+        // Filter by grid (category)
+        if (options.grid && options.grid !== "") {
+            filteredChannels = filteredChannels.filter(function(ch) {
+                return ch.grid === options.grid;
+            });
+            console.log(`[ChannelsAPI] Filtered by grid="${options.grid}": ${filteredChannels.length} channels`);
+        }
+
+        // Filter by langid (language)
+        if (options.langid && options.langid !== "") {
+            filteredChannels = filteredChannels.filter(function(ch) {
+                return ch.langid === options.langid;
+            });
+            console.log(`[ChannelsAPI] Filtered by langid="${options.langid}": ${filteredChannels.length} channels`);
+        }
+
+        // Filter by search term
+        if (options.search && options.search !== "") {
+            var searchLower = options.search.toLowerCase();
+            filteredChannels = filteredChannels.filter(function(ch) {
+                var title = (ch.chtitle || "").toLowerCase();
+                return title.indexOf(searchLower) !== -1;
+            });
+            console.log(`[ChannelsAPI] Filtered by search="${options.search}": ${filteredChannels.length} channels`);
+        }
+
+        return filteredChannels;
     },
 
     getCategoryList: async function () {
         return this.getCategories();
     },
 
-    getChannelList: async function () {
-        return this.getChannelData();
+    getChannelList: async function (options = {}) {
+        return this.getChannelData(options);
+    },
+
+    // NEW: Search channels by keyword
+    searchChannels: async function (searchTerm, options = {}) {
+        return this.getChannelData({ ...options, search: searchTerm });
+    },
+
+    // NEW: Get channels by category/grid
+    getChannelsByCategory: async function (gridId, options = {}) {
+        return this.getChannelData({ ...options, grid: gridId });
+    },
+
+    // NEW: Get channels by language
+    getChannelsByLanguage: async function (langId, options = {}) {
+        return this.getChannelData({ ...options, langid: langId });
     },
 
     getLanguageList: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
+        // Extract userid and mobile with proper fallback
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            if (user.userid) userid = user.userid;
+            if (user.mobile) mobile = user.mobile;
+        }
+
         const payload = {
-            userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
+            userid: userid,
+            mobile: mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
         };
 
         console.log("[ChannelsAPI] Getting Language List with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, { "devmac": device.mac_address });
+        console.log("[ChannelsAPI] User data:", user);
+
+        const response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
 
         // Handle array-wrapped response
         if (Array.isArray(response) && response.length > 0) {
@@ -378,18 +537,24 @@ const AdsAPI = {
     getIPTVAds: async function (options = {}) {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
+
+        // Payload structure matching Postman (no mac_address in body)
         const payload = {
             userid: user ? user.userid : DEFAULT_USER.userid,
             mobile: user ? user.mobile : DEFAULT_USER.mobile,
             adclient: options.adclient || "fofi",
             srctype: options.srctype || "image",
             displayarea: options.displayarea || "homepage",
-            displaytype: options.displaytype || "multiple",
-            mac_address: device.mac_address
+            displaytype: options.displaytype || "multiple"
         };
 
         console.log("[AdsAPI] Getting IPTV Ads with payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload, { "devmac": device.mac_address });
+
+        // Send devmac and devslno in headers (matching Postman)
+        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
 
         // Handle array-wrapped response: [{ body: ... }]
         if (Array.isArray(response) && response.length > 0 && response[0].body) {
@@ -400,6 +565,10 @@ const AdsAPI = {
             return response.body;
         }
         return response;
+    },
+
+    getHomeAds: async function () {
+        return this.getIPTVAds({ srctype: 'image', displayarea: 'homepage' });
     },
 
     getVideoAds: async function () {
@@ -470,8 +639,14 @@ const BBNL_API = {
     getStreamUrl: ChannelsAPI.getStreamUrl.bind(ChannelsAPI),
     playChannel: ChannelsAPI.playChannel.bind(ChannelsAPI),
 
+    // NEW: Client API Methods
+    searchChannels: ChannelsAPI.searchChannels.bind(ChannelsAPI),
+    getChannelsByCategory: ChannelsAPI.getChannelsByCategory.bind(ChannelsAPI),
+    getChannelsByLanguage: ChannelsAPI.getChannelsByLanguage.bind(ChannelsAPI),
+
     // Ads Methods
     getIPTVAds: AdsAPI.getIPTVAds.bind(AdsAPI),
+    getHomeAds: AdsAPI.getHomeAds.bind(AdsAPI),
     getVideoAds: AdsAPI.getVideoAds.bind(AdsAPI),
     getChannelListAds: AdsAPI.getChannelListAds.bind(AdsAPI),
     getAdsByArea: AdsAPI.getAdsByArea.bind(AdsAPI),

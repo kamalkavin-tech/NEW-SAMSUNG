@@ -1,0 +1,84 @@
+╔════════════════════════════════════════════════════════════════╗
+║          🚨 QUICK FIX FOR TIZEN STUDIO ERRORS 🚨               ║
+╚════════════════════════════════════════════════════════════════╝
+
+📌 PROBLEM:
+   "JSON key should begin with" errors in node_modules
+
+📌 SOLUTION:
+   Delete node_modules from main project folder
+
+╔════════════════════════════════════════════════════════════════╗
+║                      🚀 FASTEST FIX (30 seconds)               ║
+╚════════════════════════════════════════════════════════════════╝
+
+1️⃣  Double-click:  cleanup.bat
+2️⃣  Press:  Y (to confirm)
+3️⃣  Open Tizen Studio
+4️⃣  Press:  F5 (to refresh)
+
+DONE! Errors gone! ✅
+
+╔════════════════════════════════════════════════════════════════╗
+║                    📝 MANUAL FIX (if needed)                   ║
+╚════════════════════════════════════════════════════════════════╝
+
+Open: c:\Users\kamal\NEW-SAMSUNG
+
+DELETE these:
+  ❌ node_modules\
+  ❌ package.json
+  ❌ package-lock.json
+
+Then in Tizen Studio:
+  ✅ Right-click project → Refresh (F5)
+  ✅ Right-click project → Build Project
+
+╔════════════════════════════════════════════════════════════════╗
+║                    ✅ SUCCESS CHECKLIST                        ║
+╚════════════════════════════════════════════════════════════════╝
+
+After fix, verify:
+
+[  ] node_modules folder DELETED from root
+[  ] Tizen Studio shows 0 errors
+[  ] Can build WGT package
+[  ] Can deploy to TV
+
+╔════════════════════════════════════════════════════════════════╗
+║                    📂 CORRECT STRUCTURE                        ║
+╚════════════════════════════════════════════════════════════════╝
+
+NEW-SAMSUNG\
+├── *.html, *.js, *.css  ✅ Your app files
+├── .buildignore         ✅ NEW - excludes files
+└── bbnl-proxy\          ✅ Proxy (excluded from build)
+    └── node_modules\    ✅ Dependencies ONLY here
+
+╔════════════════════════════════════════════════════════════════╗
+║                    ⚠️ REMEMBER THIS                            ║
+╚════════════════════════════════════════════════════════════════╝
+
+❌ NEVER:
+   cd c:\Users\kamal\NEW-SAMSUNG
+   npm install
+
+✅ ALWAYS:
+   cd c:\Users\kamal\NEW-SAMSUNG\bbnl-proxy
+   npm install
+
+╔════════════════════════════════════════════════════════════════╗
+║                    🎯 NEXT STEPS                               ║
+╚════════════════════════════════════════════════════════════════╝
+
+1. Run cleanup.bat
+2. Refresh Tizen Studio (F5)
+3. Build project
+4. Create WGT package
+5. Deploy to TV
+
+🎉 All done! Your app is ready!
+
+╔════════════════════════════════════════════════════════════════╗
+Need detailed help? Read: FIX_INSTRUCTIONS.txt
+╚════════════════════════════════════════════════════════════════╝
