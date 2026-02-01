@@ -102,8 +102,8 @@ const API_ENDPOINTS = {
     // Channel endpoints - ALL use /netmon/ path (same as auth, categories, languages)
     CHANNEL_CATEGORIES: `${API_BASE_URL_PROD}/chnl_categlist`,
     CHANNEL_LANGUAGELIST: `${API_BASE_URL_PROD}/chnl_langlist`,
-    CHANNEL_LIST: `${API_BASE_URL_PROD}/chnl_list`,        // Try /netmon/ path
-    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,        // Alias for compatibility
+    CHANNEL_LIST: `${API_BASE_URL_PROD}/chnl_data`,        // CORRECT: Returns full channel data with streamlinks for playback
+    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,        // Alias for compatibility (same as CHANNEL_LIST)
     CHANNEL_EXPIRING: `${API_BASE_URL_PROD}/expiringchnl_list`,
 
     // Ads endpoint
@@ -438,17 +438,32 @@ const ChannelsAPI = {
             return [];
         }
 
-        // RESPONSE FORMAT: body[0].channels[]
+        // RESPONSE FORMAT FOR /chnl_data:
+        // The body array directly contains channel objects, NOT nested in body[0].channels
+        // Structure: { body: [ {channel1}, {channel2}, ... ], status: {...} }
         let channels = [];
+
         if (response && response.body && Array.isArray(response.body)) {
-            if (response.body.length > 0 && response.body[0].channels) {
+            // Check if it's the OLD format: body[0].channels[]
+            if (response.body.length > 0 && response.body[0].channels && Array.isArray(response.body[0].channels)) {
+                console.log("[ChannelsAPI] 📦 Detected OLD format (body[0].channels[])");
                 channels = response.body[0].channels;
-                console.log(`[ChannelsAPI] Successfully loaded ${channels.length} channels from API`);
             }
+            // NEW format: body[] contains channels directly
+            else if (response.body.length > 0 && response.body[0].chid) {
+                console.log("[ChannelsAPI] 📦 Detected NEW format (body[] with channel objects)");
+                channels = response.body;
+            }
+
+            console.log(`[ChannelsAPI] ✅ Successfully loaded ${channels.length} channels from API`);
+        } else {
+            console.warn("[ChannelsAPI] ⚠️ response.body is not an array or doesn't exist");
         }
 
         if (channels.length === 0) {
-            console.warn("[ChannelsAPI] No channels returned. Raw response:", response);
+            console.warn("[ChannelsAPI] ❌ No channels returned");
+            console.log("[ChannelsAPI] Response keys:", response ? Object.keys(response) : "null");
+            console.log("[ChannelsAPI] Response.body type:", typeof response?.body);
             return [];
         }
 
@@ -544,7 +559,14 @@ const ChannelsAPI = {
 
     getSubscribedChannels: function (channels) {
         if (!Array.isArray(channels)) return [];
-        return channels.filter(ch => ch.subscribed === "1" || ch.subscribed === true);
+        // Check for multiple possible "subscribed" values from API
+        return channels.filter(function(ch) {
+            return ch.subscribed === "yes" ||
+                   ch.subscribed === "1" ||
+                   ch.subscribed === "true" ||
+                   ch.subscribed === true ||
+                   ch.subscribed === 1;
+        });
     },
 
     getChannelsByGrid: function (channels, gridId) {
