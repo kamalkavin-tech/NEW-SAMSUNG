@@ -126,6 +126,46 @@ body.channels-page {
     gap: 15px;
 }
 
+/* Dynamic Ad Slider Styles */
+.hero-banner {
+    position: relative;
+    width: calc(100% - 80px);
+    height: 450px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #1a1d29 0%, #2d1b3d 100%);
+    border-radius: 15px;
+    margin: 0 40px;
+}
+
+/* Only show banner if it has content */
+.hero-banner:empty {
+    display: none;
+    height: 0;
+    margin: 0;
+}
+
+.ad-slider {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.ad-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.ad-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 .content-section {
     padding: 40px;
 }

@@ -50,77 +50,7 @@ window.onload = function () {
     } catch (e) {
         console.log("Not on Tizen");
     }
-
-    // Load Homepage Ads
-    loadHomeAds();
 };
-
-function loadHomeAds() {
-    console.log("Loading Home Ads...");
-    AdsAPI.getHomeAds().then(function (ads) {
-        console.log("Ads Fetched:", ads);
-        if (ads && ads.length > 0) {
-            updateHeroBanner(ads);
-        } else {
-            console.log("No ads found, keeping default banner.");
-        }
-    }).catch(function (err) {
-        console.error("Failed to load ads:", err);
-    });
-}
-
-function updateHeroBanner(ads) {
-    var heroBanner = document.querySelector('.hero-banner');
-    if (!heroBanner) return;
-
-    // Clear existing static content
-    heroBanner.innerHTML = '';
-
-    // Create Slider Container
-    var sliderContainer = document.createElement('div');
-    sliderContainer.className = 'hero-slider';
-    sliderContainer.style.width = '100%';
-    sliderContainer.style.height = '100%';
-    sliderContainer.style.position = 'relative'; // Ensure positioning context
-    heroBanner.appendChild(sliderContainer);
-
-    // Render Ads
-    ads.forEach(function (ad, index) {
-        var slide = document.createElement('div');
-        slide.className = 'hero-slide';
-        // Base styles for slides
-        slide.style.display = index === 0 ? 'block' : 'none';
-        slide.style.width = '100%';
-        slide.style.height = '100%';
-        slide.style.position = 'absolute';
-        slide.style.top = '0';
-        slide.style.left = '0';
-
-        // Image
-        var img = document.createElement('img');
-        img.src = ad.adpath; // Assuming 'adpath' is the key from API
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        slide.appendChild(img);
-
-        // Optional: Add Buttons/Overlay if needed for ad interaction
-        // For now, just the image as per standard ad display
-
-        sliderContainer.appendChild(slide);
-    });
-
-    // Start Rotation if multiple ads
-    if (ads.length > 1) {
-        var currentIndex = 0;
-        var slides = sliderContainer.querySelectorAll('.hero-slide');
-        setInterval(function () {
-            slides[currentIndex].style.display = 'none';
-            currentIndex = (currentIndex + 1) % slides.length;
-            slides[currentIndex].style.display = 'block';
-        }, 5000); // 5 seconds interval
-    }
-}
 
 // Keyboard navigation
 document.addEventListener('keydown', function (e) {
@@ -321,3 +251,109 @@ function handleClick(element) {
         return;
     }
 }
+
+// ==========================================
+// ADS INTEGRATION (ASYNC)
+// ==========================================
+
+/**
+ * Load and display homepage ads asynchronously
+ * Fails silently if API returns no data or encounters errors
+ */
+function loadHomeAds() {
+    console.log("[HOME] Loading ads asynchronously...");
+
+    // Get ads without blocking page load
+    AdsAPI.getHomeAds()
+        .then(function (ads) {
+            console.log("[HOME] Ads fetched:", ads);
+
+            // Only proceed if we have valid ads
+            if (ads && Array.isArray(ads) && ads.length > 0) {
+                console.log("[HOME] ✓ Displaying", ads.length, "ads");
+                renderAdsInHeroBanner(ads);
+            } else {
+                console.log("[HOME] No ads to display - keeping clean UI");
+            }
+        })
+        .catch(function (error) {
+            // Fail silently - don't show errors to user
+            console.error("[HOME] Failed to load ads:", error);
+            console.log("[HOME] UI remains clean without ads");
+        });
+}
+
+/**
+ * Render ads in hero banner with slider
+ * @param {Array} ads - Array of ad objects with adpath property
+ */
+function renderAdsInHeroBanner(ads) {
+    var container = document.getElementById('hero-banner-container');
+
+    if (!container) {
+        console.warn("[HOME] Hero banner container not found");
+        return;
+    }
+
+    console.log("[HOME] Rendering", ads.length, "ads in hero banner");
+
+    // Clear any existing content
+    container.innerHTML = '';
+
+    // Create slider container
+    var sliderContainer = document.createElement('div');
+    sliderContainer.className = 'ad-slider';
+    sliderContainer.style.width = '100%';
+    sliderContainer.style.height = '100%';
+    sliderContainer.style.position = 'relative';
+
+    // Create slides
+    ads.forEach(function (ad, index) {
+        var slide = document.createElement('div');
+        slide.className = 'ad-slide';
+        slide.style.position = 'absolute';
+        slide.style.top = '0';
+        slide.style.left = '0';
+        slide.style.width = '100%';
+        slide.style.height = '100%';
+        slide.style.display = index === 0 ? 'block' : 'none';
+
+        var img = document.createElement('img');
+        img.src = ad.adpath;
+        img.alt = 'Advertisement';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+
+        // Handle image load errors gracefully
+        img.onerror = function () {
+            console.error("[HOME] Failed to load ad image:", ad.adpath);
+            slide.style.display = 'none';
+        };
+
+        slide.appendChild(img);
+        sliderContainer.appendChild(slide);
+    });
+
+    container.appendChild(sliderContainer);
+
+    // Start auto-rotation if multiple ads (5 seconds)
+    if (ads.length > 1) {
+        var currentIndex = 0;
+        var slides = sliderContainer.querySelectorAll('.ad-slide');
+
+        setInterval(function () {
+            slides[currentIndex].style.display = 'none';
+            currentIndex = (currentIndex + 1) % slides.length;
+            slides[currentIndex].style.display = 'block';
+        }, 5000);
+    }
+
+    console.log("[HOME] ✓ Ad slider initialized successfully");
+}
+
+// Load ads after page is ready (non-blocking)
+window.addEventListener('load', function () {
+    // Use setTimeout to ensure ads load after critical content
+    setTimeout(loadHomeAds, 100);
+});

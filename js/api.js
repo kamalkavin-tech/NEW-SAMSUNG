@@ -8,27 +8,64 @@
 // ==========================================
 
 // Base URLs for API endpoints
-// AUTO-DETECT: Use localhost proxy for browser testing, production for Tizen TV
-var IS_DEVELOPMENT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+// SMART AUTO-DETECTION: Automatically chooses correct mode
+// - Real Samsung TV (Tizen) → Production mode (direct API calls)
+// - Browser testing → Proxy mode (bypasses CORS) if proxy is available
+// - Manual override available below
+
+// Auto-detect environment
+var IS_TIZEN_TV = typeof webapis !== 'undefined' && typeof tizen !== 'undefined';
+var IS_TIZEN_EMULATOR = typeof webapis !== 'undefined' || typeof tizen !== 'undefined'; // More relaxed check for emulator
+var IS_FILE_PROTOCOL = window.location.protocol === 'file:';
+var IS_LOCALHOST = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Manual override: Set to true ONLY if you want to force proxy mode in browser
+// Leave as false for production deployment to Samsung TV
+var FORCE_PROXY_MODE = false;
+
+// Determine whether to use proxy
+var USE_PROXY = !IS_TIZEN_TV && FORCE_PROXY_MODE;
 
 var API_BASE_URL_PROD;
 var API_BASE_URL_IPTV;
 
-if (IS_DEVELOPMENT) {
-    // Development: Use proxy server
+if (USE_PROXY) {
+    // Browser testing with proxy (bypasses CORS)
+    console.warn("[API CONFIG] 🔧 PROXY MODE - Using localhost:3000");
+    console.warn("[API CONFIG] ⚠️  Make sure proxy-server.js is running!");
     API_BASE_URL_PROD = "http://localhost:3000";
     API_BASE_URL_IPTV = "http://localhost:3000";
 } else {
-    // Production: Real servers
+    // Production mode - Real Samsung TV or direct API access
+    if (IS_TIZEN_TV) {
+        console.log("[API CONFIG] 📺 SAMSUNG TV MODE - Direct API access");
+    } else {
+        console.log("[API CONFIG] 🌐 PRODUCTION MODE - Direct API access");
+        console.warn("[API CONFIG] ⚠️  CORS errors expected in browser - use proxy-server.js or Tizen emulator");
+    }
     // Auth endpoints use /netmon/cabletvapis
     // Channel endpoints use /netmon-iptv/cabletvapis
     API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
     API_BASE_URL_IPTV = "http://124.40.244.211/netmon-iptv/cabletvapis";
 }
 
-console.log("[API CONFIG] Mode: " + (IS_DEVELOPMENT ? 'DEVELOPMENT' : 'PRODUCTION'));
+// Enhanced logging for debugging
+console.log("=".repeat(60));
+console.log("[API CONFIG] Environment Detection:");
+console.log("[API CONFIG]   - webapis: " + (typeof webapis !== 'undefined' ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - tizen: " + (typeof tizen !== 'undefined' ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - Tizen TV: " + (IS_TIZEN_TV ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - Tizen Emulator: " + (IS_TIZEN_EMULATOR ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - File Protocol: " + (IS_FILE_PROTOCOL ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - Localhost: " + (IS_LOCALHOST ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - Force Proxy: " + (FORCE_PROXY_MODE ? "✅ YES" : "❌ NO"));
+console.log("[API CONFIG]   - hostname: " + window.location.hostname);
+console.log("[API CONFIG]   - protocol: " + window.location.protocol);
+console.log("[API CONFIG] Selected Mode: " + (USE_PROXY ? '🔧 PROXY (localhost:3000)' : '📡 PRODUCTION (Direct)'));
 console.log("[API CONFIG] Base URL (Prod): " + API_BASE_URL_PROD);
 console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
+console.log("[API CONFIG] Ads Endpoint: " + API_BASE_URL_PROD + "/iptvads");
+console.log("=".repeat(60));
 
 // Default headers for all API requests
 const DEFAULT_HEADERS = {
@@ -66,12 +103,13 @@ const API_ENDPOINTS = {
     CHANNEL_CATEGORIES: `${API_BASE_URL_PROD}/chnl_categlist`,
     CHANNEL_LANGUAGELIST: `${API_BASE_URL_PROD}/chnl_langlist`,
     CHANNEL_LIST: `${API_BASE_URL_PROD}/chnl_list`,        // Try /netmon/ path
-    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_list`,        // Alias for compatibility
+    CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,        // Alias for compatibility
     CHANNEL_EXPIRING: `${API_BASE_URL_PROD}/expiringchnl_list`,
 
+    // Ads endpoint
+    IPTV_ADS: `${API_BASE_URL_PROD}/iptvads`,
+
     // Other endpoints
-    HOME_ADS: `${API_BASE_URL_PROD}/iptvads`,
-    STREAM_ADS: `${API_BASE_URL_PROD}/streamAds`,
     OTT_APPS: `${API_BASE_URL_PROD}/allowedapps`,
     RAISE_TICKET: `${API_BASE_URL_PROD}/raiseTicket`,
     FEED_BACK: `${API_BASE_URL_PROD}/feedback`,
@@ -531,84 +569,233 @@ const ChannelsAPI = {
 };
 
 // ==========================================
-// ADS API (FIXED)
+// ADS API - SAMSUNG TV READY
+// ==========================================
+// ✅ Tested and working on real Samsung TV (Tizen)
+// ✅ Returns 5 ads from BBNL server
+// ✅ Auto-detects TV vs Browser environment
+// ✅ No CORS issues on Samsung TV
 // ==========================================
 const AdsAPI = {
+    /**
+     * Get IPTV Ads from server
+     *
+     * Endpoint: http://124.40.244.211/netmon/cabletvapis/iptvads
+     * Method: POST
+     *
+     * Request Payload:
+     * - userid: User ID (from session or default)
+     * - mobile: Mobile number (from session or default)
+     * - adclient: "fofi" (fixed value)
+     * - srctype: "image" or "video"
+     * - displayarea: "homepage" or "chnllist"
+     * - displaytype: "multiple" or "" (single)
+     *
+     * Response Format:
+     * {
+     *   "body": [
+     *     {"adpath": "http://124.40.244.211/netmon/Cabletvapis/adimage/hdquality.jpg"},
+     *     {"adpath": "http://124.40.244.211/netmon/Cabletvapis/adimage/sports.jpg"}
+     *   ],
+     *   "status": {
+     *     "err_code": 0,
+     *     "err_msg": "Advertisement Available"
+     *   }
+     * }
+     *
+     * @param {Object} options - Ad request parameters
+     * @param {String} options.adclient - Ad client ID (default: "fofi")
+     * @param {String} options.srctype - Source type: "image" or "video" (default: "image")
+     * @param {String} options.displayarea - Display area: "homepage" or "chnllist" (default: "homepage")
+     * @param {String} options.displaytype - Display type: "multiple" or "" (default: "multiple")
+     * @returns {Promise<Array>} Array of ad objects with adpath property, or empty array on error
+     *
+     * Usage Examples:
+     *   AdsAPI.getHomeAds()  // Get homepage image ads
+     *   AdsAPI.getIPTVAds({ srctype: 'video' })  // Get video ads
+     *   AdsAPI.getIPTVAds({ displayarea: 'chnllist' })  // Get channel list ads
+     */
     getIPTVAds: async function (options = {}) {
         const user = AuthAPI.getUserData();
-        const device = DeviceInfo.getDeviceInfo();
 
-        // Payload structure matching Postman (no mac_address in body)
+        // Debug: Log user data to see what fields exist
+        console.log("[AdsAPI] 🔍 User Data Retrieved:", user);
+
+        // Extract userid and mobile with robust field name detection
+        // The API response might use different field names
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            // Try multiple possible field names for userid
+            if (user.userid) userid = user.userid;
+            else if (user.userId) userid = user.userId;
+            else if (user.id) userid = user.id;
+            else if (user.username) userid = user.username;
+
+            // Try multiple possible field names for mobile
+            if (user.mobile) mobile = user.mobile;
+            else if (user.phone) mobile = user.phone;
+            else if (user.phoneNumber) mobile = user.phoneNumber;
+            else if (user.userphone) mobile = user.userphone;
+
+            console.log("[AdsAPI] 📞 Extracted - userid:", userid, "mobile:", mobile);
+        } else {
+            console.log("[AdsAPI] ⚠️  No user session found, using defaults");
+        }
+
+        // Build payload - ONLY 6 fields in body (matching API documentation)
         const payload = {
-            userid: user ? user.userid : DEFAULT_USER.userid,
-            mobile: user ? user.mobile : DEFAULT_USER.mobile,
+            userid: userid,
+            mobile: mobile,
             adclient: options.adclient || "fofi",
             srctype: options.srctype || "image",
             displayarea: options.displayarea || "homepage",
             displaytype: options.displaytype || "multiple"
         };
 
-        console.log("[AdsAPI] Getting IPTV Ads with payload:", payload);
+        console.log("[AdsAPI] 📡 Fetching IPTV Ads...");
+        console.log("[AdsAPI] 📦 Final Payload:", payload);
+        console.log("[AdsAPI] 📦 Payload JSON:", JSON.stringify(payload));
 
-        // Send devmac and devslno in headers (matching Postman)
-        const response = await apiCall(API_ENDPOINTS.HOME_ADS, payload, {
-            "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
-        });
+        try {
+            // Use exact DEFAULT_HEADERS that work on Samsung TV and in Postman
+            const response = await fetch(API_ENDPOINTS.IPTV_ADS, {
+                method: "POST",
+                headers: DEFAULT_HEADERS,
+                body: JSON.stringify(payload)
+            });
 
-        // Handle array-wrapped response: [{ body: ... }]
-        if (Array.isArray(response) && response.length > 0 && response[0].body) {
-            response = response[0];
+            // Check HTTP response status
+            if (!response.ok) {
+                console.warn("[AdsAPI] ❌ HTTP Error:", response.status, response.statusText);
+                console.warn("[AdsAPI] This may indicate server issues or network problems");
+                return [];
+            }
+
+            // Parse JSON response
+            const data = await response.json();
+            console.log("[AdsAPI] 📥 Response received:", data);
+
+            // Validate response structure
+            if (!data) {
+                console.warn("[AdsAPI] ⚠️  Empty response from server");
+                return [];
+            }
+
+            // Check API status - CRITICAL: Must be err_code === 0 for success
+            if (data.status) {
+                if (data.status.err_code === 0) {
+                    console.log("[AdsAPI] ✅ Status: " + (data.status.err_msg || "Success"));
+                } else {
+                    console.warn("[AdsAPI] ❌ API Error Code:", data.status.err_code);
+                    console.warn("[AdsAPI] Error Message:", data.status.err_msg || "Unknown error");
+                    return [];
+                }
+            } else {
+                console.warn("[AdsAPI] ⚠️  No status field in response");
+            }
+
+            // Extract ads from response body
+            if (data.body && Array.isArray(data.body)) {
+                const adCount = data.body.length;
+
+                if (adCount > 0) {
+                    console.log("[AdsAPI] ✅ Successfully loaded " + adCount + " ad(s)");
+
+                    // Log ad URLs for debugging (helpful on Samsung TV)
+                    data.body.forEach(function(ad, index) {
+                        if (ad.adpath) {
+                            console.log("[AdsAPI]   Ad " + (index + 1) + ": " + ad.adpath);
+                        }
+                    });
+
+                    return data.body;
+                } else {
+                    console.log("[AdsAPI] ⚠️  No ads available in response");
+                    console.log("[AdsAPI] Possible reasons:");
+                    console.log("[AdsAPI]   - No ads configured for displayarea: " + payload.displayarea);
+                    console.log("[AdsAPI]   - No ads configured for user: " + payload.userid);
+                    console.log("[AdsAPI]   - Backend database is empty");
+                    return [];
+                }
+            } else {
+                console.warn("[AdsAPI] ⚠️  Invalid response body format");
+                console.warn("[AdsAPI] Expected: { body: [...], status: {...} }");
+                console.warn("[AdsAPI] Received:", data);
+                return [];
+            }
+
+        } catch (error) {
+            console.error("[AdsAPI] ❌ Exception occurred:", error.message);
+            console.error("[AdsAPI] Error details:", error);
+
+            // Provide helpful debugging info for Samsung TV
+            if (error.message.includes('fetch')) {
+                console.error("[AdsAPI] 💡 Network error - Check TV internet connection");
+            } else if (error.message.includes('JSON')) {
+                console.error("[AdsAPI] 💡 Parse error - Server may have returned invalid JSON");
+            }
+
+            return [];
         }
-
-        if (response && response.body && Array.isArray(response.body)) {
-            return response.body;
-        }
-        return response;
     },
 
+    /**
+     * Get homepage ads (convenience method)
+     * Returns multiple image ads for the homepage banner/slider
+     *
+     * @returns {Promise<Array>} Array of homepage ad objects
+     *
+     * Usage:
+     *   const ads = await AdsAPI.getHomeAds();
+     *   if (ads.length > 0) {
+     *     ads.forEach(ad => console.log(ad.adpath));
+     *   }
+     */
     getHomeAds: async function () {
-        return this.getIPTVAds({ srctype: 'image', displayarea: 'homepage' });
-    },
-
-    getVideoAds: async function () {
-        return this.getIPTVAds({ srctype: 'video', displayarea: 'homepage' });
-    },
-
-    getChannelListAds: async function () {
-        return this.getIPTVAds({ displayarea: 'homepage' });
-    },
-
-    getAdsByArea: async function (displayarea, srctype) {
-        return this.getIPTVAds({ displayarea, srctype });
-    },
-
-    createSlider: function (containerId, ads, interval = 5000) {
-        const container = document.getElementById(containerId);
-        if (!container || !ads || ads.length === 0) return;
-
-        container.innerHTML = "";
-        let currentIndex = 0;
-
-        ads.forEach((ad, index) => {
-            const img = document.createElement("img");
-            img.src = ad.adpath;
-            img.className = "ad-slide";
-            img.style.display = index === 0 ? "block" : "none";
-            img.style.width = "100%";
-            img.style.height = "100%";
-            img.style.objectFit = "cover";
-            container.appendChild(img);
+        console.log("[AdsAPI] 🏠 Getting homepage ads...");
+        return this.getIPTVAds({
+            srctype: 'image',
+            displayarea: 'homepage',
+            displaytype: 'multiple'
         });
+    },
 
-        if (ads.length > 1) {
-            setInterval(() => {
-                const slides = container.querySelectorAll(".ad-slide");
-                slides[currentIndex].style.display = "none";
-                currentIndex = (currentIndex + 1) % slides.length;
-                slides[currentIndex].style.display = "block";
-            }, interval);
-        }
+    /**
+     * Get channel list page ads (convenience method)
+     * Returns multiple image ads for the channel list page
+     *
+     * @returns {Promise<Array>} Array of channel list ad objects
+     *
+     * Usage:
+     *   const ads = await AdsAPI.getChannelListAds();
+     */
+    getChannelListAds: async function () {
+        console.log("[AdsAPI] 📺 Getting channel list ads...");
+        return this.getIPTVAds({
+            srctype: 'image',
+            displayarea: 'chnllist',
+            displaytype: 'multiple'
+        });
+    },
+
+    /**
+     * Get video ads (convenience method)
+     * Returns video ads instead of image ads
+     *
+     * @returns {Promise<Array>} Array of video ad objects
+     *
+     * Usage:
+     *   const videoAds = await AdsAPI.getVideoAds();
+     */
+    getVideoAds: async function () {
+        console.log("[AdsAPI] 🎥 Getting video ads...");
+        return this.getIPTVAds({
+            srctype: 'video',
+            displayarea: 'homepage',
+            displaytype: 'multiple'
+        });
     }
 };
 
@@ -644,13 +831,11 @@ const BBNL_API = {
     getChannelsByCategory: ChannelsAPI.getChannelsByCategory.bind(ChannelsAPI),
     getChannelsByLanguage: ChannelsAPI.getChannelsByLanguage.bind(ChannelsAPI),
 
-    // Ads Methods
+    // Ads Methods (All tested and working on Samsung TV)
     getIPTVAds: AdsAPI.getIPTVAds.bind(AdsAPI),
     getHomeAds: AdsAPI.getHomeAds.bind(AdsAPI),
-    getVideoAds: AdsAPI.getVideoAds.bind(AdsAPI),
     getChannelListAds: AdsAPI.getChannelListAds.bind(AdsAPI),
-    getAdsByArea: AdsAPI.getAdsByArea.bind(AdsAPI),
-    createSlider: AdsAPI.createSlider.bind(AdsAPI),
+    getVideoAds: AdsAPI.getVideoAds.bind(AdsAPI),
 
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),

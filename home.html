@@ -24,17 +24,7 @@
             </div>
         </div>
         <div class="nav-right">
-
-            <div class="nav-item">
-                <span>Dark Mode</span>
-                <div id="darkModeModeToggle" class="toggle-switch focusable" tabindex="0">
-                    <div class="toggle-circle"></div>
-                </div>
-            </div>
-            <div class="nav-item">
-                <span class="wifi-icon">📶</span>
-                <span>Network</span>
-            </div>
+          
             <button class="settings-btn focusable" tabindex="0">⚙️</button>
             <div class="profile-pic">
                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%234a90e2'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='white' font-size='18' font-family='Arial'%3EU%3C/text%3E%3C/svg%3E"
@@ -87,31 +77,10 @@
         </div>
     </nav>
 
-    <!-- Hero Banner -->
-    <section class="hero-banner">
-        <div class="hero-content">
-            <h1 class="hero-title">The Batman</h1>
-            <p class="hero-subtitle">Superhero • 2022</p>
-            <p class="hero-description">
-                noir-inspired reboot of the iconic superhero,<br>
-                directed by Matt Reeves and starring Robert<br>
-                Pattinson as a younger, more emotionally raw<br>
-                Bruce Wayne. Set during Batman's second<br>
-                year of crime-fighting.
-            </p>
-            <div class="hero-tags">
-                <span class="tag">Sci-fi</span>
-                <span class="tag">Thriller</span>
-                <span class="tag">Drama</span>
-            </div>
-            <div class="hero-buttons">
-                <button class="btn-watch focusable" tabindex="0">Watch Now</button>
-                <button class="btn-add focusable" tabindex="0">+</button>
-            </div>
-        </div>
-        <div class="hero-image">
-            <!-- Batman silhouette will be in CSS background -->
-        </div>
+    <!-- Hero Banner (Ads loaded dynamically) -->
+    <section class="hero-banner" id="hero-banner-container">
+        <!-- Ads will be rendered here if API succeeds -->
+        <!-- If no ads, this section remains empty and invisible -->
     </section>
 
     <!-- Your OTT Apps Section -->
