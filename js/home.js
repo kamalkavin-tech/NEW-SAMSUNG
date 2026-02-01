@@ -137,6 +137,14 @@ function handleEnter() {
 function handleClick(element) {
     console.log("Element clicked/activated");
 
+    // Check for data-route attribute first (highest priority)
+    var route = element.getAttribute('data-route');
+    if (route) {
+        console.log("Navigating to route:", route);
+        window.location.href = route;
+        return;
+    }
+
     // Check if it's an app card
     var appType = element.getAttribute('data-app');
     if (appType) {
@@ -152,7 +160,7 @@ function handleClick(element) {
         console.log("Opening channel from Home:", channelType);
         // Navigate to player, let player.js find the details
         // We pass 'channel_name' as query param.
-        // Note: The data-channel attribute might be short code (e.g. 'udaya'), so we might need a better mapping 
+        // Note: The data-channel attribute might be short code (e.g. 'udaya'), so we might need a better mapping
         // OR we rely on player.js fuzzy search.
         // Let's pass it as a special "name" look up
         window.location.href = "player.html?name=" + encodeURIComponent(channelType);
@@ -173,12 +181,6 @@ function handleClick(element) {
         return;
     }
 
-    if (element.classList.contains('settings-btn')) {
-        console.log("Settings clicked");
-        alert("Opening settings...");
-        return;
-    }
-
     if (element.classList.contains('menu-btn')) {
         console.log("Menu clicked");
         var sideMenu = document.getElementById('sideMenu');
@@ -191,44 +193,11 @@ function handleClick(element) {
         return;
     }
 
-    // Menu Items Navigation Logic (for Remote 'Enter' key)
-    if (element.classList.contains('menu-item')) {
-        if (element.innerText.includes('Home')) {
-            window.location.href = 'home.html';
-            return;
-        }
-        if (element.innerText.includes('Live Channels') || element.innerText.includes('TV Channels')) {
-            window.location.href = 'channels.html';
-            return;
-        }
-        if (element.innerText.includes('Subscription')) {
-            window.location.href = 'subscription.html';
-            return;
-        }
-        if (element.innerText.includes('Favorites')) {
-            window.location.href = 'favorites.html';
-            return;
-        }
-        if (element.innerText.includes('Notification')) {
-            window.location.href = 'notifications.html';
-            return;
-        }
-        if (element.innerText.includes('Get Complaint')) {
-            window.location.href = 'help-desk.html';
-            return;
-        }
-        if (element.innerText.includes('Get Feedback')) {
-            window.location.href = 'feedback.html';
-            return;
-        }
-    }
-
     // Close Menu if Backdrop Clicked (this needs separate event listener, but for now specific check)
     if (element.id === 'menuBackdrop') {
         document.getElementById('sideMenu').classList.remove('open');
         return;
     }
-
 
     // Toggle Dark Mode
     if (element.classList.contains('toggle-switch') || element.id === 'darkModeModeToggle') {
@@ -236,7 +205,6 @@ function handleClick(element) {
         document.body.classList.toggle('light-mode');
         return;
     }
-
 
     // View all cards
     if (element.classList.contains('view-all')) {
@@ -352,8 +320,180 @@ function renderAdsInHeroBanner(ads) {
     console.log("[HOME] ✓ Ad slider initialized successfully");
 }
 
-// Load ads after page is ready (non-blocking)
+// ==========================================
+// CHANNELS INTEGRATION (ASYNC)
+// ==========================================
+
+/**
+ * Load and display first 4 channels on homepage asynchronously
+ * Fails silently if API returns no data or encounters errors
+ */
+function loadHomeChannels() {
+    console.log("[HOME] Loading channels asynchronously...");
+
+    // Get channels without blocking page load
+    BBNL_API.getChannelList()
+        .then(function (channels) {
+            console.log("[HOME] Channels fetched:", channels ? channels.length : 0);
+
+            // Only proceed if we have valid channels
+            if (channels && Array.isArray(channels) && channels.length > 0) {
+                // Take first 4 channels
+                var firstFourChannels = channels.slice(0, 4);
+                console.log("[HOME] ✓ Displaying first", firstFourChannels.length, "channels");
+                renderChannelsInHomeGrid(firstFourChannels);
+            } else {
+                console.log("[HOME] No channels to display");
+                renderEmptyChannelsState();
+            }
+        })
+        .catch(function (error) {
+            // Fail silently - don't show errors to user
+            console.error("[HOME] Failed to load channels:", error);
+            console.log("[HOME] Rendering empty state");
+            renderEmptyChannelsState();
+        });
+}
+
+/**
+ * Render channels in home page grid
+ * @param {Array} channels - Array of channel objects (first 4)
+ */
+function renderChannelsInHomeGrid(channels) {
+    var container = document.getElementById('home-channels-container');
+
+    if (!container) {
+        console.warn("[HOME] Channels container not found");
+        return;
+    }
+
+    console.log("[HOME] Rendering", channels.length, "channels in home grid");
+
+    // Clear any existing content
+    container.innerHTML = '';
+
+    // Create channel cards
+    channels.forEach(function (channel) {
+        var channelName = channel.chtitle || channel.channel_name || "Channel";
+        var channelLogo = channel.chlogo || channel.logo_url || "";
+        var channelNo = channel.channelno || channel.channel_no || "";
+        var streamLink = channel.streamlink || channel.channel_url || "";
+
+        // Create channel card
+        var card = document.createElement('div');
+        card.className = 'channel-card focusable';
+        card.tabIndex = 0;
+        card.setAttribute('data-channel', channelName);
+
+        // Store full channel data for playback
+        card.dataset.streamlink = streamLink;
+        card.dataset.logo = channelLogo;
+        card.dataset.channelno = channelNo;
+
+        // Channel icon container
+        var iconDiv = document.createElement('div');
+        iconDiv.className = 'channel-icon';
+        iconDiv.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        iconDiv.style.display = 'flex';
+        iconDiv.style.flexDirection = 'column';
+        iconDiv.style.alignItems = 'center';
+        iconDiv.style.justifyContent = 'center';
+        iconDiv.style.padding = '20px';
+        iconDiv.style.borderRadius = '12px';
+
+        // Display logo if available
+        if (channelLogo && !channelLogo.includes('chnlnoimage')) {
+            var img = document.createElement('img');
+            img.src = channelLogo;
+            img.alt = channelName;
+            img.style.maxWidth = '80%';
+            img.style.maxHeight = '80%';
+            img.style.objectFit = 'contain';
+
+            // Fallback to text if image fails to load
+            img.onerror = function () {
+                iconDiv.innerHTML = '<span class="channel-name" style="color: white; font-weight: bold; font-size: 16px;">' +
+                                    channelName.substring(0, 10) + '</span>';
+            };
+
+            iconDiv.appendChild(img);
+        } else {
+            // Text fallback
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'channel-name';
+            nameSpan.style.color = 'white';
+            nameSpan.style.fontWeight = 'bold';
+            nameSpan.style.fontSize = '16px';
+            nameSpan.style.textAlign = 'center';
+            nameSpan.innerText = channelName.substring(0, 15);
+            iconDiv.appendChild(nameSpan);
+        }
+
+        card.appendChild(iconDiv);
+
+        // Channel label
+        var label = document.createElement('p');
+        label.className = 'channel-label';
+        label.innerHTML = channelName + '<br>live Channels';
+        card.appendChild(label);
+
+        // Click handler - navigate to player
+        card.addEventListener('click', function () {
+            handleChannelCardClick(channel);
+        });
+
+        container.appendChild(card);
+    });
+
+    // Add "View All" button
+    var viewAllCard = document.createElement('div');
+    viewAllCard.className = 'channel-card view-all focusable';
+    viewAllCard.tabIndex = 0;
+    viewAllCard.innerHTML = `
+        <div class="channel-icon view-all-icon">
+            <span class="arrow">→</span>
+        </div>
+        <p class="channel-label">View All<br>Channels<br>Live Channels</p>
+    `;
+    viewAllCard.addEventListener('click', function () {
+        window.location.href = 'channels.html';
+    });
+    container.appendChild(viewAllCard);
+
+    console.log("[HOME] ✓ Channels grid rendered successfully");
+
+    // Refresh focusable elements
+    focusables = document.querySelectorAll('.focusable');
+}
+
+/**
+ * Handle channel card click - navigate to player
+ */
+function handleChannelCardClick(channel) {
+    console.log("[HOME] Channel clicked:", channel.chtitle || channel.channel_name);
+
+    // Use BBNL_API.playChannel to navigate to player
+    BBNL_API.playChannel(channel);
+}
+
+/**
+ * Render empty state when no channels available
+ */
+function renderEmptyChannelsState() {
+    var container = document.getElementById('home-channels-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: #888; grid-column: 1 / -1;">
+            <p style="font-size: 18px;">No channels available</p>
+            <p style="font-size: 14px; margin-top: 10px;">Please check back later</p>
+        </div>
+    `;
+}
+
+// Load ads and channels after page is ready (non-blocking)
 window.addEventListener('load', function () {
-    // Use setTimeout to ensure ads load after critical content
+    // Use setTimeout to ensure they load after critical content
     setTimeout(loadHomeAds, 100);
+    setTimeout(loadHomeChannels, 200); // Load channels slightly after ads
 });

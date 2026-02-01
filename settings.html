@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL - Settings</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/settings.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body>
+    <!-- Back Header -->
+    <div class="subpage-header transparent-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.history.back()">
+            <span>‹</span> Back
+        </button>
+    </div>
+
+    <div class="settings-container">
+        <div class="header-text">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-subtitle">App and device information</p>
+        </div>
+
+        <div class="settings-card">
+            <!-- App Version Section -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <span class="header-icon">📱</span>
+                    <div>
+                        <h2>App Information</h2>
+                        <p>Current version details</p>
+                    </div>
+                </div>
+
+                <div class="info-group">
+                    <div class="info-item">
+                        <label>App Name</label>
+                        <div class="info-value" id="app-name">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Version</label>
+                        <div class="info-value" id="app-version">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Build Date</label>
+                        <div class="info-value" id="build-date">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device Information Section -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <span class="header-icon">📺</span>
+                    <div>
+                        <h2>Device Information</h2>
+                        <p>Connected device details</p>
+                    </div>
+                </div>
+
+                <div class="info-group">
+                    <div class="info-item">
+                        <label>Device Type</label>
+                        <div class="info-value" id="device-type">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Device Name</label>
+                        <div class="info-value" id="device-name">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>MAC Address</label>
+                        <div class="info-value" id="mac-address">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>IP Address</label>
+                        <div class="info-value" id="ip-address">Loading...</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Serial Number</label>
+                        <div class="info-value" id="serial-number">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Information Section -->
+            <div class="settings-section">
+                <div class="section-header">
+                    <span class="header-icon">👤</span>
+                    <div>
+                        <h2>User Information</h2>
+                        <p>Logged in user details</p>
+                    </div>
+                </div>
+
+                <div class="info-group">
+                    <div class="info-item">
+                        <label>User ID</label>
+                        <div class="info-value" id="user-id">Not logged in</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Mobile</label>
+                        <div class="info-value" id="user-mobile">Not logged in</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="settings-actions">
+                <button class="settings-btn primary focusable" tabindex="0" onclick="location.reload()">
+                    Refresh Data
+                </button>
+                <button class="settings-btn secondary focusable" tabindex="0" onclick="window.history.back()">
+                    Back to Home
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/settings.js"></script>
+</body>
+
+</html>

@@ -14,61 +14,56 @@
     <nav class="navbar">
         <div class="nav-left">
             <div class="logo">
-                <span class="logo-icon">📺</span>
+                <span class="logo-icon"></span>
                 <span class="logo-text">BBNL</span>
             </div>
             <button class="menu-btn focusable" tabindex="0">☰</button>
             <div class="search-box">
-                <span class="search-icon">🔍</span>
                 <input type="text" placeholder="Search for movies, TV shows..." class="search-input">
             </div>
         </div>
         <div class="nav-right">
-          
-            <button class="settings-btn focusable" tabindex="0">⚙️</button>
-            <div class="profile-pic">
-                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%234a90e2'/%3E%3Ctext x='20' y='26' text-anchor='middle' fill='white' font-size='18' font-family='Arial'%3EU%3C/text%3E%3C/svg%3E"
-                    alt="Profile">
-            </div>
+            <button class="settings-btn focusable" tabindex="0" data-route="settings.html">⚙️</button>
+           
         </div>
 
         <!-- Side Menu Overlay -->
         <div id="sideMenu" class="side-menu-overlay">
             <div class="glass-menu">
                 <div class="menu-brand">
-                    <span class="logo-icon">📺</span>
+                    <span class="logo-icon"></span>
                     <span class="logo-text">BBNL</span>
                 </div>
 
 
                 <div class="menu-list">
-                    <button class="menu-item active focusable" tabindex="0">
-                        <span class="icon">🏠</span> Home
+                    <button class="menu-item active focusable" tabindex="0" data-route="home.html">
+                        Home
                     </button>
-                    <button class="menu-item focusable" tabindex="0" onclick="window.location.href='channels.html'">
-                        <span class="icon">📺</span> Live Channels
+                    <button class="menu-item focusable" tabindex="0" data-route="channels.html">
+                        Live Channels
                     </button>
-                    <button class="menu-item focusable" tabindex="0">
-                        <span class="icon">🎬</span> Movies
+                    <button class="menu-item focusable" tabindex="0" data-route="movies.html">
+                        Movies
                     </button>
-                    <button class="menu-item focusable" tabindex="0" onclick="window.location.href='subscription.html'">
-                        <span class="icon">💳</span> Subscription
+                    <button class="menu-item focusable" tabindex="0" data-route="subscription.html">
+                        Subscription
                     </button>
-                    <button class="menu-item focusable" tabindex="0" onclick="window.location.href='favorites.html'">
-                        <span class="icon">❤️</span> Favorites
+                    <button class="menu-item focusable" tabindex="0" data-route="favorites.html">
+                        Favorites
                     </button>
-                    <button class="menu-item focusable" tabindex="0">
-                        <span class="icon">🔔</span> Notification
+                    <button class="menu-item focusable" tabindex="0" data-route="notifications.html">
+                        Notification
                     </button>
 
                     <div class="menu-divider"></div>
 
                     <div class="menu-section-label">Help Desk</div>
-                    <button class="menu-item sub-item focusable" tabindex="0">
-                        <span class="icon">💬</span> Get Complaint
+                    <button class="menu-item sub-item focusable" tabindex="0" data-route="help-desk.html">
+                        Get Complaint
                     </button>
-                    <button class="menu-item sub-item focusable" tabindex="0">
-                        <span class="icon">📝</span> Get Feedback
+                    <button class="menu-item focusable" tabindex="0" data-route="feedback.html">
+                        Get Feedback
                     </button>
                 </div>
             </div>
@@ -125,40 +120,9 @@
     <!-- Live TV Channels Section -->
     <section class="content-section">
         <h2 class="section-title">Live TV Channels</h2>
-        <div class="channels-grid">
-            <div class="channel-card focusable" tabindex="0" data-channel="udaya">
-                <div class="channel-icon udaya-icon">
-                    <div class="sun-logo"></div>
-                    <span class="channel-name">UDAYA</span>
-                </div>
-                <p class="channel-label">Udaya TV<br>live Channels</p>
-            </div>
-            <div class="channel-card focusable" tabindex="0" data-channel="colors">
-                <div class="channel-icon colors-icon">
-                    <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                </div>
-                <p class="channel-label">Colors Super TV<br>live Channels</p>
-            </div>
-            <div class="channel-card focusable" tabindex="0" data-channel="zee">
-                <div class="channel-icon zee-icon">
-                    <span class="zee-logo">ZEE</span>
-                    <span class="zee-kannada">ಕನ್ನಡ</span>
-                </div>
-                <p class="channel-label">Zee-kanada<br>live Channels</p>
-            </div>
-            <div class="channel-card focusable" tabindex="0" data-channel="gemini">
-                <div class="channel-icon gemini-icon">
-                    <div class="sun-logo"></div>
-                    <span class="channel-name">GEMINI</span>
-                </div>
-                <p class="channel-label">Gemini TV<br>live Channels</p>
-            </div>
-            <div class="channel-card view-all focusable" tabindex="0">
-                <div class="channel-icon view-all-icon">
-                    <span class="arrow">→</span>
-                </div>
-                <p class="channel-label">View All<br>Channels<br>Live Channels</p>
-            </div>
+        <div class="channels-grid" id="home-channels-container">
+            <!-- Channels will be loaded dynamically from API -->
+            <!-- First 4 channels + View All button -->
         </div>
     </section>
 

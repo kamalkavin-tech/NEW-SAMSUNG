@@ -1,132 +1,278 @@
+/* ========================================
+   MODERN UI - CHANNELS & HOME PAGES
+   ======================================== */
+
+/* Base Body Styling */
+body {
+    background: #000 !important;
+    color: #fff !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
 /* Channels Page Layout with Sidebar */
 body.channels-page {
     display: grid;
     grid-template-columns: 280px 1fr;
-    /* Sidebar | Content */
     grid-template-rows: auto 1fr;
-    /* Header | Main */
     height: 100vh;
     overflow: hidden;
+    background: #000 !important;
 }
+
+/* ========================================
+   HEADER SECTION
+   ======================================== */
 
 .subpage-header {
     grid-column: 1 / -1;
-    /* Header spans full width */
+    background: linear-gradient(to bottom, rgba(0,0,0,0.95), transparent);
+    padding: 20px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     z-index: 20;
 }
 
-/* Sidebar Container */
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.back-btn {
+    background: transparent !important;
+    color: #fff !important;
+    font-size: 20px;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.back-btn:hover,
+.back-btn:focus {
+    transform: translateX(-5px);
+    outline: none !important;
+}
+
+.subpage-search {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 25px;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.subpage-search input {
+    background: transparent;
+    border: none;
+    color: #fff;
+    outline: none;
+    width: 300px;
+    font-size: 16px;
+}
+
+.subpage-search input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Page Title */
+.page-title-container {
+    padding: 0 48px;
+    margin-top: 10px;
+}
+
+.page-title {
+    font-size: 28px !important;
+    font-weight: 700 !important;
+    margin-bottom: 20px;
+    color: #fff !important;
+}
+
+/* ========================================
+   SIDEBAR / FILTER BAR
+   ======================================== */
+
 .filters-bar {
     grid-column: 1 / 2;
     grid-row: 2 / 3;
-    padding: 20px 0 20px 40px;
-    /* Indent */
+    padding: 20px 0 20px 48px;
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 8px;
     overflow-y: auto;
     border-right: none;
-    /* Clean look */
+    background: transparent;
 }
 
-/* Main Content Area */
-.subpage-section {
-    grid-column: 2 / 3;
-    grid-row: 2 / 3;
-    padding: 20px 40px;
-    overflow-y: auto;
-    height: 100%;
-}
-
-/* Vertical Pill Buttons for Sidebar */
 .filter-chip {
     width: 100%;
-    /* Full width of container */
     justify-content: flex-start;
-    /* Left align text */
     background: transparent !important;
-    /* Transparent default */
-    color: #9a9a9a !important;
+    color: rgba(255, 255, 255, 0.6) !important;
     font-weight: 500;
-    padding: 12px 20px;
+    padding: 12px 24px;
     border-radius: 25px 0 0 25px;
-    /* Rounded left only for sidebar look */
     font-size: 18px;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
+    border: none !important;
+    text-align: left;
+    cursor: pointer;
 }
 
 .filter-chip.active {
     background: #3b5cff !important;
-    color: white !important;
+    color: #fff !important;
     font-weight: 700;
 }
 
+.filter-chip:hover,
 .filter-chip:focus {
     background: rgba(255, 255, 255, 0.1) !important;
-    color: white !important;
+    color: #fff !important;
     transform: translateX(10px);
-    /* Slide out effect */
+    outline: none !important;
 }
 
-.hero-banner::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    width: 50%;
+/* ========================================
+   MAIN CONTENT AREA
+   ======================================== */
+
+.subpage-section {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    padding: 20px 48px;
+    overflow-y: auto;
     height: 100%;
-    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><path d="M200,100 L250,200 L200,450 L150,200 Z" fill="%23000" opacity="0.3"/></svg>') center/contain no-repeat;
-    opacity: 0.6;
+    background: #000;
 }
 
-.hero-content {
+/* Section Headers */
+.section-header {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: #fff !important;
+    margin: 30px 0 20px 0 !important;
+    padding-left: 0;
+}
+
+/* ========================================
+   CHANNEL GRID
+   ======================================== */
+
+.grid-5,
+.channels-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 24px !important;
+    margin-bottom: 40px;
+}
+
+/* Channel Group (card + labels) */
+.channel-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Channel Card */
+.channel-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-radius: 16px !important;
+    padding: 0 !important;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent !important;
     position: relative;
-    z-index: 2;
-    padding: 60px;
-    max-width: 600px;
-    color: white;
 }
 
-.hero-title {
-    font-size: 72px;
-    font-weight: bold;
-    margin-bottom: 10px;
-    text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.8);
+.channel-card:hover,
+.channel-card:focus {
+    transform: translateY(-8px) !important;
+    border-color: #3b5cff !important;
+    box-shadow: 0 8px 24px rgba(59, 92, 255, 0.4) !important;
+    outline: none !important;
 }
 
-.hero-subtitle {
-    font-size: 20px;
-    color: #b0b0b0;
-    margin-bottom: 20px;
-}
-
-.hero-description {
-    font-size: 16px;
-    line-height: 1.6;
-    color: #d0d0d0;
-    margin-bottom: 25px;
-}
-
-.hero-tags {
+/* Channel Icon Container */
+.channel-icon {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
     display: flex;
-    gap: 15px;
-    margin-bottom: 30px;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0 !important;
 }
 
-.tag {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    padding: 8px 20px;
-    border-radius: 20px;
-    font-size: 14px;
+.channel-icon img {
+    max-width: 70%;
+    max-height: 70%;
+    object-fit: contain;
+    z-index: 1;
 }
 
-.hero-buttons {
-    display: flex;
-    gap: 15px;
+/* ========================================
+   LIVE BADGE
+   ======================================== */
+
+.live-badge {
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    background: #ef4444 !important;
+    color: #fff !important;
+    padding: 4px 12px !important;
+    border-radius: 4px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    z-index: 2 !important;
 }
 
-/* Dynamic Ad Slider Styles */
+.live-dot {
+    width: 6px;
+    height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* ========================================
+   CARD TITLES
+   ======================================== */
+
+.card-title-bottom {
+    color: #fff !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-subtitle-bottom {
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-size: 13px !important;
+    font-weight: 400;
+}
+
+/* ========================================
+   HOME PAGE - ADS BANNER
+   ======================================== */
+
 .hero-banner {
     position: relative;
     width: calc(100% - 80px);
@@ -134,10 +280,9 @@ body.channels-page {
     overflow: hidden;
     background: linear-gradient(135deg, #1a1d29 0%, #2d1b3d 100%);
     border-radius: 15px;
-    margin: 0 40px;
+    margin: 0 40px 30px 40px;
 }
 
-/* Only show banner if it has content */
 .hero-banner:empty {
     display: none;
     height: 0;
@@ -166,235 +311,103 @@ body.channels-page {
     display: block;
 }
 
+/* ========================================
+   HOME PAGE SECTIONS
+   ======================================== */
+
 .content-section {
     padding: 40px;
 }
 
 .section-title {
-    font-size: 32px;
-    font-weight: bold;
+    font-size: 32px !important;
+    font-weight: 700 !important;
     margin-bottom: 30px;
-    color: var(--text-main);
+    color: #fff !important;
 }
 
-.channels-grid,
-.grid-5 {
+.apps-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    /* Restored to 5 to match image */
-    gap: 25px;
+    gap: 24px;
+    margin-bottom: 40px;
 }
 
-.section-header {
-    font-size: 24px;
-    font-weight: 600;
-    color: white;
-    margin: 40px 0 20px 0;
-    padding-left: 5px;
-    /* Alignment with cards */
+.app-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
 }
 
-.channel-label {
-    padding: 15px;
+.app-card:hover,
+.app-card:focus {
+    transform: translateY(-8px);
+    border-color: #3b5cff;
+    box-shadow: 0 8px 24px rgba(59, 92, 255, 0.4);
+    outline: none;
+}
+
+/* ========================================
+   LOADING & EMPTY STATES
+   ======================================== */
+
+.loading-spinner,
+.loading-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+}
+
+.empty-label {
     text-align: center;
-    font-size: 14px;
-    color: var(--text-sec);
-    background: var(--bg-label);
-    transition: background 0.3s, color 0.3s;
-    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+    padding: 40px;
 }
 
-/* Specific Channel Logo Styles (Matching Reference) */
+/* ========================================
+   SCROLLBAR STYLING
+   ======================================== */
 
-/* 1. Base Icon Area - The White Box */
-.channel-icon {
-    background: white;
-    position: relative;
-    border-radius: 15px;
-    /* Smooth rounded corners */
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    /* Subtle depth */
-    overflow: hidden;
-    /* Clip contents like badges */
+.subpage-section::-webkit-scrollbar,
+.filters-bar::-webkit-scrollbar {
+    width: 8px;
 }
 
-/* 2. Sun Network (Udaya, Gemini) */
-.udaya-icon,
-.gemini-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
+.subpage-section::-webkit-scrollbar-track,
+.filters-bar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
 }
 
-.sun-logo {
-    /* The Sun Graphic */
-    width: 100px;
-    height: 100px;
-    background: radial-gradient(circle, #ff9800 20%, #ff5722 80%);
-    border-radius: 50%;
-    position: absolute;
-    /* Center it */
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-
-    /* Sun Rays using a dashed border trick or pseudo-elements */
-    box-shadow: 0 0 0 5px rgba(255, 87, 34, 0.2);
-    display: flex;
-    /* Center inner text if needed */
-    align-items: center;
-    justify-content: center;
-}
-
-/* Sun Rays Effect */
-.sun-logo::before {
-    content: '';
-    position: absolute;
-    width: 130%;
-    height: 130%;
-    border: 4px dashed #ff5722;
-    border-radius: 50%;
-    animation: spin-slow 20s linear infinite;
-}
-
-.channel-name {
-    /* Text Overlay */
-    z-index: 2;
-    font-family: 'Arial Black', sans-serif;
-    font-weight: 900;
-    font-size: 26px;
-    color: #b71c1c;
-    /* Deep Red */
-    text-transform: uppercase;
-    text-shadow:
-        2px 2px 0 #fff,
-        -1px -1px 0 #ffeb3b;
-    /* Yellow/White stroke effect */
-    letter-spacing: 1px;
-}
-
-
-/* 3. Colors Super */
-.colors-icon {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.colors-text {
-    font-family: sans-serif;
-    font-size: 38px;
-    font-weight: 900;
-    color: #4a148c;
-    /* Purple */
-    line-height: 0.9;
-    letter-spacing: -1px;
-}
-
-.colors-text strong {
-    font-size: 22px;
-    color: #d81b60;
-    /* Pinkish Red */
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-top: 2px;
-}
-
-/* 4. Zee Kannada */
-.zee-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-
-.zee-logo {
-    /* The Orange Circle Container */
-    width: 110px;
-    height: 110px;
-    background: linear-gradient(135deg, #ff9800, #f57c00);
-    border-radius: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    box-shadow: 0 4px 8px rgba(245, 124, 0, 0.4);
-    position: relative;
-}
-
-/* 'ZEE' text inside circle */
-.zee-logo::before {
-    content: 'ZEE';
-    font-size: 34px;
-    font-weight: 900;
-    font-family: sans-serif;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    line-height: 1;
-    margin-bottom: 2px;
-}
-
-.zee-kannada {
-    font-size: 18px;
-    color: white;
-    font-weight: bold;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-
-/* 5. Live Badge - Adjusted Positioning */
-.live-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: #d32f2f;
-    /* Standard Red */
-    color: white;
-    font-size: 10px;
-    text-transform: uppercase;
-    font-weight: bold;
-    padding: 4px 8px;
+.subpage-section::-webkit-scrollbar-thumb,
+.filters-bar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    /* Slightly squarer than pill */
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    z-index: 10;
 }
 
-.live-dot {
-    width: 6px;
-    height: 6px;
-    background: white;
-    border-radius: 50%;
+.subpage-section::-webkit-scrollbar-thumb:hover,
+.filters-bar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
-/* Animations */
-@keyframes spin-slow {
-    from {
-        transform: rotate(0deg);
-    }
+/* ========================================
+   RESPONSIVE
+   ======================================== */
 
-    to {
-        transform: rotate(360deg);
+@media (max-width: 1600px) {
+    .grid-5, .channels-grid, .apps-grid {
+        grid-template-columns: repeat(4, 1fr) !important;
     }
 }
 
-/* Text Below Cards */
-.card-title-bottom {
-    font-size: 15px;
-    font-weight: 700;
-    margin-top: 12px;
-    color: white;
-    letter-spacing: 0.5px;
-}
-
-.card-subtitle-bottom {
-    font-size: 13px;
-    color: #9e9e9e;
-    /* Muted grey */
-    margin-top: 2px;
+@media (max-width: 1200px) {
+    .grid-5, .channels-grid, .apps-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
 }

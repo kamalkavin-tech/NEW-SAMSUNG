@@ -77,7 +77,7 @@ const DEFAULT_HEADERS = {
 
 // Default user information
 const DEFAULT_USER = {
-    userid: "testiser1",
+    userid: "testiser1",  // ✅ Correct userid (with typo as per backend)
     mobile: "7800000001"
 };
 
@@ -822,6 +822,71 @@ const AdsAPI = {
 };
 
 // ==========================================
+// FEEDBACK API
+// ==========================================
+const FeedbackAPI = {
+    /**
+     * Submit user feedback to BBNL server
+     *
+     * @param {Object} feedbackData - Feedback data
+     * @param {String} feedbackData.userid - User ID
+     * @param {String} feedbackData.mobile - Mobile number
+     * @param {String} feedbackData.feedback - Feedback text
+     * @param {Number} feedbackData.rating - Rating (1-5)
+     * @returns {Promise<Object>} API response
+     */
+    submitFeedback: async function(feedbackData) {
+        const device = DeviceInfo.getDeviceInfo();
+
+        // Backend expects this EXACT format (confirmed from API documentation):
+        // Field: rate_count (STRING), NOT rating (NUMBER)
+        const payload = {
+            userid: feedbackData.userid || DEFAULT_USER.userid,
+            mobile: feedbackData.mobile || DEFAULT_USER.mobile,
+            rate_count: String(feedbackData.rating || 0),  // IMPORTANT: Must be STRING!
+            feedback: feedbackData.feedback,
+            mac_address: device.mac_address,
+            device_name: (device.device_name || "rk3368_box_").replace(/_$/, ''),  // Remove trailing underscore if present
+            device_type: (device.device_type || "FOFI_LG").replace(/_LG$/, '')     // Use "FOFI" not "FOFI_LG"
+        };
+
+        console.log("[FeedbackAPI] ✅ Submitting with CORRECT format:", payload);
+
+        return await apiCall(API_ENDPOINTS.FEED_BACK, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
+    }
+};
+
+// ==========================================
+// APP VERSION API
+// ==========================================
+const AppVersionAPI = {
+    /**
+     * Get app version from BBNL server
+     *
+     * @returns {Promise<Object>} API response with app version
+     */
+    getAppVersion: async function() {
+        const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
+
+        const payload = {
+            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile
+        };
+
+        console.log("[AppVersionAPI] Getting app version:", payload);
+
+        return await apiCall(API_ENDPOINTS.APP_VERSION, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
+    }
+};
+
+// ==========================================
 // GLOBAL EXPORT
 // ==========================================
 // Create BBNL_API object and expose it globally
@@ -859,6 +924,12 @@ const BBNL_API = {
     getChannelListAds: AdsAPI.getChannelListAds.bind(AdsAPI),
     getVideoAds: AdsAPI.getVideoAds.bind(AdsAPI),
 
+    // Feedback Methods
+    submitFeedback: FeedbackAPI.submitFeedback.bind(FeedbackAPI),
+
+    // App Version Methods
+    getAppVersion: AppVersionAPI.getAppVersion.bind(AppVersionAPI),
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -873,6 +944,8 @@ if (typeof window !== 'undefined') {
     window.AuthAPI = AuthAPI;
     window.ChannelsAPI = ChannelsAPI;
     window.AdsAPI = AdsAPI;
+    window.FeedbackAPI = FeedbackAPI;
+    window.AppVersionAPI = AppVersionAPI;
     window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
 }

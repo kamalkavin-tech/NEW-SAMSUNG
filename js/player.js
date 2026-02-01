@@ -182,41 +182,135 @@ async function loadChannelList(lookupName = null) {
 function setupPlayer(channel) {
     console.log("=== Setting up player for channel ===", channel);
 
-    // Populate UI Elements
-    const uiName = document.getElementById("ui-channel-name");
-    const uiLogo = document.getElementById("ui-channel-logo");
-    const uiTitle = document.getElementById("ui-program-title");
-    const uiNum = document.querySelector(".channel-number");
+    // ==========================================
+    // POPULATE ALL UI ELEMENTS DYNAMICALLY
+    // ==========================================
 
-    // Standardize Name
+    // Channel Name
     const chName = channel.channel_name || channel.chtitle || "Unknown Channel";
+    const uiName = document.getElementById("ui-channel-name");
     if (uiName) uiName.innerText = chName;
 
-    // Standardize Number (Using 'urno', 'chno', 'ch_no', or 'id')
-    if (uiNum) {
-        uiNum.innerText = channel.urno || channel.chno || channel.ch_no || channel.id || "000";
-    }
+    // Channel Number
+    const channelNum = channel.channelno || channel.urno || channel.chno || channel.ch_no || channel.id || "000";
+    const uiNum = document.getElementById("ui-channel-number");
+    if (uiNum) uiNum.innerText = channelNum;
 
-    // Standardize Logo
+    // Channel Logo
     const logo = channel.logo_url || channel.chlogo || channel.logo;
+    const uiLogo = document.getElementById("ui-channel-logo");
     if (uiLogo) {
-        if (logo && logo.trim() !== "") {
+        if (logo && logo.trim() !== "" && !logo.includes('chnlnoimage')) {
             console.log("Setting channel logo:", logo);
             uiLogo.src = logo;
             uiLogo.onerror = function() {
-                // If logo fails to load, use a placeholder
                 console.warn("Logo failed to load:", logo);
-                this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23333' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='14'%3ETV%3C/text%3E%3C/svg%3E";
+                this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
             };
         } else {
-            // Use placeholder SVG for missing logo
-            console.log("No logo provided, using placeholder");
-            uiLogo.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23333' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='14'%3ETV%3C/text%3E%3C/svg%3E";
+            console.log("No valid logo, using placeholder");
+            uiLogo.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
         }
     }
 
-    // For now, we mock the Program Title since API doesn't provide real-time EPG yet for this specific channel object
-    if (uiTitle) uiTitle.innerText = "Live Stream: " + chName;
+    // Expiry Date
+    const uiExpiry = document.getElementById("ui-expiry");
+    if (uiExpiry) {
+        if (channel.expirydate && channel.expirydate.trim() !== "") {
+            const expiryDate = new Date(channel.expirydate);
+            const today = new Date();
+            const diffTime = expiryDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 0) {
+                uiExpiry.innerText = "Expires in " + diffDays + " day" + (diffDays > 1 ? "s" : "");
+            } else if (diffDays === 0) {
+                uiExpiry.innerText = "Expires today";
+            } else {
+                uiExpiry.innerText = "Expired";
+            }
+        } else {
+            // No expiry or unlimited subscription
+            uiExpiry.innerText = "Active";
+        }
+    }
+
+    // Program Title (Live Stream)
+    const uiTitle = document.getElementById("ui-program-title");
+    if (uiTitle) {
+        uiTitle.innerText = "Live Stream: " + chName;
+    }
+
+    // Program Time (Show as LIVE for live streams)
+    const uiProgramTime = document.getElementById("ui-program-time");
+    if (uiProgramTime) {
+        uiProgramTime.innerHTML = '<span style="color: #ef4444;">●</span> LIVE';
+    }
+
+    // Next Program (Not available from API)
+    const uiNext = document.getElementById("ui-next");
+    if (uiNext) {
+        uiNext.innerText = "--";
+    }
+
+    // ==========================================
+    // FOOTER STATUS BAR
+    // ==========================================
+
+    // EPG (use channel ID or provider)
+    const uiEpg = document.getElementById("ui-epg");
+    if (uiEpg) {
+        const epgId = channel.chid || channel.provider || chName.substring(0, 10).toUpperCase();
+        uiEpg.innerText = epgId;
+    }
+
+    // Status (Subscription status and price)
+    const uiStatus = document.getElementById("ui-status");
+    if (uiStatus) {
+        const isSubscribed = channel.subscribed === "yes" || channel.subscribed === "1" ||
+                            channel.subscribed === true || channel.subscribed === 1;
+        const price = channel.chprice || "0.00";
+
+        if (isSubscribed) {
+            if (parseFloat(price) > 0) {
+                uiStatus.innerText = "Pay($" + price + "/mo)";
+                uiStatus.style.color = "#10b981"; // Green for paid subscription
+            } else {
+                uiStatus.innerText = "Subscribed (Free)";
+                uiStatus.style.color = "#10b981"; // Green
+            }
+        } else {
+            uiStatus.innerText = "Not Subscribed";
+            uiStatus.style.color = "#ef4444"; // Red
+        }
+    }
+
+    // User Info (from session)
+    const uiUser = document.getElementById("ui-user");
+    if (uiUser) {
+        const userData = AuthAPI.getUserData();
+        if (userData && (userData.userid || userData.userId || userData.username)) {
+            const userId = userData.userid || userData.userId || userData.username || "user";
+            uiUser.innerText = userId;
+        } else {
+            uiUser.innerText = "guest";
+        }
+    }
+
+    // TV ID (from DeviceInfo)
+    const uiTvId = document.getElementById("ui-tvid");
+    if (uiTvId) {
+        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.devslno) {
+            uiTvId.innerText = DeviceInfo.devslno;
+        } else {
+            uiTvId.innerText = "TV-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+    }
+
+    // Current Date and Time (live updating)
+    updateDateTime();
+    // Update time every second
+    setInterval(updateDateTime, 1000);
 
     // Update Index if list loaded
     if (allChannels.length > 0) {
@@ -540,3 +634,32 @@ document.addEventListener('click', showOverlay);
 setTimeout(function() {
     showOverlay();
 }, 100);
+
+// ==========================================
+// DATE AND TIME UPDATES
+// ==========================================
+
+/**
+ * Update current date and time in footer
+ */
+function updateDateTime() {
+    const now = new Date();
+
+    // Update Date
+    const uiDate = document.getElementById('ui-date');
+    if (uiDate) {
+        const options = { month: 'short', day: '2-digit', year: 'numeric' };
+        uiDate.innerText = now.toLocaleDateString('en-US', options);
+    }
+
+    // Update Time
+    const uiTime = document.getElementById('ui-time');
+    if (uiTime) {
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours % 12 || 12;
+        const displayMinutes = minutes < 10 ? '0' + minutes : minutes;
+        uiTime.innerText = displayHours + ':' + displayMinutes + ' ' + ampm;
+    }
+}

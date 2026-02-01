@@ -12,30 +12,16 @@
 .focusable:focus {
     outline: none;
 
-    /* "Pop" effect - Scale up */
-    transform: scale(1.08);
-    /* Slightly larger for clear selection */
+    /* No scale transform - cleaner look */
+    transform: none;
 
-    /* High-contrast multi-layer shadow to simulate a glowing border without layout shift */
-    box-shadow:
-        0 0 0 4px #ffffff,
-        /* Solid white ring */
-        0 20px 40px rgba(0, 0, 0, 0.6),
-        /* Deep drop shadow for depth */
-        0 0 20px rgba(255, 255, 255, 0.3);
-    /* Subtle outer glow */
+    /* Simple underline effect */
+    border-bottom: 3px solid #3b5cff;
+
+    /* Simplified shadow - subtle depth without glow */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 
     /* Ensure element is above everything else */
     z-index: 999;
     position: relative;
-
-    /* Optional: Ensure border doesn't double wash if existing borders are present */
-    border-color: transparent;
-}
-
-/* Specific adjustment for large cards to prevent too much growth */
-.app-card:focus,
-.channel-card:focus {
-    /* Slightly less scale for big cards to avoid screen overflow */
-    transform: scale(1.05);
 }
