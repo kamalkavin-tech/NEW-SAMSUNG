@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
-    <title>BBNL IPTV - Home</title>
+    <title>Fo-Fi TV - Home</title>
     <link rel="stylesheet" href="css/style.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
@@ -14,25 +14,103 @@
     <nav class="navbar">
         <div class="nav-left">
             <div class="logo">
-                <span class="logo-icon"></span>
-                <span class="logo-text">BBNL</span>
+                <img src="images/fofi.jpeg" alt="Fo-Fi TV" class="navbar-logo">
             </div>
             <button class="menu-btn focusable" tabindex="0">☰</button>
             <div class="search-box">
-                <input type="text" placeholder="Search for movies, TV shows..." class="search-input">
+                <span class="search-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </span>
+                <input type="text" placeholder="Search for movies, TV shows..." class="search-input focusable" tabindex="0">
             </div>
         </div>
         <div class="nav-right">
-            <button class="settings-btn focusable" tabindex="0" data-route="settings.html">⚙️</button>
-           
+            <!-- Dark Mode Toggle -->
+            <div class="darkmode-toggle focusable" tabindex="0" id="darkModeToggle">
+                <span class="toggle-label">Dark Mode</span>
+                <div class="toggle-switch">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <!-- Network Status Button -->
+            <div class="network-btn focusable" tabindex="0" id="networkBtn">
+                <svg class="network-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                    <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                    <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                </svg>
+                <span class="network-label" id="networkLabel">Network</span>
+            </div>
+
+            <!-- Network Settings Popup -->
+            <div class="network-popup" id="networkPopup">
+                <div class="network-popup-header">Network Settings</div>
+                <div class="network-popup-content">
+                    <!-- WiFi Option -->
+                    <div class="network-option focusable active" tabindex="0" id="wifiOption">
+                        <div class="network-option-icon wifi-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                                <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                                <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                            </svg>
+                        </div>
+                        <div class="network-option-info">
+                            <div class="network-option-title" id="wifiTitle">Wifi</div>
+                            <div class="network-option-subtitle" id="wifiSubtitle">Checking...</div>
+                        </div>
+                        <div class="network-option-status" id="wifiStatus">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="9 12 11 14 15 10"></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Ethernet Option -->
+                    <div class="network-option focusable" tabindex="0" id="ethernetOption">
+                        <div class="network-option-icon ethernet-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="7" width="20" height="10" rx="2"></rect>
+                                <line x1="6" y1="12" x2="6" y2="12"></line>
+                                <line x1="10" y1="12" x2="10" y2="12"></line>
+                                <line x1="14" y1="12" x2="14" y2="12"></line>
+                                <line x1="18" y1="12" x2="18" y2="12"></line>
+                            </svg>
+                        </div>
+                        <div class="network-option-info">
+                            <div class="network-option-title">Ethernet</div>
+                            <div class="network-option-subtitle" id="ethernetSubtitle">Available</div>
+                        </div>
+                        <div class="network-option-status" id="ethernetStatus" style="display: none;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="9 12 11 14 15 10"></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Button -->
+            <button class="settings-btn focusable" tabindex="0" data-route="settings.html">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
         </div>
 
         <!-- Side Menu Overlay -->
         <div id="sideMenu" class="side-menu-overlay">
             <div class="glass-menu">
                 <div class="menu-brand">
-                    <span class="logo-icon"></span>
-                    <span class="logo-text">BBNL</span>
+                    <img src="images/fofi.jpeg" alt="Fo-Fi TV" class="menu-logo">
                 </div>
 
 
@@ -43,8 +121,8 @@
                     <button class="menu-item focusable" tabindex="0" data-route="channels.html">
                         Live Channels
                     </button>
-                    <button class="menu-item focusable" tabindex="0" data-route="movies.html">
-                        Movies
+                    <button class="menu-item focusable" tabindex="0" data-route="ott-apps.html">
+                        OTT Apps
                     </button>
                     <button class="menu-item focusable" tabindex="0" data-route="subscription.html">
                         Subscription
@@ -81,39 +159,9 @@
     <!-- Your OTT Apps Section -->
     <section class="content-section">
         <h2 class="section-title">Your OTT Apps</h2>
-        <div class="apps-grid">
-            <div class="app-card focusable" tabindex="0" data-app="jiohotstar">
-                <div class="app-icon jiohotstar-icon">
-                    <span class="star-icon">✦</span>
-                    <span class="app-name">JioHotstar</span>
-                </div>
-                <p class="app-label">Streaming Services</p>
-            </div>
-            <div class="app-card focusable" tabindex="0" data-app="prime">
-                <div class="app-icon prime-icon">
-                    <span class="prime-text">prime<br>video</span>
-                </div>
-                <p class="app-label">Streaming Services</p>
-            </div>
-            <div class="app-card focusable" tabindex="0" data-app="netflix">
-                <div class="app-icon netflix-icon">
-                    <span class="netflix-text">NETFLIX</span>
-                </div>
-                <p class="app-label">Streaming Services</p>
-            </div>
-            <div class="app-card focusable" tabindex="0" data-app="appletv">
-                <div class="app-icon appletv-icon">
-                    <span class="apple-logo"></span>
-                    <span class="tv-text"> Apple TV</span>
-                </div>
-                <p class="app-label">Streaming Services</p>
-            </div>
-            <div class="app-card view-all focusable" tabindex="0">
-                <div class="app-icon view-all-icon">
-                    <span class="arrow">→</span>
-                </div>
-                <p class="app-label">View All Ott<br>Streaming Services</p>
-            </div>
+        <div class="apps-grid" id="home-apps-container">
+            <!-- Apps will be loaded dynamically from API -->
+            <!-- First 4 apps + View All button -->
         </div>
     </section>
 

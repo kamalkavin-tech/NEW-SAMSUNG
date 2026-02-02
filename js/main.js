@@ -53,7 +53,10 @@ window.onload = function () {
         });
     });
 
-    // 6. Register Tizen Keys
+    // 6. Initialize Error Modal (if on login page)
+    initErrorModal();
+
+    // 7. Register Tizen Keys
     try {
         var keys = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
             "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
@@ -138,6 +141,77 @@ function showMacAddress() {
     }
 }
 
+/* ERROR MODAL */
+function initErrorModal() {
+    var errorModal = document.getElementById("errorModal");
+    if (!errorModal) return; // Not on login page
+
+    var tryAgainBtn = document.getElementById("errorTryAgainBtn");
+    var supportLink = document.getElementById("errorSupportLink");
+
+    // Try Again button - close modal and focus on phone input
+    if (tryAgainBtn) {
+        tryAgainBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            hideErrorModal();
+            var phoneInput = document.getElementById("phoneInput");
+            if (phoneInput) {
+                phoneInput.value = "";
+                phoneInput.focus();
+            }
+        });
+    }
+
+    // Contact Support link
+    if (supportLink) {
+        supportLink.addEventListener("click", function (e) {
+            e.preventDefault();
+            hideErrorModal();
+            // You can add navigation to support page here
+            alert("Please contact support at: support@bbnl.co.in");
+        });
+    }
+
+    // Click outside modal to close
+    errorModal.addEventListener("click", function (e) {
+        if (e.target === errorModal) {
+            hideErrorModal();
+            var phoneInput = document.getElementById("phoneInput");
+            if (phoneInput) phoneInput.focus();
+        }
+    });
+}
+
+function showErrorModal() {
+    var errorModal = document.getElementById("errorModal");
+    if (errorModal) {
+        errorModal.classList.add("show");
+
+        // Update focusables to include modal button
+        focusables = document.querySelectorAll(".focusable");
+
+        // Focus on Try Again button
+        var tryAgainBtn = document.getElementById("errorTryAgainBtn");
+        if (tryAgainBtn) {
+            var index = Array.from(focusables).indexOf(tryAgainBtn);
+            if (index >= 0) {
+                currentFocus = index;
+                tryAgainBtn.focus();
+            }
+        }
+    }
+}
+
+function hideErrorModal() {
+    var errorModal = document.getElementById("errorModal");
+    if (errorModal) {
+        errorModal.classList.remove("show");
+
+        // Refresh focusables
+        focusables = document.querySelectorAll(".focusable");
+    }
+}
+
 /* REMOTE CONTROL KEYS */
 /* REMOTE CONTROL KEYS */
 document.addEventListener("keydown", function (e) {
@@ -151,17 +225,66 @@ document.addEventListener("keydown", function (e) {
         // Special Handling for OTP Inputs: Allow continuous remote entry
         if (active.classList.contains('otp-input')) {
             if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
-                // We will handle this manually below to ensure focus moves instantly
-                // e.preventDefault() is implied if we don't return here? 
-                // No, we must NOT return here, so it falls through to our manual handler.
+                // Digit keys - falls through to default case for manual handling
             } else if (e.keyCode === 8) {
-                // Allow backspace to propagate (handled in initOTPPage for nav)
+                // Backspace - allow with navigation
+                e.preventDefault();
+                var currentId = active.id;
+                var idx = parseInt(currentId.replace('otp', ''));
+                if (active.value.length === 0 && idx > 1) {
+                    var prev = document.getElementById('otp' + (idx - 1));
+                    if (prev) {
+                        prev.focus();
+                        var focusIndex = Array.from(focusables).indexOf(prev);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                } else {
+                    active.value = '';
+                }
                 return;
             } else if (e.keyCode === 13) {
-                // Allow Enter
+                // Enter - allow
                 return;
+            } else if (e.keyCode === 37) {
+                // LEFT arrow - move to previous OTP input
+                e.preventDefault();
+                var currentId = active.id;
+                var idx = parseInt(currentId.replace('otp', ''));
+                if (idx > 1) {
+                    var prev = document.getElementById('otp' + (idx - 1));
+                    if (prev) {
+                        prev.focus();
+                        var focusIndex = Array.from(focusables).indexOf(prev);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                }
+                return;
+            } else if (e.keyCode === 39) {
+                // RIGHT arrow - move to next OTP input or verify button
+                e.preventDefault();
+                var currentId = active.id;
+                var idx = parseInt(currentId.replace('otp', ''));
+                if (idx < 4) {
+                    var next = document.getElementById('otp' + (idx + 1));
+                    if (next) {
+                        next.focus();
+                        var focusIndex = Array.from(focusables).indexOf(next);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                } else {
+                    var verifyBtn = document.getElementById('verifyBtn');
+                    if (verifyBtn) {
+                        verifyBtn.focus();
+                        var focusIndex = Array.from(focusables).indexOf(verifyBtn);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                }
+                return;
+            } else if (e.keyCode === 38 || e.keyCode === 40) {
+                // UP/DOWN arrows - allow to navigate out of OTP row
+                // Falls through to switch statement
             } else {
-                // Ignore other keys?
+                // Ignore other keys
                 return;
             }
         } else {
@@ -197,7 +320,14 @@ document.addEventListener("keydown", function (e) {
             handleOK();
             break;
         case 10009: // BACK (Tizen specific)
-            if (isInput) {
+            // Check if error modal is open
+            var errorModal = document.getElementById("errorModal");
+            if (errorModal && errorModal.classList.contains("show")) {
+                e.preventDefault();
+                hideErrorModal();
+                var phoneInput = document.getElementById("phoneInput");
+                if (phoneInput) phoneInput.focus();
+            } else if (isInput) {
                 active.blur(); // Hide keyboard if open
                 e.preventDefault(); // Prevent app exit if keyboard was just open
             } else {
@@ -218,16 +348,29 @@ document.addEventListener("keydown", function (e) {
                     console.log("Manual OTP Entry:", digit);
                     active.value = digit;
 
-                    // Trigger input event manually if needed, or just move focus
-                    // Move Focus Logic
+                    // Trigger input event for listeners
+                    var inputEvent = new Event('input', { bubbles: true });
+                    active.dispatchEvent(inputEvent);
+
+                    // Move Focus Logic - OTP has 4 digits
                     var currentId = active.id; // otp1
                     var idx = parseInt(currentId.replace('otp', ''));
-                    if (idx < 6) {
+                    if (idx < 4) {
                         var next = document.getElementById('otp' + (idx + 1));
-                        if (next) next.focus();
+                        if (next) {
+                            next.focus();
+                            // Update currentFocus to keep in sync
+                            var focusIndex = Array.from(focusables).indexOf(next);
+                            if (focusIndex >= 0) currentFocus = focusIndex;
+                        }
                     } else {
+                        // After 4th digit, focus verify button
                         var verifyBtn = document.getElementById('verifyBtn');
-                        if (verifyBtn) verifyBtn.focus();
+                        if (verifyBtn) {
+                            verifyBtn.focus();
+                            var focusIndex = Array.from(focusables).indexOf(verifyBtn);
+                            if (focusIndex >= 0) currentFocus = focusIndex;
+                        }
                     }
                 }
             }
@@ -260,6 +403,17 @@ function handleOK() {
         var value = active.getAttribute('data-value');
         console.log("Number pad button pressed:", value);
         handleNumberPadInput(value);
+        return;
+    }
+
+    // ERROR MODAL: Try Again Button
+    if (active.id === "errorTryAgainBtn") {
+        hideErrorModal();
+        var phoneInput = document.getElementById("phoneInput");
+        if (phoneInput) {
+            phoneInput.value = "";
+            phoneInput.focus();
+        }
         return;
     }
 
@@ -312,7 +466,15 @@ function handleOK() {
                     } else {
                         console.error("[Login] ❌ OTP request failed:", response);
                         var errorMsg = response.status ? response.status.err_msg : "Failed to send OTP";
-                        alert("Error: " + errorMsg);
+
+                        // Check if error is related to invalid mobile number
+                        if (errorMsg.toLowerCase().includes("mobile") ||
+                            errorMsg.toLowerCase().includes("phone") ||
+                            errorMsg.toLowerCase().includes("number")) {
+                            showErrorModal();
+                        } else {
+                            alert("Error: " + errorMsg);
+                        }
                     }
                 })
                 .catch(function (error) {
@@ -322,7 +484,8 @@ function handleOK() {
                     alert("Network error. Please check your connection.");
                 });
         } else {
-            alert("Please enter 10 digits");
+            // Show error modal for invalid phone number length
+            showErrorModal();
         }
         return;
     }
@@ -541,34 +704,57 @@ function resendOTP() {
     const urlParams = new URLSearchParams(window.location.search);
     const mobile = urlParams.get('mobile') || "7800000001";
     const userid = urlParams.get('userid') || "testiser1";
+    const email = urlParams.get('email') || "sureshs@bbnl.co.in"; // Add email parameter
 
     const resendLink = document.getElementById('resendLink');
     if (resendLink) resendLink.innerText = "Sending...";
 
-    // Call API
-    AuthAPI.resendOTP(userid, mobile).then(response => {
+    // Get device info for the API call
+    const device = DeviceInfo.getDeviceInfo();
+    const deviceData = {
+        mac_address: device.mac_address,
+        device_name: device.device_name,
+        ip_address: device.ip_address,
+        device_type: device.device_type
+    };
+
+    console.log("[Resend OTP] Payload:", {
+        userid: userid,
+        mobile: mobile,
+        email: email,
+        ...deviceData
+    });
+
+    // Call API with all required parameters
+    AuthAPI.resendOTP(userid, mobile, email, deviceData).then(response => {
         console.log("Resend Response:", response);
         if (resendLink) resendLink.innerText = "Resend OTP";
 
-        // Restart timer on success (or always?)
-        // Assuming success if no error thrown
-        startCountdown();
+        // Check if response is successful
+        if (response && response.status && response.status.err_code === 0) {
+            // Restart timer on success
+            startCountdown();
 
-        // Clear Inputs
-        otpCode = ["", "", "", "", "", ""];
-        for (var i = 1; i <= 6; i++) {
-            var digitEl = document.getElementById('otp' + i);
-            if (digitEl) digitEl.value = '';
+            // Clear Inputs
+            otpCode = ["", "", "", "", "", ""];
+            for (var i = 1; i <= 6; i++) {
+                var digitEl = document.getElementById('otp' + i);
+                if (digitEl) digitEl.value = '';
+            }
+            currentOtpIndex = 0;
+            if (focusables.length > 0) focusables[0].focus();
+
+            alert("OTP sent successfully to " + mobile);
+        } else {
+            var errorMsg = response && response.status ? response.status.err_msg : "Unknown error";
+            console.error("[Resend OTP] API Error:", errorMsg);
+            alert("Failed: " + errorMsg);
         }
-        currentOtpIndex = 0;
-        if (focusables.length > 0) focusables[0].focus();
-
-        alert("OTP sent successfully!");
 
     }).catch(e => {
         console.error("Resend Failed", e);
         if (resendLink) resendLink.innerText = "Resend OTP";
-        alert("Failed to resend OTP");
+        alert("Failed to resend OTP: " + e.message);
     });
 }
 

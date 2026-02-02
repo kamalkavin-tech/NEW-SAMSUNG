@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
-    <title>BBNL - Login</title>
+    <title>Fo-Fi TV - Login</title>
     <link rel="stylesheet" href="css/style.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
@@ -51,6 +51,23 @@
                 <p id="ipAddressText">IP: Loading...</p>
                 <p id="macAddressText">MAC: Loading...</p>
             </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="error-modal-overlay" id="errorModal">
+        <div class="error-modal">
+            <div class="error-icon">
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="40" cy="40" r="35" stroke="#FF4444" stroke-width="3" fill="rgba(255, 68, 68, 0.1)"/>
+                    <path d="M40 25V45" stroke="#FF4444" stroke-width="4" stroke-linecap="round"/>
+                    <circle cx="40" cy="55" r="3" fill="#FF4444"/>
+                </svg>
+            </div>
+            <h2 class="error-title">Invalid mobile number</h2>
+            <p class="error-message">The mobile number you entered is incorrect. Please check and try again with a valid 10-digit mobile number.</p>
+            <button class="error-try-again-btn focusable" id="errorTryAgainBtn" tabindex="0">Try Again</button>
+            <a href="#" class="error-support-link" id="errorSupportLink">Contact Support</a>
         </div>
     </div>
 

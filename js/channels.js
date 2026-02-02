@@ -10,6 +10,9 @@ var currentCategory = "All"; // Store selected category
 window.onload = function () {
     console.log("=== BBNL Channels Page Initialized ===");
 
+    // Initialize Dark Mode from localStorage
+    initDarkMode();
+
     // Initialize UI
     initPage();
 
@@ -471,4 +474,24 @@ function handleEnter(el) {
         BBNL_API.playChannel(channel);
         return;
     }
+}
+
+// ==========================================
+// DARK MODE FUNCTIONALITY
+// ==========================================
+
+/**
+ * Initialize dark mode from localStorage
+ */
+function initDarkMode() {
+    console.log("[Channels] Initializing dark mode...");
+    var isDarkMode = localStorage.getItem('darkMode') !== 'false'; // Default to dark mode
+
+    if (isDarkMode) {
+        document.body.classList.remove('light-mode');
+    } else {
+        document.body.classList.add('light-mode');
+    }
+
+    console.log("[Channels] Dark mode:", isDarkMode ? "ON" : "OFF");
 }

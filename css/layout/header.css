@@ -31,6 +31,23 @@
     font-size: 28px;
 }
 
+/* Fo-Fi TV Logo in Navbar */
+.navbar-logo {
+    height: 45px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
+/* Fo-Fi TV Logo in Side Menu */
+.menu-logo {
+    height: 60px;
+    width: auto;
+    max-width: 180px;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
 .nav-right {
     display: flex;
     align-items: center;

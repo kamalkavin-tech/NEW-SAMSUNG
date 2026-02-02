@@ -79,6 +79,7 @@
     margin-bottom: 12px;
 }
 
+/* Legacy logo circle - kept for compatibility */
 .logo-circle {
     width: 140px;
     height: 140px;
@@ -93,6 +94,23 @@
 
 .logo-emoji {
     font-size: 70px;
+}
+
+/* New Fo-Fi TV Logo Container */
+.logo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 50px;
+}
+
+.brand-logo {
+    max-width: 500px;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 16px;
 }
 
 .brand-title {
@@ -130,4 +148,148 @@
     font-size: 18px;
     color: #8899a6;
     text-align: center;
+    margin-bottom: 10px;
+}
+
+/* Resend OTP Link - Centered */
+.resend-link {
+    display: block;
+    margin: 20px auto 0 auto;
+    width: fit-content;
+    font-size: 18px;
+    color: #3b6cff;
+    text-decoration: none;
+    text-align: center;
+    padding: 15px 50px;
+    border-radius: 30px;
+    border: 2px solid #3b6cff;
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.resend-link:hover,
+.resend-link:focus {
+    color: #fff;
+    background: #3b6cff;
+    box-shadow: 0 0 20px rgba(59, 108, 255, 0.5);
+    outline: none;
+}
+
+.resend-link.disabled {
+    color: #555;
+    border-color: #333;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Verify Steps */
+.verify-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 50px;
+}
+
+.verify-step {
+    font-size: 18px;
+    color: #666;
+}
+
+.verify-step.active {
+    color: #3b6cff;
+    font-weight: 600;
+}
+
+.verify-step.completed {
+    color: #4dd4ac;
+}
+
+.verify-dots {
+    color: #444;
+    letter-spacing: 3px;
+}
+
+/* Error Modal */
+.error-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(5px);
+}
+
+.error-modal-overlay.show {
+    display: flex;
+}
+
+.error-modal {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    border-radius: 20px;
+    padding: 50px 60px;
+    max-width: 600px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(255, 68, 68, 0.2);
+}
+
+.error-icon {
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: center;
+}
+
+.error-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #FF4444;
+    margin-bottom: 20px;
+}
+
+.error-message {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+    margin-bottom: 40px;
+}
+
+.error-try-again-btn {
+    width: 100%;
+    padding: 18px 40px;
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #000;
+    font-size: 20px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 20px;
+}
+
+.error-try-again-btn:hover,
+.error-try-again-btn:focus {
+    transform: scale(1.02);
+    box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+    outline: none;
+}
+
+.error-support-link {
+    display: inline-block;
+    color: #3b6cff;
+    font-size: 16px;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.error-support-link:hover {
+    color: #5080ff;
+    text-decoration: underline;
 }

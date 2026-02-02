@@ -418,6 +418,21 @@ function handleKeydown(e) {
         return;
     }
 
+    // Number Keys (0-9) for direct channel navigation
+    // Standard number keys: 48-57 (0-9)
+    // Numpad number keys: 96-105 (0-9)
+    if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+        var digit;
+        if (code >= 48 && code <= 57) {
+            digit = String(code - 48); // Convert keycode to digit
+        } else {
+            digit = String(code - 96); // Convert numpad keycode to digit
+        }
+        handleNumberInput(digit);
+        showOverlay();
+        return;
+    }
+
     // Channel Up / Down (Tizen codes: 427, 428)
     // Also mapping Up/Down arrows for easier testing
     if (code === 427 || code === 33) { // CH+ or PageUp
@@ -592,6 +607,148 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// ==========================================
+// CHANNEL NUMBER INPUT FUNCTIONALITY
+// ==========================================
+var channelNumberBuffer = "";
+var channelInputTimeout = null;
+var CHANNEL_INPUT_DELAY = 2000; // 2 seconds to complete typing
+
+/**
+ * Handle number key input for direct channel navigation
+ */
+function handleNumberInput(digit) {
+    console.log("[Player] Number key pressed:", digit);
+
+    // Add digit to buffer
+    channelNumberBuffer += digit;
+
+    // Show the channel number input display
+    showChannelNumberInput(channelNumberBuffer);
+
+    // Clear existing timeout
+    if (channelInputTimeout) {
+        clearTimeout(channelInputTimeout);
+    }
+
+    // Set timeout to navigate after delay
+    channelInputTimeout = setTimeout(function() {
+        navigateToChannelNumber(channelNumberBuffer);
+        channelNumberBuffer = "";
+        hideChannelNumberInput();
+    }, CHANNEL_INPUT_DELAY);
+}
+
+/**
+ * Show channel number input overlay
+ */
+function showChannelNumberInput(number) {
+    var container = document.getElementById('player-container');
+    if (!container) return;
+
+    var inputDisplay = document.getElementById('channel-number-input');
+    if (!inputDisplay) {
+        inputDisplay = document.createElement('div');
+        inputDisplay.id = 'channel-number-input';
+        inputDisplay.style.cssText = `
+            position: absolute;
+            top: 80px;
+            right: 80px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 20px 40px;
+            border-radius: 12px;
+            font-size: 64px;
+            font-weight: bold;
+            z-index: 10000;
+            min-width: 150px;
+            text-align: center;
+            border: 2px solid rgba(59, 92, 255, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        `;
+        container.appendChild(inputDisplay);
+    }
+
+    inputDisplay.innerText = number;
+    inputDisplay.style.display = 'block';
+}
+
+/**
+ * Hide channel number input overlay
+ */
+function hideChannelNumberInput() {
+    var inputDisplay = document.getElementById('channel-number-input');
+    if (inputDisplay) {
+        inputDisplay.style.display = 'none';
+    }
+}
+
+/**
+ * Navigate to channel by number
+ */
+function navigateToChannelNumber(number) {
+    console.log("[Player] Navigating to channel number:", number);
+
+    if (allChannels.length === 0) {
+        console.warn("[Player] No channels loaded, cannot navigate");
+        showChannelNotFound(number);
+        return;
+    }
+
+    var targetNumber = parseInt(number, 10);
+
+    // Find channel by channelno, urno, chno, or ch_no
+    var channel = allChannels.find(function(ch) {
+        var chNum = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || ch.id, 10);
+        return chNum === targetNumber;
+    });
+
+    if (channel) {
+        console.log("[Player] Found channel:", channel.chtitle || channel.channel_name);
+        setupPlayer(channel);
+    } else {
+        console.warn("[Player] Channel not found for number:", number);
+        showChannelNotFound(number);
+    }
+}
+
+/**
+ * Show channel not found message
+ */
+function showChannelNotFound(number) {
+    var container = document.getElementById('player-container');
+    if (!container) return;
+
+    var notFoundDisplay = document.getElementById('channel-not-found');
+    if (!notFoundDisplay) {
+        notFoundDisplay = document.createElement('div');
+        notFoundDisplay.id = 'channel-not-found';
+        notFoundDisplay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 30px 50px;
+            border-radius: 15px;
+            font-size: 24px;
+            z-index: 10000;
+            text-align: center;
+            border: 2px solid rgba(255, 68, 68, 0.5);
+        `;
+        container.appendChild(notFoundDisplay);
+    }
+
+    notFoundDisplay.innerHTML = '<div style="color: #ff4444; font-size: 36px; margin-bottom: 10px;">Channel ' + number + '</div><div style="color: #aaa;">Not Found</div>';
+    notFoundDisplay.style.display = 'block';
+
+    // Auto-hide after 2 seconds
+    setTimeout(function() {
+        notFoundDisplay.style.display = 'none';
+    }, 2000);
+}
 
 // ==========================================
 // OVERLAY AUTO-HIDE/SHOW FUNCTIONALITY

@@ -43,10 +43,10 @@ if (USE_PROXY) {
         console.log("[API CONFIG] 🌐 PRODUCTION MODE - Direct API access");
         console.warn("[API CONFIG] ⚠️  CORS errors expected in browser - use proxy-server.js or Tizen emulator");
     }
-    // Auth endpoints use /netmon/cabletvapis
-    // Channel endpoints use /netmon-iptv/cabletvapis
-    API_BASE_URL_PROD = "http://124.40.244.211/netmon/cabletvapis";
-    API_BASE_URL_IPTV = "http://124.40.244.211/netmon-iptv/cabletvapis";
+    // HTTPS endpoint for Samsung TV (HTTP is blocked by proxy on TV)
+    // Using secure HTTPS endpoint: https://netmontest.bbnl.in/netmon/cabletvapis/
+    API_BASE_URL_PROD = "https://netmontest.bbnl.in/netmon/cabletvapis";
+    API_BASE_URL_IPTV = "https://netmontest.bbnl.in/netmon/cabletvapis";
 }
 
 // Enhanced logging for debugging
@@ -403,13 +403,14 @@ const ChannelsAPI = {
         console.log("[ChannelsAPI] User info - userid:", userid, "mobile:", mobile);
         console.log("[ChannelsAPI] Full user data:", user);
 
-        // PRODUCTION API FORMAT (tested in Postman)
-        // Simple payload: userid, mobile, ip_address, mac_address only
+        // NEW API FORMAT for chnl_data endpoint
+        // Body: userid, mobile, ip_address, mac_address (empty)
+        // Headers: devmac, Authorization, devslno
         const payload = {
             userid: userid,
             mobile: mobile,
-            ip_address: device.ip_address,
-            mac_address: device.mac_address
+            ip_address: device.ip_address || "192.168.101.110",
+            mac_address: ""  // Empty string as per new API format
         };
 
         console.log("[ChannelsAPI] Getting Channel List with payload:", payload);
@@ -419,8 +420,9 @@ const ChannelsAPI = {
             API_ENDPOINTS.CHANNEL_LIST,
             payload,
             {
-                "devmac": "68:1D:EF:14:6C:21",  // Use Postman header MAC (different from body MAC)
-                "devslno": device.devslno || "FOFI20191129000336"
+                "devmac": "68:1D:EF:14:6C:21",
+                "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
+                "devslno": "FOFI20191129000336"
             }
         );
 
@@ -872,14 +874,80 @@ const AppVersionAPI = {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
+        // Backend expects this exact format
         const payload = {
             userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            ip_address: device.ip_address || "192.168.101.110",
+            device_type: "",  // Empty string as per API format
+            mac_address: "",  // Empty string as per API format
+            device_name: "",  // Empty string as per API format
+            app_package: "com.fofi.fofiboxtv"
         };
 
         console.log("[AppVersionAPI] Getting app version:", payload);
 
         return await apiCall(API_ENDPOINTS.APP_VERSION, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
+    }
+};
+
+// ==========================================
+// OTT APPS API
+// ==========================================
+const OTTAppsAPI = {
+    /**
+     * Get allowed OTT apps from BBNL server
+     *
+     * @returns {Promise<Object>} API response with apps array
+     */
+    getAllowedApps: async function() {
+        const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
+
+        // Backend expects this format
+        const payload = {
+            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            ip_address: device.ip_address || "192.168.101.110",
+            mac: device.mac_address || "26:F2:AE:D8:3F:99"
+        };
+
+        console.log("[OTTAppsAPI] Getting allowed apps:", payload);
+
+        return await apiCall(API_ENDPOINTS.OTT_APPS, payload, {
+            "devmac": device.mac_address,
+            "devslno": device.devslno || "FOFI20191129000336"
+        });
+    }
+};
+
+// ==========================================
+// APP LOCK API
+// ==========================================
+const AppLockAPI = {
+    /**
+     * Check app lock status from BBNL server
+     *
+     * @returns {Promise<Object>} API response with lock status and app info
+     */
+    checkAppLock: async function() {
+        const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
+
+        // Backend expects this format
+        const payload = {
+            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            ip_address: device.ip_address || "192.168.101.110",
+            appversion: "1.0"
+        };
+
+        console.log("[AppLockAPI] Checking app lock:", payload);
+
+        return await apiCall(API_ENDPOINTS.APP_LOCK, payload, {
             "devmac": device.mac_address,
             "devslno": device.devslno || "FOFI20191129000336"
         });
@@ -930,6 +998,12 @@ const BBNL_API = {
     // App Version Methods
     getAppVersion: AppVersionAPI.getAppVersion.bind(AppVersionAPI),
 
+    // OTT Apps Methods
+    getAllowedApps: OTTAppsAPI.getAllowedApps.bind(OTTAppsAPI),
+
+    // App Lock Methods
+    checkAppLock: AppLockAPI.checkAppLock.bind(AppLockAPI),
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -946,6 +1020,8 @@ if (typeof window !== 'undefined') {
     window.AdsAPI = AdsAPI;
     window.FeedbackAPI = FeedbackAPI;
     window.AppVersionAPI = AppVersionAPI;
+    window.OTTAppsAPI = OTTAppsAPI;
+    window.AppLockAPI = AppLockAPI;
     window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
 }

@@ -9,10 +9,10 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
 }
 
-/* Channels Page Layout with Sidebar */
+/* Channels Page Layout with Sidebar - Optimized proportions */
 body.channels-page {
     display: grid;
-    grid-template-columns: 280px 1fr;
+    grid-template-columns: 240px 1fr;
     grid-template-rows: auto 1fr;
     height: 100vh;
     overflow: hidden;
@@ -77,30 +77,31 @@ body.channels-page {
     color: rgba(255, 255, 255, 0.5);
 }
 
-/* Page Title */
+/* Page Title - Enhanced typography */
 .page-title-container {
-    padding: 0 48px;
-    margin-top: 10px;
+    padding: 0 50px;
+    margin-top: 15px;
 }
 
 .page-title {
-    font-size: 28px !important;
+    font-size: 32px !important;
     font-weight: 700 !important;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     color: #fff !important;
+    letter-spacing: 0.5px;
 }
 
 /* ========================================
-   SIDEBAR / FILTER BAR
+   SIDEBAR / FILTER BAR - Improved UX
    ======================================== */
 
 .filters-bar {
     grid-column: 1 / 2;
     grid-row: 2 / 3;
-    padding: 20px 0 20px 48px;
+    padding: 30px 20px 30px 40px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     overflow-y: auto;
     border-right: none;
     background: transparent;
@@ -110,130 +111,139 @@ body.channels-page {
     width: 100%;
     justify-content: flex-start;
     background: transparent !important;
-    color: rgba(255, 255, 255, 0.6) !important;
+    color: rgba(255, 255, 255, 0.65) !important;
     font-weight: 500;
-    padding: 12px 24px;
-    border-radius: 25px 0 0 25px;
-    font-size: 18px;
-    transition: all 0.3s ease;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 16px;
+    transition: all 0.25s ease;
     border: none !important;
     text-align: left;
     cursor: pointer;
+    letter-spacing: 0.3px;
 }
 
 .filter-chip.active {
-    background: #3b5cff !important;
+    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%) !important;
     color: #fff !important;
-    font-weight: 700;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(59, 92, 255, 0.3);
 }
 
 .filter-chip:hover,
 .filter-chip:focus {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
     color: #fff !important;
-    transform: translateX(10px);
+    transform: translateX(4px);
     outline: none !important;
 }
 
 /* ========================================
-   MAIN CONTENT AREA
+   MAIN CONTENT AREA - Improved spacing
    ======================================== */
 
 .subpage-section {
     grid-column: 2 / 3;
     grid-row: 2 / 3;
-    padding: 20px 48px;
+    padding: 30px 50px 50px 50px;
     overflow-y: auto;
     height: 100%;
     background: #000;
 }
 
-/* Section Headers */
+/* Section Headers - Better visual hierarchy */
 .section-header {
-    font-size: 22px !important;
+    font-size: 24px !important;
     font-weight: 700 !important;
     color: #fff !important;
-    margin: 30px 0 20px 0 !important;
+    margin: 40px 0 24px 0 !important;
     padding-left: 0;
+    letter-spacing: 0.5px;
 }
 
 /* ========================================
-   CHANNEL GRID
+   CHANNEL GRID - 4 columns for optimal viewing
    ======================================== */
 
 .grid-5,
 .channels-grid {
     display: grid !important;
-    grid-template-columns: repeat(5, 1fr) !important;
-    gap: 24px !important;
-    margin-bottom: 40px;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 28px !important;
+    margin-bottom: 50px;
 }
 
-/* Channel Group (card + labels) */
+/* Channel Group - Enhanced spacing */
 .channel-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
 }
 
-/* Channel Card */
+/* Channel Card - Optimized for 4-column grid */
 .channel-card {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border-radius: 16px !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+    border-radius: 18px !important;
     padding: 0 !important;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.3s ease;
-    border: 2px solid transparent !important;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
     position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .channel-card:hover,
 .channel-card:focus {
-    transform: translateY(-8px) !important;
+    transform: translateY(-6px) scale(1.02) !important;
     border-color: #3b5cff !important;
-    box-shadow: 0 8px 24px rgba(59, 92, 255, 0.4) !important;
+    box-shadow: 0 12px 32px rgba(59, 92, 255, 0.35) !important;
     outline: none !important;
+    background: linear-gradient(135deg, rgba(59, 92, 255, 0.15) 0%, rgba(80, 128, 255, 0.05) 100%) !important;
 }
 
-/* Channel Icon Container */
+/* Channel Icon Container - Fixed 3:2 ratio to prevent elongation */
 .channel-icon {
     width: 100%;
-    aspect-ratio: 16 / 9;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    aspect-ratio: 3 / 2;
+    background: linear-gradient(135deg, rgba(20, 20, 30, 0.8) 0%, rgba(10, 10, 20, 0.9) 100%) !important;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
     overflow: hidden;
-    border-radius: 0 !important;
+    border-radius: 16px !important;
+    padding: 20px;
 }
 
 .channel-icon img {
-    max-width: 70%;
-    max-height: 70%;
+    max-width: 75%;
+    max-height: 75%;
     object-fit: contain;
     z-index: 1;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
 }
 
 /* ========================================
-   LIVE BADGE
+   LIVE BADGE - Enhanced design
    ======================================== */
 
 .live-badge {
     position: absolute !important;
-    top: 12px !important;
-    right: 12px !important;
-    background: #ef4444 !important;
+    top: 14px !important;
+    right: 14px !important;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
     color: #fff !important;
-    padding: 4px 12px !important;
-    border-radius: 4px !important;
+    padding: 6px 14px !important;
+    border-radius: 6px !important;
     font-size: 11px !important;
     font-weight: 700 !important;
     display: flex !important;
     align-items: center !important;
     gap: 6px !important;
-    z-index: 2 !important;
+    z-index: 10 !important;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    letter-spacing: 0.5px;
 }
 
 .live-dot {
@@ -245,28 +255,63 @@ body.channels-page {
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.9);
+    }
 }
 
 /* ========================================
-   CARD TITLES
+   CARD TITLES - Enhanced typography
    ======================================== */
 
 .card-title-bottom {
     color: #fff !important;
-    font-size: 16px !important;
+    font-size: 15px !important;
     font-weight: 600 !important;
-    margin-top: 4px;
+    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    letter-spacing: 0.3px;
+    line-height: 1.4;
 }
 
 .card-subtitle-bottom {
-    color: rgba(255, 255, 255, 0.5) !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 12px !important;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+}
+
+/* Channel Label Styling - for dynamically generated cards */
+.channel-label {
+    color: #fff !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    padding: 12px 16px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.channel-label br + text,
+.channel-label {
+    display: block;
+}
+
+/* App Label Styling */
+.app-label {
+    color: rgba(255, 255, 255, 0.6) !important;
     font-size: 13px !important;
-    font-weight: 400;
+    font-weight: 500 !important;
+    padding: 10px 16px;
+    text-align: center;
+    line-height: 1.4;
 }
 
 /* ========================================
@@ -276,11 +321,12 @@ body.channels-page {
 .hero-banner {
     position: relative;
     width: calc(100% - 80px);
-    height: 450px;
+    height: 550px;
     overflow: hidden;
-    background: linear-gradient(135deg, #1a1d29 0%, #2d1b3d 100%);
-    border-radius: 15px;
-    margin: 0 40px 30px 40px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+    border-radius: 20px;
+    margin: 30px 40px 40px 40px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 .hero-banner:empty {
@@ -293,6 +339,9 @@ body.channels-page {
     position: relative;
     width: 100%;
     height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .ad-slide {
@@ -302,13 +351,43 @@ body.channels-page {
     width: 100%;
     height: 100%;
     transition: opacity 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
 }
 
 .ad-slide img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
+}
+
+/* Ad Navigation Dots */
+.ad-dots {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+}
+
+.ad-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.ad-dot.active {
+    background: #fff;
+    width: 30px;
+    border-radius: 6px;
 }
 
 /* ========================================
@@ -316,7 +395,11 @@ body.channels-page {
    ======================================== */
 
 .content-section {
-    padding: 40px;
+    padding: 20px 40px 40px 40px;
+}
+
+.content-section:first-of-type {
+    padding-top: 10px;
 }
 
 .section-title {
@@ -324,6 +407,7 @@ body.channels-page {
     font-weight: 700 !important;
     margin-bottom: 30px;
     color: #fff !important;
+    padding-left: 4px;
 }
 
 .apps-grid {
@@ -397,17 +481,496 @@ body.channels-page {
 }
 
 /* ========================================
-   RESPONSIVE
+   RESPONSIVE - Optimized breakpoints
    ======================================== */
 
-@media (max-width: 1600px) {
+@media (max-width: 1800px) {
     .grid-5, .channels-grid, .apps-grid {
         grid-template-columns: repeat(4, 1fr) !important;
+        gap: 24px !important;
+    }
+
+    .hero-banner {
+        height: 500px;
     }
 }
+
+@media (max-width: 1400px) {
+    .grid-5, .channels-grid, .apps-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 24px !important;
+    }
+
+    body.channels-page {
+        grid-template-columns: 220px 1fr;
+    }
+
+    .filters-bar {
+        padding: 25px 15px 25px 30px;
+    }
+
+    .subpage-section {
+        padding: 25px 40px 40px 40px;
+    }
+}
+
+/* ========================================
+   NAVBAR - DARK MODE & NETWORK STATUS
+   ======================================== */
+
+/* Network Status Indicator */
+.network-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.network-status:hover,
+.network-status:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+.network-status.connected .network-icon {
+    color: #4dd4ac;
+}
+
+/* ========================================
+   DARK MODE TOGGLE - Exact Design Match
+   ======================================== */
+.darkmode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    border: none;
+}
+
+.darkmode-toggle:focus {
+    outline: none;
+}
+
+.darkmode-toggle:focus .toggle-switch {
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+}
+
+.toggle-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.toggle-switch {
+    width: 52px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 20px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Dark Mode Active State (toggle ON) */
+.darkmode-toggle.active .toggle-switch {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.darkmode-toggle.active .toggle-slider {
+    transform: translateX(24px);
+}
+
+/* ========================================
+   NETWORK BUTTON - Pill Shape with Border
+   ======================================== */
+.network-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: transparent;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.network-btn:hover,
+.network-btn:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.3);
+}
+
+.network-btn .network-icon {
+    color: #4dd4ac;
+    transition: color 0.3s;
+}
+
+.network-btn.disconnected .network-icon {
+    color: #ff6b6b;
+}
+
+.network-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: #fff;
+}
+
+/* ========================================
+   NETWORK POPUP - Floating Card
+   ======================================== */
+.network-popup {
+    position: absolute;
+    top: 70px;
+    right: 100px;
+    width: 380px;
+    background: rgba(45, 45, 55, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 1000;
+    display: none;
+}
+
+.network-popup.show {
+    display: block;
+}
+
+.network-popup-header {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 20px;
+}
+
+.network-popup-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.network-option {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1.5px solid transparent;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.network-option:hover,
+.network-option:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+.network-option.active {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.network-option:focus {
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+}
+
+.network-option-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    color: #4dd4ac;
+}
+
+.network-option-icon.ethernet-icon {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.network-option-info {
+    flex: 1;
+}
+
+.network-option-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+.network-option-subtitle {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.network-option-status {
+    color: #4dd4ac;
+}
+
+.network-option-status svg {
+    fill: none;
+}
+
+.network-option-arrow {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* ========================================
+   SETTINGS BUTTON - Circle with Icon
+   ======================================== */
+.settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #fff;
+}
+
+.settings-btn:hover,
+.settings-btn:focus {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+}
+
+.settings-btn svg {
+    width: 22px;
+    height: 22px;
+}
+
+/* ========================================
+   GLOBAL FOCUS STYLES FOR REMOTE NAVIGATION
+   ======================================== */
+.focusable:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+}
+
+.menu-btn:focus,
+.search-input:focus {
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+}
+
+.channel-card:focus,
+.app-card:focus {
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 12px 32px rgba(59, 92, 255, 0.35) !important;
+}
+
+/* Light Mode Theme Variables */
+body.light-mode {
+    background: #f5f5f7 !important;
+    color: #1a1a1a !important;
+}
+
+body.light-mode .navbar {
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95), rgba(245, 245, 247, 0.9)) !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .search-box,
+body.light-mode .subpage-search {
+    background: rgba(0, 0, 0, 0.08) !important;
+}
+
+body.light-mode .search-input,
+body.light-mode .subpage-search input {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .search-input::placeholder,
+body.light-mode .subpage-search input::placeholder {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+body.light-mode .section-title,
+body.light-mode .page-title {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .channel-card,
+body.light-mode .app-card {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .channel-card:hover,
+body.light-mode .channel-card:focus,
+body.light-mode .app-card:hover,
+body.light-mode .app-card:focus {
+    background: rgba(59, 92, 255, 0.1) !important;
+    border-color: #3b5cff !important;
+}
+
+body.light-mode .card-title-bottom {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .card-subtitle-bottom {
+    color: rgba(0, 0, 0, 0.5) !important;
+}
+
+body.light-mode .hero-banner {
+    background: linear-gradient(135deg, #e8e8e8 0%, #f5f5f7 100%);
+}
+
+body.light-mode .content-section {
+    background: #f5f5f7;
+}
+
+body.light-mode .network-btn {
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+body.light-mode .network-btn:hover,
+body.light-mode .network-btn:focus {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.3);
+}
+
+body.light-mode .network-label,
+body.light-mode .toggle-label {
+    color: #1a1a1a;
+}
+
+body.light-mode .toggle-switch {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+body.light-mode .network-popup {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .network-popup-header {
+    color: #1a1a1a;
+}
+
+body.light-mode .network-option {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+body.light-mode .network-option:hover,
+body.light-mode .network-option:focus {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+body.light-mode .network-option-icon {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .network-option-title {
+    color: #1a1a1a;
+}
+
+body.light-mode .network-option-subtitle {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+body.light-mode .settings-btn {
+    background: rgba(0, 0, 0, 0.08);
+    color: #1a1a1a !important;
+}
+
+body.light-mode .settings-btn:hover,
+body.light-mode .settings-btn:focus {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+body.light-mode .menu-btn {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .filter-chip {
+    color: rgba(0, 0, 0, 0.65) !important;
+}
+
+body.light-mode .filter-chip:hover,
+body.light-mode .filter-chip:focus {
+    background: rgba(0, 0, 0, 0.08) !important;
+    color: #1a1a1a !important;
+}
+
+body.light-mode .channel-icon {
+    background: linear-gradient(135deg, rgba(200, 200, 210, 0.8) 0%, rgba(220, 220, 230, 0.9) 100%) !important;
+}
+
+body.light-mode .subpage-header {
+    background: linear-gradient(to bottom, rgba(245, 245, 247, 0.95), transparent);
+}
+
+body.light-mode .back-btn {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .channel-label {
+    color: #1a1a1a !important;
+}
+
+body.light-mode .app-label {
+    color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ========================================
+   RESPONSIVE - Optimized breakpoints
+   ======================================== */
 
 @media (max-width: 1200px) {
     .grid-5, .channels-grid, .apps-grid {
         grid-template-columns: repeat(3, 1fr) !important;
+        gap: 20px !important;
+    }
+
+    .hero-banner {
+        height: 400px;
+        margin: 20px 30px 30px 30px;
+        width: calc(100% - 60px);
+    }
+
+    .content-section {
+        padding: 20px 30px 30px 30px;
+    }
+
+    body.channels-page {
+        grid-template-columns: 200px 1fr;
+    }
+
+    .filter-chip {
+        font-size: 15px;
+        padding: 12px 16px;
     }
 }

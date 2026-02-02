@@ -4,118 +4,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
-    <title>BBNL - Settings</title>
+    <title>Fo-Fi TV - Settings</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/pages/settings.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body>
+<body class="settings-page">
     <!-- Back Header -->
-    <div class="subpage-header transparent-header">
-        <button class="back-btn focusable" tabindex="0" onclick="window.history.back()">
+    <div class="settings-back-header">
+        <button class="back-btn focusable" tabindex="0" data-route="home.html">
             <span>‹</span> Back
         </button>
     </div>
 
-    <div class="settings-container">
-        <div class="header-text">
-            <h1 class="page-title">Settings</h1>
-            <p class="page-subtitle">App and device information</p>
+    <div class="settings-layout">
+        <!-- Left Sidebar -->
+        <div class="settings-sidebar">
+            <button class="sidebar-item focusable active" tabindex="0" data-section="parental">
+               
+                <span>Parental Controls</span>
+            </button>
+            <button class="sidebar-item focusable" tabindex="0" data-section="display">
+               
+                <span>Display</span>
+            </button>
+            <button class="sidebar-item focusable" tabindex="0" data-section="about">
+               
+                <span>About App</span>
+            </button>
         </div>
 
-        <div class="settings-card">
-            <!-- App Version Section -->
-            <div class="settings-section">
-                <div class="section-header">
-                    <span class="header-icon">📱</span>
-                    <div>
+        <!-- Main Content Area -->
+        <div class="settings-content">
+
+            <!-- Parental Controls Section -->
+            <div class="content-panel active" id="panel-parental">
+                <div class="panel-header">
+                    <h1>Parental Controls</h1>
+                    <p>Manage content restriction and PIN settings for your device</p>
+                </div>
+
+                <div class="settings-options">
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Enable Parental Controls</h3>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="parental-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Set PIN</h3>
+                            <p>A PIN required to change settings and bypass restrictions.</p>
+                        </div>
+                        <button class="action-btn focusable" tabindex="0">Change</button>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Content Rating</h3>
+                            <p>Restrict Movies and TV shows on their rating</p>
+                        </div>
+                        <button class="action-btn focusable" tabindex="0">Set Rating</button>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>App Restriction</h3>
+                            <p>Block access to specific app</p>
+                        </div>
+                        <button class="action-btn focusable" tabindex="0">Manage</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Display Settings Section -->
+            <div class="content-panel" id="panel-display">
+                <div class="panel-header">
+                    <h1>Display Settings</h1>
+                    <p>Manage your display settings and its size</p>
+                </div>
+
+                <div class="settings-options">
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Streaming Quality</h3>
+                            <p>Set the video quality for streaming</p>
+                        </div>
+                        <select class="dropdown-select focusable" tabindex="0">
+                            <option value="auto">Auto</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Auto Play Previews</h3>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoplay-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Display Size</h3>
+                            <p>Adjust the screen area to fit your TV</p>
+                        </div>
+                        <button class="action-btn focusable" tabindex="0">Adjust</button>
+                    </div>
+
+                    <div class="option-row">
+                        <div class="option-info">
+                            <h3>Aspect Ratio</h3>
+                            <p>Match the display shape to your screen format</p>
+                        </div>
+                        <select class="dropdown-select focusable" tabindex="0">
+                            <option value="auto">Auto</option>
+                            <option value="16:9">16:9</option>
+                            <option value="4:3">4:3</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- About App Section -->
+            <div class="content-panel" id="panel-about">
+                <div class="panel-header">
+                    <h1>About App</h1>
+                    <p>Learn information about our app</p>
+                </div>
+
+                <div class="info-sections">
+                    <!-- App Information -->
+                    <div class="info-card">
                         <h2>App Information</h2>
-                        <p>Current version details</p>
+                        <div class="info-grid">
+                            <div class="info-row">
+                                <span class="label">Model Name</span>
+                                <span class="value" id="model-name">BBNL IPTV</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Software Version</span>
+                                <span class="value" id="software-version">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Serial Number</span>
+                                <span class="value" id="serial-number">Loading...</span>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="info-group">
-                    <div class="info-item">
-                        <label>App Name</label>
-                        <div class="info-value" id="app-name">Loading...</div>
+                    <!-- Network Information -->
+                    <div class="info-card">
+                        <h2>Network Information</h2>
+                        <div class="info-grid">
+                            <div class="info-row">
+                                <span class="label">IP Address</span>
+                                <span class="value" id="ip-address">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Mac Address</span>
+                                <span class="value" id="mac-address">Loading...</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="info-item">
-                        <label>Version</label>
-                        <div class="info-value" id="app-version">Loading...</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Build Date</label>
-                        <div class="info-value" id="build-date">Loading...</div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Device Information Section -->
-            <div class="settings-section">
-                <div class="section-header">
-                    <span class="header-icon">📺</span>
-                    <div>
-                        <h2>Device Information</h2>
-                        <p>Connected device details</p>
-                    </div>
-                </div>
-
-                <div class="info-group">
-                    <div class="info-item">
-                        <label>Device Type</label>
-                        <div class="info-value" id="device-type">Loading...</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Device Name</label>
-                        <div class="info-value" id="device-name">Loading...</div>
-                    </div>
-                    <div class="info-item">
-                        <label>MAC Address</label>
-                        <div class="info-value" id="mac-address">Loading...</div>
-                    </div>
-                    <div class="info-item">
-                        <label>IP Address</label>
-                        <div class="info-value" id="ip-address">Loading...</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Serial Number</label>
-                        <div class="info-value" id="serial-number">Loading...</div>
+                    <!-- Software Updates -->
+                    <div class="option-row update-row">
+                        <div class="option-info">
+                            <h3>Software Updates</h3>
+                            <p id="update-status">Your App software is up to date</p>
+                        </div>
+                        <button class="action-btn focusable" tabindex="0" onclick="checkForUpdates()">Check</button>
                     </div>
                 </div>
             </div>
 
-            <!-- User Information Section -->
-            <div class="settings-section">
-                <div class="section-header">
-                    <span class="header-icon">👤</span>
-                    <div>
-                        <h2>User Information</h2>
-                        <p>Logged in user details</p>
-                    </div>
-                </div>
-
-                <div class="info-group">
-                    <div class="info-item">
-                        <label>User ID</label>
-                        <div class="info-value" id="user-id">Not logged in</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Mobile</label>
-                        <div class="info-value" id="user-mobile">Not logged in</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="settings-actions">
-                <button class="settings-btn primary focusable" tabindex="0" onclick="location.reload()">
-                    Refresh Data
-                </button>
-                <button class="settings-btn secondary focusable" tabindex="0" onclick="window.history.back()">
-                    Back to Home
-                </button>
-            </div>
         </div>
     </div>
 
