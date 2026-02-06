@@ -53,6 +53,21 @@ var AVPlayer = (function () {
         return url;
     }
 
+    /**
+     * Try HTTP version of HTTPS URL (fallback for SSL issues)
+     */
+    function tryHttpFallback(url) {
+        if (url && url.startsWith('https://')) {
+            var httpUrl = url.replace('https://', 'http://');
+            console.log("[AVPlayer] 🔄 HTTP Fallback URL:", httpUrl);
+            return httpUrl;
+        }
+        return url;
+    }
+
+    // Track if we should try HTTP fallback
+    var httpsFailedUrls = {};
+
     return {
         init: function (options) {
             console.log("[AVPlayer] Init called");
@@ -71,16 +86,19 @@ var AVPlayer = (function () {
 
             try {
                 // Set custom HTTP headers for stream requests
+                // Using browser-like User-Agent to avoid server blocking
                 var httpHeaders = [
-                    "User-Agent: Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.146 TV Safari/537.36",
+                    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept: */*",
-                    "Accept-Encoding: identity",
+                    "Accept-Encoding: gzip, deflate, br",
+                    "Accept-Language: en-US,en;q=0.9",
                     "Connection: keep-alive",
-                    "Referer: " + window.location.href
+                    "Origin: https://bbnl.in",
+                    "Referer: https://bbnl.in/"
                 ];
 
                 var headerString = httpHeaders.join("|");
-                console.log("[AVPlayer] Setting HTTP headers");
+                console.log("[AVPlayer] Setting HTTP headers (browser-like)");
                 avplay.setStreamingProperty("CUSTOM_MESSAGE", headerString);
 
             } catch (e) {
@@ -95,6 +113,14 @@ var AVPlayer = (function () {
 
             } catch (e) {
                 console.warn("[AVPlayer] Streaming properties warning:", e);
+            }
+
+            // Try to set SSL verification (for self-signed certs)
+            try {
+                avplay.setStreamingProperty("SET_MODE_4K", "FALSE");
+                console.log("[AVPlayer] 4K mode disabled for compatibility");
+            } catch (e) {
+                // Ignore if not supported
             }
         },
 
@@ -138,16 +164,16 @@ var AVPlayer = (function () {
                 var self = this;
                 setTimeout(function () {
                     try {
-                        // STEP 2: Set HTTP headers BEFORE opening
-                        console.log("[AVPlayer] Setting streaming headers...");
-                        self.setStreamingHeaders(url);
-                        console.log("[AVPlayer] ✓ Headers set");
-
-                        // STEP 3: Open stream
+                        // STEP 2: Open stream FIRST (required before setting properties)
                         console.log("[AVPlayer] Opening stream...");
                         avplay.open(url);
                         playerState = "IDLE";
                         console.log("[AVPlayer] ✓ Stream opened");
+
+                        // STEP 3: Set HTTP headers AFTER opening (Samsung TV requirement)
+                        console.log("[AVPlayer] Setting streaming headers...");
+                        self.setStreamingHeaders(url);
+                        console.log("[AVPlayer] ✓ Headers set");
 
                         // STEP 4: Configure timeout and buffering (ULTRA-FAST START)
                         try {
@@ -236,26 +262,9 @@ var AVPlayer = (function () {
                 console.log("[AVPlayer] ========================================");
 
                 if (playerState === "IDLE") {
-                    // ULTRA-FAST MODE: For HLS streams, try direct play without prepare
-                    var isHLS = currentStreamUrl && (currentStreamUrl.includes('.m3u8') || currentStreamUrl.includes('.m3u'));
-
-                    if (isHLS) {
-                        console.log("[AVPlayer] ⚡ ULTRA-FAST MODE: HLS detected, attempting direct play...");
-                        try {
-                            avplay.play();
-                            playerState = "PLAYING";
-                            console.log("[AVPlayer] ========================================");
-                            console.log("[AVPlayer] ✓✓✓ INSTANT PLAYBACK STARTED (HLS) ✓✓✓");
-                            console.log("[AVPlayer] ========================================");
-                            return;
-                        } catch (directPlayError) {
-                            console.warn("[AVPlayer] Direct play failed, falling back to prepareAsync:", directPlayError);
-                            playerState = "IDLE"; // Reset state
-                        }
-                    }
-
-                    // Fallback: Standard prepare for non-HLS or if direct play failed
-                    console.log("[AVPlayer] Preparing stream...");
+                    // SAMSUNG TV REQUIREMENT: Always use prepareAsync before play
+                    // Direct play without prepare causes InvalidAccessError on real TV
+                    console.log("[AVPlayer] Preparing stream (prepareAsync required for Samsung TV)...");
 
                     avplay.prepareAsync(
                         function () {
@@ -461,6 +470,50 @@ var AVPlayer = (function () {
                         console.error("[AVPlayer] Player State:", playerState);
                         console.error("[AVPlayer] ========================================");
 
+                        // AUTO-RETRY: Try HTTP if HTTPS failed (SSL certificate issues)
+                        if (eventType === "PLAYER_ERROR_CONNECTION_FAILED" &&
+                            currentStreamUrl &&
+                            currentStreamUrl.startsWith('https://') &&
+                            !httpsFailedUrls[currentStreamUrl]) {
+
+                            httpsFailedUrls[currentStreamUrl] = true;
+                            var httpUrl = tryHttpFallback(currentStreamUrl);
+
+                            console.log("[AVPlayer] 🔄 HTTPS failed, auto-retrying with HTTP...");
+                            console.log("[AVPlayer] HTTP URL:", httpUrl);
+
+                            // Try HTTP version
+                            setTimeout(function() {
+                                try {
+                                    avplay.stop();
+                                    avplay.close();
+                                } catch(e) {}
+
+                                try {
+                                    avplay.open(httpUrl);
+                                    currentStreamUrl = httpUrl;
+                                    avplay.setDisplayRect(0, 0, 1920, 1080);
+                                    avplay.prepareAsync(
+                                        function() {
+                                            console.log("[AVPlayer] ✓ HTTP fallback succeeded!");
+                                            avplay.play();
+                                            playerState = "PLAYING";
+                                        },
+                                        function(err) {
+                                            console.error("[AVPlayer] HTTP fallback also failed:", err);
+                                            eventCallbacks.onError("Cannot connect to stream server (both HTTPS and HTTP failed)", {
+                                                type: eventType,
+                                                url: currentStreamUrl
+                                            });
+                                        }
+                                    );
+                                } catch(e) {
+                                    console.error("[AVPlayer] HTTP fallback exception:", e);
+                                }
+                            }, 100);
+                            return; // Don't show error yet, trying HTTP
+                        }
+
                         var errorDetails = {
                             type: eventType,
                             timestamp: new Date().toISOString(),
@@ -472,8 +525,8 @@ var AVPlayer = (function () {
 
                         switch (eventType) {
                             case "PLAYER_ERROR_CONNECTION_FAILED":
-                                userMessage = "Cannot connect to stream server.\n\nPossible causes:\n• Stream URL is incorrect\n• Server is blocking TV requests\n• Network connection issue\n• CORS headers not set";
-                                errorDetails.suggestion = "Check stream URL and network connectivity";
+                                userMessage = "Cannot connect to stream server.\n\nPossible causes:\n• Stream URL is incorrect or expired\n• Server SSL certificate not trusted by TV\n• Server is blocking TV requests\n• Network connection issue";
+                                errorDetails.suggestion = "Try refreshing the channel list or check network";
                                 break;
                             case "PLAYER_ERROR_INVALID_URI":
                                 userMessage = "Invalid stream URL format";

@@ -86,6 +86,16 @@
     text-align: center;
 }
 
+.menu-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.menu-text {
+    flex: 1;
+}
+
 .menu-item:hover,
 .menu-item:focus {
     background: rgba(255, 255, 255, 0.1);

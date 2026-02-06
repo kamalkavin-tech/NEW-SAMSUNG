@@ -1,1 +1,252 @@
-/* Responsive styles can go here if needed */
+/* ==========================================
+   RESPONSIVE STYLES FOR TV SCREENS
+   Supports various TV resolutions:
+   - 720p (1280x720)
+   - 1080p (1920x1080)
+   - 4K (3840x2160)
+   ========================================== */
+
+/* Base TV (1920x1080 - Full HD) */
+@media (min-width: 1920px) and (max-width: 2559px) {
+    body {
+        width: 1920px;
+        height: 1080px;
+    }
+
+    /* Grid adjustments */
+    .grid-5 {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 24px;
+    }
+
+    .grid-4 {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+    }
+}
+
+/* 4K TVs (3840x2160) */
+@media (min-width: 2560px) {
+    body {
+        width: 3840px;
+        height: 2160px;
+        font-size: 24px;
+    }
+
+    /* Scale up all elements for 4K */
+    .grid-5 {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 40px;
+    }
+
+    .grid-4 {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 40px;
+    }
+
+    /* Larger cards for 4K */
+    .channel-card,
+    .app-card,
+    .movie-card {
+        border-radius: 24px;
+    }
+
+    .channel-icon {
+        aspect-ratio: 16 / 10;
+    }
+
+    .card-info {
+        padding: 20px 24px;
+    }
+
+    .card-title-bottom {
+        font-size: 22px;
+    }
+
+    .card-subtitle-bottom {
+        font-size: 16px;
+    }
+
+    /* Headers */
+    .page-title {
+        font-size: 48px;
+    }
+
+    .section-header {
+        font-size: 28px;
+    }
+
+    /* Buttons */
+    .filter-chip {
+        padding: 18px 36px;
+        font-size: 20px;
+        border-radius: 36px;
+    }
+
+    /* Search */
+    .subpage-search {
+        padding: 18px 28px;
+        border-radius: 36px;
+    }
+
+    .subpage-search input {
+        font-size: 22px;
+        width: 400px;
+    }
+}
+
+/* HD Ready TVs (1280x720) */
+@media (max-width: 1600px) {
+    body {
+        width: 1280px;
+        height: 720px;
+    }
+
+    /* Smaller grids */
+    .grid-5 {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+    }
+
+    .grid-4 {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+
+    /* Smaller fonts */
+    .page-title {
+        font-size: 24px;
+    }
+
+    .section-header {
+        font-size: 16px;
+    }
+
+    /* Smaller cards */
+    .channel-card,
+    .app-card {
+        border-radius: 12px;
+    }
+
+    .card-info {
+        padding: 10px 12px;
+    }
+
+    .card-title-bottom {
+        font-size: 12px;
+    }
+
+    .card-subtitle-bottom {
+        font-size: 10px;
+    }
+
+    /* Smaller buttons */
+    .filter-chip {
+        padding: 10px 18px;
+        font-size: 13px;
+        border-radius: 20px;
+    }
+
+    /* Smaller search */
+    .subpage-search {
+        padding: 10px 16px;
+    }
+
+    .subpage-search input {
+        font-size: 14px;
+        width: 180px;
+    }
+
+    /* Settings adjustments */
+    .settings-sidebar {
+        width: 220px;
+        padding: 16px;
+    }
+
+    .sidebar-item {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+
+    .settings-content {
+        padding: 28px;
+    }
+
+    .panel-header h1 {
+        font-size: 24px;
+    }
+
+    .option-row {
+        padding: 18px;
+    }
+
+    .option-info h3 {
+        font-size: 16px;
+    }
+
+    .option-info p {
+        font-size: 12px;
+    }
+}
+
+/* Very small screens / testing */
+@media (max-width: 1280px) {
+    body {
+        width: 1280px;
+        height: 720px;
+    }
+
+    .grid-5 {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+    }
+
+    .grid-4 {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+    }
+
+    /* Padding adjustments */
+    .subpage-header,
+    .title-search-row,
+    .filters-container,
+    .subpage-section {
+        padding-left: 32px;
+        padding-right: 32px;
+    }
+}
+
+/* ==========================================
+   AUTO-SCALING FOR TV SCREENS
+   ========================================== */
+
+/* Auto scale based on viewport */
+@media screen and (min-aspect-ratio: 16/9) {
+    html {
+        font-size: calc(100vw / 120);
+    }
+}
+
+/* Ensure smooth scrolling on TVs */
+html {
+    scroll-behavior: smooth;
+}
+
+/* TV-optimized touch/pointer handling */
+@media (pointer: coarse) {
+    .focusable {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Hide scrollbars on TV (use D-pad navigation) */
+@media (hover: none) {
+    ::-webkit-scrollbar {
+        display: none;
+    }
+
+    * {
+        scrollbar-width: none;
+    }
+}

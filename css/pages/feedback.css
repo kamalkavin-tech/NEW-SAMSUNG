@@ -132,7 +132,10 @@
 }
 
 .submit-btn:focus,
-.cancel-btn:focus {
+.cancel-btn:focus,
+.focusable:focus {
     transform: scale(1.05);
-    border: 1px solid white;
+    border: 2px solid #fff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+    outline: none;
 }

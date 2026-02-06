@@ -37,10 +37,15 @@ window.onload = function () {
         });
     });
 
-    try {
-        var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
-        tizen.tvinputdevice.registerKeyBatch(keys);
-    } catch (e) { }
+    // Register All Remote Keys (supports all Samsung remote types)
+    if (typeof RemoteKeys !== 'undefined') {
+        RemoteKeys.registerAllKeys();
+    } else {
+        try {
+            var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
+            tizen.tvinputdevice.registerKeyBatch(keys);
+        } catch (e) { }
+    }
 };
 
 document.addEventListener("keydown", function (e) {

@@ -23,8 +23,15 @@
     <!-- ============================================ -->
     <access origin="*" subdomains="true"/>
     <access origin="http://124.40.244.211" subdomains="true"/>
+    <access origin="https://netmontest.bbnl.in" subdomains="true"/>
+    <!-- Stream domains - both HTTP and HTTPS -->
+    <access origin="http://livestream.bbnl.in" subdomains="true"/>
     <access origin="https://livestream.bbnl.in" subdomains="true"/>
+    <access origin="http://livestream2.bbnl.in" subdomains="true"/>
     <access origin="https://livestream2.bbnl.in" subdomains="true"/>
+    <!-- Samsung HTTP/1.1 compatible server -->
+    <access origin="http://livestream3.bbnl.in" subdomains="true"/>
+    <access origin="https://livestream3.bbnl.in" subdomains="true"/>
     
     <!-- ============================================ -->
     <!-- NETWORK PRIVILEGES (CRITICAL FOR STREAMING) -->

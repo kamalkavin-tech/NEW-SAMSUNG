@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="css/style.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
     <script src="js/api.js"></script>
-    <script src="js/main.js"></script>
 </head>
 
 <body>
@@ -24,14 +23,14 @@
 
             <form class="auth-form" action="home.html" method="get">
                 <div class="otp-container">
-                    <input id="otp1" name="otp1" type="text" class="otp-input focusable" maxlength="1"
-                        autocomplete="off" tabindex="0">
-                    <input id="otp2" name="otp2" type="text" class="otp-input focusable" maxlength="1"
-                        autocomplete="off" tabindex="0">
-                    <input id="otp3" name="otp3" type="text" class="otp-input focusable" maxlength="1"
-                        autocomplete="off" tabindex="0">
-                    <input id="otp4" name="otp4" type="text" class="otp-input focusable" maxlength="1"
-                        autocomplete="off" tabindex="0">
+                    <input id="otp1" name="otp1" type="tel" class="otp-input focusable" maxlength="1"
+                        autocomplete="off" inputmode="numeric" pattern="[0-9]" tabindex="0">
+                    <input id="otp2" name="otp2" type="tel" class="otp-input focusable" maxlength="1"
+                        autocomplete="off" inputmode="numeric" pattern="[0-9]" tabindex="0">
+                    <input id="otp3" name="otp3" type="tel" class="otp-input focusable" maxlength="1"
+                        autocomplete="off" inputmode="numeric" pattern="[0-9]" tabindex="0">
+                    <input id="otp4" name="otp4" type="tel" class="otp-input focusable" maxlength="1"
+                        autocomplete="off" inputmode="numeric" pattern="[0-9]" tabindex="0">
                 </div>
                 <button type="button" id="verifyBtn" class="verify-btn focusable" tabindex="0">Verify</button>
                 <div class="resend-text">Didn't receive the code? <span id="timer" style="color:#2b4cff;">00:59</span>
@@ -40,6 +39,8 @@
             </form>
         </div>
     </div>
+    
+    <script src="js/main.js"></script>
 </body>
 
 </html>

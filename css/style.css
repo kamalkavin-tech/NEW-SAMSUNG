@@ -22,6 +22,7 @@
 /* 4. Pages (Page-specific styles) */
 @import url('pages/homepages.css');
 @import url('pages/apps.css');
+@import url('pages/channels.css');
 @import url('pages/auth.css');
 @import url('pages/favorites.css');
 @import url('pages/notifications.css');

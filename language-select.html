@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>Fo-Fi TV - Select Language</title>
+    <!-- Base Styles -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/language-select.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+
+<body class="language-select-page">
+
+    <!-- Fixed Header -->
+    <div class="language-header">
+        <button class="back-btn focusable" tabindex="0">
+            <span class="back-icon">←</span>
+        </button>
+        <h1 class="page-title">Select Language</h1>
+    </div>
+
+    <!-- Language Cards Grid -->
+    <div class="language-container">
+        <div class="language-grid" id="languageGrid">
+            <!-- Language cards will be loaded dynamically from API -->
+            <div class="loading-spinner">Loading Languages...</div>
+        </div>
+    </div>
+
+    <!-- Error Popup - No Internet -->
+    <div class="error-popup-overlay" id="noInternetPopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="200" height="140" viewBox="0 0 200 140">
+                    <!-- Monitor -->
+                    <rect x="50" y="15" width="100" height="65" rx="5" fill="#2d5a45" stroke="#3d7a55"
+                        stroke-width="2" />
+                    <text x="100" y="40" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">NO
+                        INTERNET</text>
+                    <text x="100" y="55" text-anchor="middle" fill="#fff" font-size="11"
+                        font-weight="bold">CONNECTION</text>
+                    <!-- Warning icons -->
+                    <circle cx="75" cy="68" r="6" fill="#f5a623" />
+                    <text x="75" y="71" text-anchor="middle" fill="#333" font-size="10" font-weight="bold">!</text>
+                    <circle cx="125" cy="68" r="6" fill="#f5a623" />
+                    <text x="125" y="71" text-anchor="middle" fill="#333" font-size="10" font-weight="bold">!</text>
+                    <!-- Stand -->
+                    <rect x="90" y="80" width="20" height="10" fill="#3d7a55" />
+                    <!-- Dog -->
+                    <ellipse cx="45" cy="115" rx="25" ry="20" fill="#d4a534" />
+                    <circle cx="35" cy="105" r="4" fill="#333" />
+                    <circle cx="50" cy="105" r="4" fill="#333" />
+                    <ellipse cx="42" cy="115" rx="5" ry="4" fill="#333" />
+                    <ellipse cx="30" cy="90" rx="8" ry="12" fill="#d4a534" />
+                    <ellipse cx="55" cy="90" rx="8" ry="12" fill="#d4a534" />
+                    <!-- Cat -->
+                    <ellipse cx="155" cy="115" rx="20" ry="18" fill="#888" />
+                    <circle cx="148" cy="108" r="3" fill="#4CAF50" />
+                    <circle cx="162" cy="108" r="3" fill="#4CAF50" />
+                    <polygon points="143,95 148,105 138,105" fill="#888" />
+                    <polygon points="167,95 172,105 162,105" fill="#888" />
+                </svg>
+            </div>
+            <h2 class="error-popup-title">No Internet Connection</h2>
+            <p class="error-popup-message">Please Check your network and try again</p>
+            <button class="error-popup-btn focusable" id="retryInternetBtn" tabindex="0">Try Again</button>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/language-select.js"></script>
+</body>
+
+</html>

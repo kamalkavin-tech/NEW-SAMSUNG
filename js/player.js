@@ -21,12 +21,14 @@ const PLAYER_CONFIG = {
 /**
  * Fix localhost URLs that cannot be accessed from TV
  * Replaces 127.0.0.1 and localhost with actual server IP
+ * Also transforms old stream servers to Samsung HTTP/1.1 compatible server (livestream3.bbnl.in)
  */
 function fixLocalhostUrl(url) {
     if (!url) return url;
 
     var originalUrl = url;
     var wasLocalhost = false;
+    var wasOldServer = false;
 
     // Check if URL contains localhost or 127.0.0.1
     if (url.includes('127.0.0.1') || url.includes('localhost')) {
@@ -39,7 +41,20 @@ function fixLocalhostUrl(url) {
 
         console.log("Original URL:", originalUrl);
         console.log("Fixed URL:", url);
+    }
 
+    // Transform old stream servers to new Samsung HTTP/1.1 compatible server
+    // livestream.bbnl.in and livestream2.bbnl.in -> livestream3.bbnl.in
+    if (url.includes('livestream.bbnl.in') || url.includes('livestream2.bbnl.in')) {
+        wasOldServer = true;
+        console.log("⚠️ OLD STREAM SERVER DETECTED - Switching to Samsung HTTP/1.1 server");
+        
+        // Replace old servers with new Samsung-compatible HTTP/1.1 server
+        url = url.replace(/livestream2\.bbnl\.in/g, 'livestream3.bbnl.in');
+        url = url.replace(/livestream\.bbnl\.in/g, 'livestream3.bbnl.in');
+        
+        console.log("Original Server URL:", originalUrl);
+        console.log("New Samsung HTTP/1.1 URL:", url);
     }
 
     return url;
@@ -111,11 +126,15 @@ window.onload = function () {
         console.error("No channel data found");
     }
 
-    // Register Keys
-    try {
-        const keys = ["MediaPlay", "MediaPause", "MediaStop", "MediaFastForward", "MediaRewind", "Return", "Enter", "10009", "ChannelUp", "ChannelDown"];
-        tizen.tvinputdevice.registerKeyBatch(keys);
-    } catch (e) { }
+    // Register All Remote Keys (supports all Samsung remote types including media controls)
+    if (typeof RemoteKeys !== 'undefined') {
+        RemoteKeys.registerAllKeys();
+    } else {
+        try {
+            const keys = ["MediaPlay", "MediaPause", "MediaStop", "MediaFastForward", "MediaRewind", "Return", "Enter", "ChannelUp", "ChannelDown", "MediaPlayPause"];
+            tizen.tvinputdevice.registerKeyBatch(keys);
+        } catch (e) { }
+    }
 
     // Fetch Channel Context for Zapping (and Lookup)
     loadChannelList(channelNameParam);

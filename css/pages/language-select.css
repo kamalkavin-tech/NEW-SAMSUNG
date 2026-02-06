@@ -1,0 +1,379 @@
+/* ==========================================
+   LANGUAGE SELECT PAGE - FULL PAGE LAYOUT
+   ========================================== */
+
+/* Override sidebar layout */
+body.language-select-page {
+    display: block !important;
+    grid-template-columns: unset !important;
+    grid-template-rows: unset !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #000000;
+    overflow: hidden;
+}
+
+/* ==========================================
+   HEADER SECTION - FIXED TOP
+   ========================================== */
+
+.language-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #000000;
+    height: 60px;
+    padding: 0 30px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    z-index: 100;
+}
+
+/* Back Button */
+.back-btn {
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 20px;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.back-btn .back-icon {
+    line-height: 1;
+    width: 20px;
+    height: 20px;
+}
+
+.back-btn:hover,
+.back-btn:focus {
+    background: #333;
+    border-color: #666;
+    outline: none;
+}
+
+/* Page Title */
+.page-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+/* ==========================================
+   LANGUAGE CARDS GRID SECTION
+   ========================================== */
+
+.language-container {
+    margin-top: 60px;
+    padding: 40px 30px;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+    background: #000000;
+}
+
+/* Language Grid - 4 Columns */
+.language-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    max-width: 1860px;
+    margin: 0 auto;
+}
+
+/* Language Card - Colorful Gradient Cards */
+.language-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 30px 20px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    min-height: 180px;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid transparent;
+}
+
+.language-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.language-card:hover::before {
+    opacity: 1;
+}
+
+.language-card:hover,
+.language-card:focus {
+    transform: translateY(-8px) scale(1.05);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    outline: none;
+}
+
+.language-card:focus {
+    border-color: #fff;
+}
+
+/* Language Icon Container */
+.language-icon {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 5px;
+}
+
+.language-icon img {
+    max-width: 70px;
+    max-height: 70px;
+    object-fit: contain;
+}
+
+.language-icon-text {
+    font-size: 36px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Language Card Info */
+.language-card-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.language-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.language-card-subtitle {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================================
+   GRADIENT COLOR VARIATIONS
+   ========================================== */
+
+/* Subscribed Channels - Purple/Blue */
+.language-card[data-langid="subs"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* All Channels - Pink */
+.language-card[data-langid=""] {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+/* Kannada - Cyan */
+.language-card[data-langid="9"] {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+/* Hindi - Green */
+.language-card[data-langid="1"] {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+/* English - Orange/Yellow */
+.language-card[data-langid="3"] {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+/* Tamil - Blue */
+.language-card[data-langid="5"] {
+    background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+}
+
+/* Telugu - Light Cyan */
+.language-card[data-langid="15"] {
+    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+}
+
+/* Malayalam - Orange */
+.language-card[data-langid="7"] {
+    background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+}
+
+/* Urdu - Dark Purple */
+.language-card[data-langid="21"] {
+    background: linear-gradient(135deg, #5f2c82 0%, #49a09d 100%);
+}
+
+/* Gujarati - Blue */
+.language-card[data-langid="25"] {
+    background: linear-gradient(135deg, #2196f3 0%, #4fc3f7 100%);
+}
+
+/* Marathi - Red */
+.language-card[data-langid="13"] {
+    background: linear-gradient(135deg, #f85032 0%, #e73827 100%);
+}
+
+/* Punjabi - Light Blue */
+.language-card[data-langid="23"] {
+    background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+}
+
+/* Odia - Green */
+.language-card[data-langid="19"] {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+/* Multilingual - Red/Pink */
+.language-card[data-langid="33"] {
+    background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+}
+
+/* Bangla - Light Gray/Purple */
+.language-card[data-langid="31"] {
+    background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
+}
+
+/* Bhojpuri - Purple */
+.language-card[data-langid="29"] {
+    background: linear-gradient(135deg, #7f00ff 0%, #e100ff 100%);
+}
+
+/* Assame - Light */
+.language-card[data-langid="27"] {
+    background: linear-gradient(135deg, #ddd6f3 0%, #faaca8 100%);
+}
+
+/* ==========================================
+   SCROLLBAR STYLING
+   ========================================== */
+
+.language-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.language-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.language-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+}
+
+.loading-spinner {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+}
+
+/* Error Popup Styling */
+.error-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.error-popup {
+    background: #1e1e1e;
+    padding: 40px;
+    border-radius: 16px;
+    text-align: center;
+    max-width: 500px;
+}
+
+.error-popup-title {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 600;
+    margin: 20px 0 10px;
+}
+
+.error-popup-message {
+    color: #999;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.error-popup-btn {
+    margin-top: 20px;
+    padding: 12px 40px;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.error-popup-btn:hover,
+.error-popup-btn:focus {
+    background: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+    outline: none;
+}
+
+/* ==========================================
+   RESPONSIVE ADJUSTMENTS
+   ========================================== */
+
+@media (max-width: 1600px) {
+    .language-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 1280px) {
+    .language-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 960px) {
+    .language-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

@@ -31,25 +31,51 @@ window.onload = function () {
         });
     });
 
-    // Side Menu Backdrop Click
-    var backdrop = document.getElementById('menuBackdrop');
-    if (backdrop) {
-        backdrop.addEventListener('click', function () {
-            document.getElementById('sideMenu').classList.remove('open');
-            // Return focus to menu btn?
-            var menuBtn = document.querySelector('.menu-btn');
-            if (menuBtn) menuBtn.focus();
+    // Initialize sidebar icon buttons - Set active state based on current page ONLY
+    var sidebarBtns = document.querySelectorAll('.sidebar-icon-btn');
+    var currentPage = window.location.pathname.split('/').pop() || 'home.html';
+
+    // Remove all active classes first, then set only for current page
+    // Also add explicit click handlers for navigation
+    sidebarBtns.forEach(function(btn) {
+        btn.classList.remove('active');
+        var route = btn.getAttribute('data-route');
+        if (route === currentPage) {
+            btn.classList.add('active');
+            console.log("Active sidebar icon set to:", route);
+        }
+
+        // Add explicit click handler for sidebar navigation
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var targetRoute = btn.getAttribute('data-route');
+            if (targetRoute) {
+                console.log("[Sidebar] Navigating to:", targetRoute);
+                window.location.href = targetRoute;
+            }
         });
+    });
+
+    // Register All Remote Keys (supports all Samsung remote types)
+    if (typeof RemoteKeys !== 'undefined') {
+        RemoteKeys.registerAllKeys();
+    } else {
+        try {
+            var keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Return'];
+            tizen.tvinputdevice.registerKeyBatch(keys);
+            console.log("Tizen keys registered (fallback)");
+        } catch (e) {
+            console.log("Not on Tizen");
+        }
     }
 
-    // Register Tizen keys
-    try {
-        var keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Return'];
-        tizen.tvinputdevice.registerKeyBatch(keys);
-        console.log("Tizen keys registered");
-    } catch (e) {
-        console.log("Not on Tizen");
-    }
+    // Initialize TV Navigation System
+    // This will set initial focus on Home icon in sidebar
+    setTimeout(function() {
+        if (typeof TVNavigation !== 'undefined') {
+            TVNavigation.init();
+        }
+    }, 100);
 };
 
 // Keyboard navigation
@@ -59,19 +85,27 @@ document.addEventListener('keydown', function (e) {
     switch (e.keyCode) {
         case 37: // LEFT
             e.preventDefault();
-            moveFocusHorizontal(-1);
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleLeft();
+            }
             break;
         case 39: // RIGHT
             e.preventDefault();
-            moveFocusHorizontal(1);
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleRight();
+            }
             break;
         case 38: // UP
             e.preventDefault();
-            moveFocusVertical(-1);
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleUp();
+            }
             break;
         case 40: // DOWN
             e.preventDefault();
-            moveFocusVertical(1);
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleDown();
+            }
             break;
         case 13: // ENTER
             e.preventDefault();
@@ -79,23 +113,64 @@ document.addEventListener('keydown', function (e) {
             break;
         case 10009: // BACK
             e.preventDefault();
-
-            // 1. Close Side Menu if Open
-            var sideMenu = document.getElementById('sideMenu');
-            if (sideMenu && sideMenu.classList.contains('open')) {
-                console.log("Closing Side Menu");
-                sideMenu.classList.remove('open');
-                var menuBtn = document.querySelector('.menu-btn');
-                if (menuBtn) menuBtn.focus();
-                return;
-            }
-
-            // 2. Navigate Back
-            console.log("Back Pressed - Navigating History");
-            window.history.back();
+            // Smart back navigation:
+            // If in content area -> go back to sidebar
+            // If in sidebar at home icon -> show exit confirmation
+            // If in sidebar at other icon -> go to home icon
+            console.log("Back Pressed on Home");
+            handleBackNavigation();
             break;
     }
 });
+
+// Smart back navigation handler
+function handleBackNavigation() {
+    var active = document.activeElement;
+    
+    // Check if we're in the exit modal
+    var exitModal = document.getElementById('exitModal');
+    if (exitModal && exitModal.classList.contains('show')) {
+        // Close the exit modal
+        hideExitConfirmation();
+        return;
+    }
+    
+    // Check if we're in sidebar
+    var sidebarIcons = document.querySelectorAll('.sidebar-icon');
+    var inSidebar = false;
+    var atHomeIcon = false;
+    
+    sidebarIcons.forEach(function(icon, index) {
+        if (icon === active || icon.contains(active)) {
+            inSidebar = true;
+            if (index === 0) {
+                atHomeIcon = true;
+            }
+        }
+    });
+    
+    if (inSidebar) {
+        if (atHomeIcon) {
+            // At home icon in sidebar - show exit confirmation
+            console.log("At home icon - showing exit confirmation");
+            showExitConfirmation();
+        } else {
+            // In sidebar but not at home - go to home icon
+            console.log("In sidebar - going to home icon");
+            var homeIcon = document.querySelector('.sidebar-icon');
+            if (homeIcon) {
+                homeIcon.focus();
+            }
+        }
+    } else {
+        // In content area - go to sidebar home icon
+        console.log("In content - going to sidebar");
+        var homeIcon = document.querySelector('.sidebar-icon');
+        if (homeIcon) {
+            homeIcon.focus();
+        }
+    }
+}
 
 function moveFocusHorizontal(direction) {
     if (focusables.length === 0) return;
@@ -186,9 +261,13 @@ function moveFocusVertical(direction) {
 }
 
 function handleEnter() {
-    if (focusables.length === 0) return;
-    var activeElement = focusables[currentFocus];
-    handleClick(activeElement);
+    // Use document.activeElement to get the actually focused element
+    // This works correctly with TV Navigation system
+    var activeElement = document.activeElement;
+    if (activeElement) {
+        console.log("handleEnter - Active element:", activeElement.className, activeElement.getAttribute('data-route'));
+        handleClick(activeElement);
+    }
 }
 
 function handleClick(element) {
@@ -245,28 +324,24 @@ function handleClick(element) {
         return;
     }
 
-    if (element.classList.contains('menu-btn')) {
-        console.log("Menu clicked");
-        var sideMenu = document.getElementById('sideMenu');
-        if (sideMenu) {
-            sideMenu.classList.add('open');
-            // Focus first item in menu
-            var firstMenuItem = sideMenu.querySelector('.menu-item.focusable');
-            if (firstMenuItem) firstMenuItem.focus();
-        }
+    // Sidebar icon navigation
+    if (element.classList.contains('sidebar-icon-btn')) {
+        console.log("Sidebar icon clicked");
+        // Route navigation is already handled by data-route check above
         return;
     }
 
-    // Close Menu if Backdrop Clicked (this needs separate event listener, but for now specific check)
-    if (element.id === 'menuBackdrop') {
-        document.getElementById('sideMenu').classList.remove('open');
+    // Header icon buttons
+    if (element.classList.contains('header-icon-btn')) {
+        console.log("Header icon button clicked");
+        // Route navigation handled by data-route or specific handlers below
         return;
     }
 
-    // Toggle Dark Mode
-    if (element.id === 'darkModeToggle' || element.classList.contains('darkmode-toggle')) {
-        console.log("Toggle Dark Mode clicked");
-        toggleDarkMode();
+    // Search button
+    if (element.id === 'searchBtn') {
+        console.log("Search clicked");
+        // TODO: Implement search modal
         return;
     }
 
@@ -460,10 +535,10 @@ function loadHomeChannels() {
 
             // Only proceed if we have valid channels
             if (channels && Array.isArray(channels) && channels.length > 0) {
-                // Take first 4 channels
-                var firstFourChannels = channels.slice(0, 4);
-                console.log("[HOME] ✓ Displaying first", firstFourChannels.length, "channels");
-                renderChannelsInHomeGrid(firstFourChannels);
+                // Take first 3 channels (+ View All = 4 cards total)
+                var firstThreeChannels = channels.slice(0, 3);
+                console.log("[HOME] ✓ Displaying first", firstThreeChannels.length, "channels");
+                renderChannelsInHomeGrid(firstThreeChannels);
             } else {
                 console.log("[HOME] No channels to display");
                 renderEmptyChannelsState();
@@ -634,39 +709,161 @@ function renderEmptyChannelsState() {
 // ==========================================
 
 /**
- * Load and display first 4 OTT apps on homepage asynchronously
+ * Load and display languages on homepage asynchronously
  * Fails silently if API returns no data or encounters errors
  */
-function loadHomeApps() {
-    console.log("[HOME] Loading OTT apps asynchronously...");
+function loadHomeLanguages() {
+    console.log("[HOME] Loading languages asynchronously...");
 
-    // Get apps without blocking page load
-    BBNL_API.getAllowedApps()
-        .then(function (response) {
-            console.log("[HOME] Apps response:", response);
+    // Get languages without blocking page load
+    BBNL_API.getLanguageList()
+        .then(function (languages) {
+            console.log("[HOME] Languages response:", languages);
 
-            // Check if response is successful
-            if (response && response.status && response.status.err_code === 0) {
-                if (response.apps && Array.isArray(response.apps) && response.apps.length > 0) {
-                    // Take first 4 apps
-                    var firstFourApps = response.apps.slice(0, 4);
-                    console.log("[HOME] ✓ Displaying first", firstFourApps.length, "apps");
-                    renderAppsInHomeGrid(firstFourApps);
-                } else {
-                    console.log("[HOME] No apps to display");
-                    renderEmptyAppsState();
-                }
+            // Check if response is an array with languages
+            if (languages && Array.isArray(languages) && languages.length > 0) {
+                console.log("[HOME] ✓ Displaying", languages.length, "languages");
+                renderLanguagesInHomeGrid(languages);
             } else {
-                console.log("[HOME] No apps available");
-                renderEmptyAppsState();
+                console.log("[HOME] No languages to display");
+                renderEmptyLanguagesState();
             }
         })
         .catch(function (error) {
             // Fail silently - don't show errors to user
-            console.error("[HOME] Failed to load apps:", error);
+            console.error("[HOME] Failed to load languages:", error);
             console.log("[HOME] Rendering empty state");
-            renderEmptyAppsState();
+            renderEmptyLanguagesState();
         });
+}
+
+/**
+ * Render languages in home page grid as cards (like channel cards)
+ * @param {Array} languages - Array of language objects
+ */
+function renderLanguagesInHomeGrid(languages) {
+    var container = document.getElementById('home-languages-container');
+
+    if (!container) {
+        console.warn("[HOME] Languages container not found");
+        return;
+    }
+
+    console.log("[HOME] Rendering", languages.length, "languages in home grid");
+
+    // Clear any existing content
+    container.innerHTML = '';
+
+    // Take first 3 languages (+ View All = 4 cards total)
+    var firstThreeLanguages = languages.slice(0, 3);
+
+    // Create language cards
+    firstThreeLanguages.forEach(function (lang) {
+        var langName = lang.langtitle || "Language";
+        var langId = lang.langid || "";
+        var langLogo = lang.langlogo || "";
+
+        // Create language card (similar to channel card)
+        var card = document.createElement('div');
+        card.className = 'channel-card focusable';
+        card.tabIndex = 0;
+        card.setAttribute('data-langid', langId);
+        card.setAttribute('data-langname', langName);
+
+        // Language icon container
+        var iconDiv = document.createElement('div');
+        iconDiv.className = 'channel-icon';
+        iconDiv.style.background = 'linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%)';
+        iconDiv.style.display = 'flex';
+        iconDiv.style.flexDirection = 'column';
+        iconDiv.style.alignItems = 'center';
+        iconDiv.style.justifyContent = 'center';
+        iconDiv.style.padding = '20px';
+        iconDiv.style.borderRadius = '12px';
+
+        // Display logo if available
+        if (langLogo && !langLogo.includes('noimage')) {
+            var img = document.createElement('img');
+            img.src = langLogo;
+            img.alt = langName;
+            img.style.maxWidth = '80%';
+            img.style.maxHeight = '80%';
+            img.style.objectFit = 'contain';
+
+            // Fallback to text if image fails to load
+            img.onerror = function () {
+                iconDiv.innerHTML = '<span style="color: white; font-weight: bold; font-size: 24px;">' +
+                                    langName.substring(0, 2).toUpperCase() + '</span>';
+            };
+
+            iconDiv.appendChild(img);
+        } else {
+            // Text fallback - show first 2 letters
+            var nameSpan = document.createElement('span');
+            nameSpan.style.color = 'white';
+            nameSpan.style.fontWeight = 'bold';
+            nameSpan.style.fontSize = '28px';
+            nameSpan.style.textAlign = 'center';
+            nameSpan.innerText = langName.substring(0, 2).toUpperCase();
+            iconDiv.appendChild(nameSpan);
+        }
+
+        card.appendChild(iconDiv);
+
+        // Language label container
+        var labelContainer = document.createElement('div');
+        labelContainer.className = 'card-info';
+        labelContainer.style.padding = '12px 16px';
+
+        // Language name
+        var titleEl = document.createElement('div');
+        titleEl.className = 'card-title-bottom';
+        titleEl.innerText = langName;
+        labelContainer.appendChild(titleEl);
+
+        card.appendChild(labelContainer);
+
+        // Click handler - navigate to channels with language filter
+        card.addEventListener('click', function () {
+            console.log("[HOME] Language clicked:", langName, "ID:", langId);
+            window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
+        });
+
+        container.appendChild(card);
+    });
+
+    // Add "View All" button
+    var viewAllCard = document.createElement('div');
+    viewAllCard.className = 'channel-card view-all focusable';
+    viewAllCard.tabIndex = 0;
+    viewAllCard.innerHTML = `
+        <div class="channel-icon view-all-icon" style="background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);">
+            <span class="arrow" style="font-size: 48px; color: #3b5cff;">→</span>
+        </div>
+        <div class="card-info" style="padding: 12px 16px;">
+            <div class="card-title-bottom">View All</div>
+            <div class="card-subtitle-bottom">Languages</div>
+        </div>
+    `;
+    viewAllCard.addEventListener('click', function () {
+        window.location.href = 'language-select.html';
+    });
+    container.appendChild(viewAllCard);
+
+    console.log("[HOME] ✓ Languages grid rendered successfully");
+
+    // Refresh focusable elements
+    focusables = document.querySelectorAll('.focusable');
+}
+
+/**
+ * Render empty state when no languages are available
+ */
+function renderEmptyLanguagesState() {
+    var container = document.getElementById('home-languages-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="empty-state" style="color: rgba(255,255,255,0.5); padding: 20px;">No languages available</div>';
 }
 
 /**
@@ -812,28 +1009,6 @@ function initDarkMode() {
     }
 
     console.log("[HOME] Dark mode initialized:", isDarkMode ? "ON" : "OFF");
-}
-
-/**
- * Toggle dark/light mode
- */
-function toggleDarkMode() {
-    var toggle = document.getElementById('darkModeToggle');
-    var isCurrentlyDark = !document.body.classList.contains('light-mode');
-
-    if (isCurrentlyDark) {
-        // Switch to light mode
-        document.body.classList.add('light-mode');
-        if (toggle) toggle.classList.remove('active');
-        localStorage.setItem('darkMode', 'false');
-        console.log("[HOME] Switched to Light Mode");
-    } else {
-        // Switch to dark mode
-        document.body.classList.remove('light-mode');
-        if (toggle) toggle.classList.add('active');
-        localStorage.setItem('darkMode', 'true');
-        console.log("[HOME] Switched to Dark Mode");
-    }
 }
 
 // ==========================================
@@ -1016,10 +1191,82 @@ function updateNetworkStatus() {
 }
 
 // ==========================================
+// EXIT CONFIRMATION FUNCTIONALITY
+// ==========================================
+
+var exitPopupOpen = false;
+
+/**
+ * Show exit confirmation popup
+ */
+function showExitConfirmation() {
+    var popup = document.getElementById('exitPopup');
+    if (popup) {
+        popup.style.display = 'flex';
+        exitPopupOpen = true;
+        // Focus on "No" button (stay in app)
+        var noBtn = document.getElementById('exitNoBtn');
+        if (noBtn) noBtn.focus();
+    }
+}
+
+/**
+ * Hide exit confirmation popup
+ */
+function hideExitConfirmation() {
+    var popup = document.getElementById('exitPopup');
+    if (popup) {
+        popup.style.display = 'none';
+        exitPopupOpen = false;
+    }
+}
+
+/**
+ * Handle exit confirmation - exit app
+ */
+function confirmExit() {
+    console.log("[HOME] User confirmed exit");
+    try {
+        // Tizen app exit
+        if (typeof tizen !== 'undefined' && tizen.application) {
+            tizen.application.getCurrentApplication().exit();
+        } else {
+            // Browser fallback - close window
+            window.close();
+        }
+    } catch (e) {
+        console.error("[HOME] Exit error:", e);
+        window.close();
+    }
+}
+
+/**
+ * Handle exit cancellation - stay in app
+ */
+function cancelExit() {
+    console.log("[HOME] User cancelled exit");
+    hideExitConfirmation();
+}
+
+// Initialize exit popup buttons
+document.addEventListener('DOMContentLoaded', function() {
+    var exitYesBtn = document.getElementById('exitYesBtn');
+    var exitNoBtn = document.getElementById('exitNoBtn');
+
+    if (exitYesBtn) {
+        exitYesBtn.addEventListener('click', confirmExit);
+    }
+
+    if (exitNoBtn) {
+        exitNoBtn.addEventListener('click', cancelExit);
+    }
+});
+
+// ==========================================
 // PAGE LOAD - INITIALIZE ALL FEATURES
 // ==========================================
 
-// Load ads, apps, and channels after page is ready (non-blocking)
+// Load ads, languages, and channels after page is ready (non-blocking)
 window.addEventListener('load', function () {
     // Initialize dark mode
     initDarkMode();
@@ -1029,6 +1276,6 @@ window.addEventListener('load', function () {
 
     // Use setTimeout to ensure they load after critical content
     setTimeout(loadHomeAds, 100);
-    setTimeout(loadHomeApps, 150); // Load apps
+    setTimeout(loadHomeLanguages, 150); // Load languages
     setTimeout(loadHomeChannels, 200); // Load channels slightly after ads
 });

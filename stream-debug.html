@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>BBNL TV Stream Debug</title>
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Consolas', monospace;
+            font-size: 18px;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #00ff00;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+        #log {
+            height: 400px;
+            overflow-y: auto;
+            border: 2px solid #00ff00;
+            padding: 15px;
+            margin: 15px 0;
+            background: #111;
+            border-radius: 8px;
+        }
+        .log-error { color: #ff4444; }
+        .log-success { color: #44ff44; }
+        .log-warning { color: #ffaa00; }
+        .log-info { color: #00aaff; }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+        }
+        button {
+            font-size: 18px;
+            padding: 15px 25px;
+            background: #00aa00;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        button:hover, button:focus {
+            background: #00ff00;
+            outline: 2px solid #fff;
+        }
+        button.danger {
+            background: #aa0000;
+            color: #fff;
+        }
+        button.danger:hover, button.danger:focus {
+            background: #ff0000;
+        }
+        button.info {
+            background: #0066aa;
+            color: #fff;
+        }
+        button.info:hover, button.info:focus {
+            background: #0088ff;
+        }
+
+        .stream-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            background: #222;
+            color: #0f0;
+            border: 2px solid #0f0;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .stream-input:focus {
+            outline: none;
+            border-color: #0ff;
+        }
+
+        .status-bar {
+            background: #222;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: flex;
+            gap: 20px;
+        }
+        .status-item {
+            display: flex;
+            gap: 8px;
+        }
+        .status-label { color: #888; }
+        .status-value { color: #0f0; font-weight: bold; }
+
+        .back-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+        }
+    </style>
+</head>
+<body>
+    <button class="back-btn" onclick="window.location.href='home.html'">← Back</button>
+
+    <h1>BBNL TV AVPlay Stream Debug</h1>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="status-item">
+            <span class="status-label">State:</span>
+            <span class="status-value" id="playerState">IDLE</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Duration:</span>
+            <span class="status-value" id="playerDuration">--:--</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Position:</span>
+            <span class="status-value" id="playerPosition">--:--</span>
+        </div>
+    </div>
+
+    <!-- Custom Stream Input -->
+    <input type="text" id="customUrl" class="stream-input"
+           placeholder="Enter custom stream URL (m3u8 or mp4)..."
+           value="https://livestream3.bbnl.in/9d0ac588-1ea4-4a3e-8301-e65907ba98f4/index.m3u8">
+
+    <!-- Log Output -->
+    <div id="log"></div>
+
+    <!-- Control Buttons -->
+    <div class="btn-group">
+        <button onclick="testCustomStream()">▶ TEST CUSTOM URL</button>
+        <button onclick="testPublicStreams()">🧪 TEST PUBLIC STREAMS</button>
+        <button onclick="testBBNLStreams()">🔴 TEST BBNL STREAMS</button>
+        <button class="info" onclick="stopPlayback()">⏹ STOP</button>
+        <button class="danger" onclick="clearLog()">🗑 CLEAR LOG</button>
+    </div>
+
+    <script>
+    var logDiv = document.getElementById('log');
+    var isPlaying = false;
+
+    // Logging functions
+    function addLog(msg, type) {
+        type = type || 'info';
+        var time = new Date().toLocaleTimeString('en-IN');
+        var className = 'log-' + type;
+        logDiv.innerHTML += '<div class="' + className + '">[' + time + '] ' + msg + '</div>';
+        logDiv.scrollTop = logDiv.scrollHeight;
+        console.log('[' + type.toUpperCase() + ']', msg);
+    }
+
+    function clearLog() {
+        logDiv.innerHTML = '';
+        addLog('Log cleared', 'info');
+    }
+
+    function updateState(state) {
+        document.getElementById('playerState').innerText = state;
+    }
+
+    function updatePosition(ms) {
+        var sec = Math.floor(ms / 1000);
+        var min = Math.floor(sec / 60);
+        sec = sec % 60;
+        document.getElementById('playerPosition').innerText =
+            String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+    }
+
+    function updateDuration(ms) {
+        var sec = Math.floor(ms / 1000);
+        var min = Math.floor(sec / 60);
+        sec = sec % 60;
+        document.getElementById('playerDuration').innerText =
+            String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+    }
+
+    // Initialize
+    window.onload = function() {
+        addLog('BBNL Stream Debug Tool Started', 'info');
+
+        if (typeof webapis === 'undefined') {
+            addLog('⚠️ BROWSER MODE - AVPlay not available', 'warning');
+            addLog('⚠️ Deploy to Samsung TV for testing', 'warning');
+        } else {
+            addLog('✓ Running on Samsung Tizen TV', 'success');
+            addLog('✓ webapis.avplay available', 'success');
+        }
+
+        // Register keys
+        try {
+            tizen.tvinputdevice.registerKeyBatch([
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+                'Enter', 'Return', 'MediaPlay', 'MediaPause', 'MediaStop'
+            ]);
+        } catch(e) {}
+    };
+
+    // AVPlay Listener
+    var avplayListener = {
+        onbufferingstart: function() {
+            addLog('📹 Buffering started...', 'info');
+            updateState('BUFFERING');
+        },
+        onbufferingprogress: function(percent) {
+            addLog('📹 Buffering: ' + percent + '%', 'info');
+        },
+        onbufferingcomplete: function() {
+            addLog('✓ Buffering complete', 'success');
+        },
+        oncurrentplaytime: function(time) {
+            updatePosition(time);
+            // Log every 5 seconds
+            if (Math.floor(time / 1000) % 5 === 0) {
+                addLog('⏱️ Position: ' + Math.floor(time / 1000) + 's', 'info');
+            }
+        },
+        onevent: function(eventType, eventData) {
+            addLog('📢 Event: ' + eventType + (eventData ? ' - ' + eventData : ''), 'info');
+        },
+        onerror: function(eventType) {
+            addLog('❌ AVPlay ERROR: ' + eventType, 'error');
+            updateState('ERROR');
+            isPlaying = false;
+        },
+        onstreamcompleted: function() {
+            addLog('✓ Stream completed', 'success');
+            updateState('COMPLETED');
+            isPlaying = false;
+        },
+        onsubtitlechange: function() {}
+    };
+
+    // Play Stream
+    function playStream(url) {
+        addLog('═══════════════════════════════════', 'info');
+        addLog('🎬 Testing: ' + url, 'info');
+        addLog('═══════════════════════════════════', 'info');
+
+        if (typeof webapis === 'undefined' || !webapis.avplay) {
+            addLog('❌ AVPlay not available (browser mode)', 'error');
+            return;
+        }
+
+        // Stop any existing playback
+        stopPlayback();
+
+        try {
+            // Open stream
+            addLog('1. Opening stream...', 'info');
+            webapis.avplay.open(url);
+            updateState('OPENING');
+
+            // Set listener
+            addLog('2. Setting listener...', 'info');
+            webapis.avplay.setListener(avplayListener);
+
+            // Set display (full screen)
+            addLog('3. Setting display rect...', 'info');
+            webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
+
+            // Prepare async
+            addLog('4. Preparing stream (async)...', 'info');
+            updateState('PREPARING');
+
+            webapis.avplay.prepareAsync(
+                function() {
+                    addLog('✓ Stream prepared successfully!', 'success');
+
+                    // Get duration
+                    try {
+                        var duration = webapis.avplay.getDuration();
+                        updateDuration(duration);
+                        addLog('Duration: ' + Math.floor(duration / 1000) + ' seconds', 'info');
+                    } catch(e) {
+                        addLog('Duration: Live stream', 'info');
+                    }
+
+                    // Start playback
+                    addLog('5. Starting playback...', 'info');
+                    webapis.avplay.play();
+                    updateState('PLAYING');
+                    isPlaying = true;
+                    addLog('✓ PLAYBACK STARTED!', 'success');
+                },
+                function(error) {
+                    addLog('❌ Prepare FAILED: ' + (error.message || error.name || error), 'error');
+                    updateState('ERROR');
+                }
+            );
+
+        } catch(e) {
+            addLog('❌ Exception: ' + e.message, 'error');
+            updateState('ERROR');
+        }
+    }
+
+    // Stop Playback
+    function stopPlayback() {
+        if (typeof webapis !== 'undefined' && webapis.avplay) {
+            try {
+                var state = webapis.avplay.getState();
+                if (state !== 'NONE' && state !== 'IDLE') {
+                    webapis.avplay.stop();
+                    addLog('⏹ Playback stopped', 'info');
+                }
+                webapis.avplay.close();
+            } catch(e) {
+                // Ignore close errors
+            }
+        }
+        updateState('IDLE');
+        isPlaying = false;
+    }
+
+    // Test Custom URL
+    function testCustomStream() {
+        var url = document.getElementById('customUrl').value.trim();
+        if (url) {
+            playStream(url);
+        } else {
+            addLog('❌ Please enter a stream URL', 'error');
+        }
+    }
+
+    // Test Public Streams (known to work)
+    function testPublicStreams() {
+        addLog('🧪 TESTING PUBLIC STREAMS (should work)', 'info');
+
+        var publicStreams = [
+            'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+            'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8'
+        ];
+
+        // Test first stream
+        playStream(publicStreams[0]);
+    }
+
+    // Test BBNL Streams
+    function testBBNLStreams() {
+        addLog('🔴 TESTING BBNL STREAMS (Samsung HTTP/1.1 Server)', 'info');
+
+        var bbnlStreams = [
+            'https://livestream3.bbnl.in/9d0ac588-1ea4-4a3e-8301-e65907ba98f4/index.m3u8'
+        ];
+
+        // Test first BBNL stream
+        playStream(bbnlStreams[0]);
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        switch(e.keyCode) {
+            case 10009: // Back
+                stopPlayback();
+                window.location.href = 'home.html';
+                break;
+            case 415: // MediaPlay
+                if (!isPlaying && typeof webapis !== 'undefined') {
+                    webapis.avplay.play();
+                    updateState('PLAYING');
+                    isPlaying = true;
+                }
+                break;
+            case 19: // MediaPause
+                if (isPlaying && typeof webapis !== 'undefined') {
+                    webapis.avplay.pause();
+                    updateState('PAUSED');
+                    isPlaying = false;
+                }
+                break;
+            case 413: // MediaStop
+                stopPlayback();
+                break;
+        }
+    });
+    </script>
+</body>
+</html>

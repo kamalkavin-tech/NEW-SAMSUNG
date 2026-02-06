@@ -14,3 +14,66 @@ body {
     overflow-y: auto;
     transition: background 0.3s, color 0.3s;
 }
+
+/* ==========================================
+   GLOBAL FOCUS STYLES FOR TV NAVIGATION
+   ========================================== */
+
+/* Default focus outline removal - we use custom styles */
+*:focus {
+    outline: none;
+}
+
+/* Global focusable element styles */
+.focusable {
+    transition: all 0.2s ease;
+}
+
+.focusable:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 0 20px rgba(59, 92, 255, 0.3);
+    transform: scale(1.02);
+}
+
+/* Button focus styles */
+button.focusable:focus,
+.btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 4px 12px rgba(59, 92, 255, 0.3);
+    transform: scale(1.02);
+    background: rgba(59, 92, 255, 0.15);
+}
+
+/* Card focus styles */
+.card:focus,
+.channel-card:focus,
+.app-card:focus,
+.movie-card:focus {
+    outline: none;
+    border-color: #3b5cff !important;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 8px 24px rgba(59, 92, 255, 0.35);
+    transform: translateY(-4px) scale(1.02);
+}
+
+/* Input focus styles */
+input.focusable:focus,
+select.focusable:focus,
+textarea.focusable:focus {
+    outline: none;
+    border-color: #3b5cff !important;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.3);
+}
+
+/* Navigation item focus */
+.nav-item:focus,
+.sidebar-item:focus,
+.filter-chip:focus {
+    outline: none;
+    background: rgba(59, 92, 255, 0.2) !important;
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+}
+
+/* Active state for selected items */
+.focusable.active:focus {
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.6), 0 4px 16px rgba(59, 92, 255, 0.4);
+}

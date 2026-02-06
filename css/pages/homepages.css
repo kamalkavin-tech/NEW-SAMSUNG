@@ -320,12 +320,12 @@ body.channels-page {
 
 .hero-banner {
     position: relative;
-    width: calc(100% - 80px);
-    height: 550px;
+    width: calc(100% - 50px);
+    height: 350px;
     overflow: hidden;
     background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-    border-radius: 20px;
-    margin: 30px 40px 40px 40px;
+    border-radius: 16px;
+    margin: 10px 25px 20px 25px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -333,6 +333,7 @@ body.channels-page {
     display: none;
     height: 0;
     margin: 0;
+    padding: 0;
 }
 
 .ad-slider {
@@ -360,8 +361,9 @@ body.channels-page {
 .ad-slide img {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     display: block;
+    border-radius: 16px;
 }
 
 /* Ad Navigation Dots */
@@ -395,26 +397,60 @@ body.channels-page {
    ======================================== */
 
 .content-section {
-    padding: 20px 40px 40px 40px;
+    padding: 5px 25px 15px 25px;
 }
 
 .content-section:first-of-type {
-    padding-top: 10px;
+    padding-top: 5px;
 }
 
 .section-title {
-    font-size: 32px !important;
-    font-weight: 700 !important;
-    margin-bottom: 30px;
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    margin-bottom: 15px;
     color: #fff !important;
-    padding-left: 4px;
+    padding-left: 0;
 }
 
 .apps-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 24px;
-    margin-bottom: 40px;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+/* ========================================
+   LANGUAGES GRID (HOME PAGE)
+   ======================================== */
+
+.languages-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.language-pill-home {
+    background: rgba(255, 255, 255, 0.95);
+    color: #000;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+}
+
+.language-pill-home:hover,
+.language-pill-home:focus {
+    background: #fff;
+    color: #000;
+    transform: scale(1.08);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4), 0 4px 16px rgba(255, 255, 255, 0.3);
+    outline: none;
 }
 
 .app-card {
@@ -973,4 +1009,111 @@ body.light-mode .app-label {
         font-size: 15px;
         padding: 12px 16px;
     }
+}
+
+/* ========================================
+   EXIT CONFIRMATION POPUP
+   ======================================== */
+
+.exit-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.exit-popup {
+    background: linear-gradient(135deg, #2a2a35 0%, #1a1a22 100%);
+    border-radius: 24px;
+    padding: 48px 60px;
+    text-align: center;
+    max-width: 450px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.exit-popup-icon {
+    margin-bottom: 24px;
+}
+
+.exit-popup-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 12px;
+}
+
+.exit-popup-message {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 32px;
+}
+
+.exit-popup-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+}
+
+.exit-btn {
+    padding: 14px 40px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+}
+
+.exit-btn-no {
+    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%);
+    color: #fff;
+}
+
+.exit-btn-no:hover,
+.exit-btn-no:focus {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(59, 92, 255, 0.4);
+    outline: none;
+}
+
+.exit-btn-yes {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.exit-btn-yes:hover,
+.exit-btn-yes:focus {
+    background: rgba(255, 68, 68, 0.2);
+    border-color: #ff4444;
+    color: #ff4444;
+    outline: none;
+}
+
+/* Light Mode Exit Popup */
+body.light-mode .exit-popup {
+    background: linear-gradient(135deg, #fff 0%, #f5f5f7 100%);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .exit-popup-title {
+    color: #1a1a1a;
+}
+
+body.light-mode .exit-popup-message {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+body.light-mode .exit-btn-yes {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.7);
+    border-color: rgba(0, 0, 0, 0.15);
 }

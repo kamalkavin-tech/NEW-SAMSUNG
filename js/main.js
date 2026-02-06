@@ -56,16 +56,23 @@ window.onload = function () {
     // 6. Initialize Error Modal (if on login page)
     initErrorModal();
 
-    // 7. Register Tizen Keys
-    try {
-        var keys = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-            "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-            "Enter", "Return"];
-        tizen.tvinputdevice.registerKeyBatch(keys);
-        console.log("Tizen keys registered");
-    } catch (e) {
-        console.log("Not running on Tizen or key registration failed");
+    // 7. Register All Remote Keys (supports all Samsung remote types)
+    if (typeof RemoteKeys !== 'undefined') {
+        RemoteKeys.registerAllKeys();
+    } else {
+        try {
+            var keys = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+                "Enter", "Return"];
+            tizen.tvinputdevice.registerKeyBatch(keys);
+            console.log("Tizen keys registered (fallback)");
+        } catch (e) {
+            console.log("Not running on Tizen or key registration failed");
+        }
     }
+
+    // 8. Add Number-Only Validation for Phone and OTP inputs
+    setupNumberOnlyInputs();
 };
 
 /* DEVICE ID */
@@ -212,6 +219,76 @@ function hideErrorModal() {
     }
 }
 
+/* NUMBER-ONLY INPUT VALIDATION */
+function setupNumberOnlyInputs() {
+    // Phone Input - only allow numbers
+    var phoneInput = document.getElementById("phoneInput");
+    if (phoneInput) {
+        // Block non-numeric keypress
+        phoneInput.addEventListener("keypress", function (e) {
+            var charCode = e.which || e.keyCode;
+            // Allow only 0-9 (charCode 48-57)
+            if (charCode < 48 || charCode > 57) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Filter on input (for paste/auto-fill)
+        phoneInput.addEventListener("input", function (e) {
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        console.log("Phone input: number-only validation enabled");
+    }
+
+    // OTP Inputs - only allow numbers + auto-advance
+    var otpInputs = document.querySelectorAll(".otp-input");
+    otpInputs.forEach(function (input, idx) {
+        // Block non-numeric keypress
+        input.addEventListener("keypress", function (e) {
+            var charCode = e.which || e.keyCode;
+            // Allow only 0-9 (charCode 48-57)
+            if (charCode < 48 || charCode > 57) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Filter and auto-advance on input
+        input.addEventListener("input", function (e) {
+            // Remove non-numeric characters
+            this.value = this.value.replace(/[^0-9]/g, '');
+
+            // If digit entered, auto-advance to next input
+            if (this.value.length === 1) {
+                var currentId = this.id;
+                var currentIdx = parseInt(currentId.replace('otp', ''));
+
+                if (currentIdx < 4) {
+                    var next = document.getElementById('otp' + (currentIdx + 1));
+                    if (next) {
+                        next.focus();
+                        // Update currentFocus to keep in sync
+                        var focusIndex = Array.from(focusables).indexOf(next);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                } else {
+                    // After 4th digit, focus verify button
+                    var verifyBtn = document.getElementById('verifyBtn');
+                    if (verifyBtn) {
+                        verifyBtn.focus();
+                        var focusIndex = Array.from(focusables).indexOf(verifyBtn);
+                        if (focusIndex >= 0) currentFocus = focusIndex;
+                    }
+                }
+            }
+        });
+
+        console.log("OTP input " + (idx + 1) + ": number-only validation + auto-advance enabled");
+    });
+}
+
 /* REMOTE CONTROL KEYS */
 /* REMOTE CONTROL KEYS */
 document.addEventListener("keydown", function (e) {
@@ -287,8 +364,48 @@ document.addEventListener("keydown", function (e) {
                 // Ignore other keys
                 return;
             }
+        } else if (active.id === 'phoneInput') {
+            // Phone Input: Handle remote number keys manually
+            var digit = -1;
+            
+            // Standard number keys (0-9)
+            if (e.keyCode >= 48 && e.keyCode <= 57) digit = e.keyCode - 48;
+            // Numpad keys
+            if (e.keyCode >= 96 && e.keyCode <= 105) digit = e.keyCode - 96;
+            // Samsung TV Remote number keys (varies by remote model)
+            // BN59-01180A and similar remotes use these codes
+            if (e.key >= '0' && e.key <= '9') digit = parseInt(e.key);
+            
+            if (digit !== -1) {
+                e.preventDefault();
+                console.log("Remote number key pressed:", digit);
+                // Append digit to phone input (max 10 digits)
+                if (active.value.length < 10) {
+                    active.value += digit;
+                    // Trigger input event for listeners
+                    var inputEvent = new Event('input', { bubbles: true });
+                    active.dispatchEvent(inputEvent);
+                }
+                return;
+            }
+            
+            // Backspace - clear last digit
+            if (e.keyCode === 8) {
+                return; // Let default handle it
+            }
+            
+            // Enter - submit
+            if (e.keyCode === 13) {
+                e.preventDefault();
+                var getOtpBtn = document.getElementById('getOtpBtn');
+                if (getOtpBtn) {
+                    getOtpBtn.focus();
+                    getOtpBtn.click();
+                }
+                return;
+            }
         } else {
-            // Standard Inputs (Phone): Let System Handle Everything
+            // Other Inputs: Let System Handle Everything
             if ((e.keyCode >= 48 && e.keyCode <= 57) ||
                 (e.keyCode >= 96 && e.keyCode <= 105) ||
                 e.keyCode === 8 || e.keyCode === 13) {
@@ -528,10 +645,17 @@ function handleOK() {
                     // Check response
                     if (response && response.status && response.status.err_code === 0) {
                         console.log("[Verify] ✅ OTP verified successfully");
+
+                        // Store login state in localStorage
+                        localStorage.setItem('isLoggedIn', 'true');
+                        localStorage.setItem('userid', userid);
+                        localStorage.setItem('mobile', mobile);
+                        localStorage.setItem('loginTime', new Date().toISOString());
+
                         alert("Login successful!");
 
-                        // Navigate to home page
-                        window.location.href = "home.html";
+                        // Navigate to home page using replace to prevent back navigation to login
+                        window.location.replace("home.html");
                     } else {
                         console.error("[Verify] ❌ OTP verification failed:", response);
                         var errorMsg = response.status ? response.status.err_msg : "Invalid OTP";

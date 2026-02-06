@@ -8,6 +8,91 @@
     align-items: center;
 }
 
+/* Verify Page with Ads - Split Layout */
+.verify-page-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+}
+
+/* Left: Ads Section */
+.verify-ads-section {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    background: linear-gradient(135deg, #0d1225 0%, #151b30 100%);
+}
+
+.verify-ads-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ads-loading-text {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 24px;
+}
+
+.verify-ad-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 20px;
+}
+
+.verify-ads-default {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 40px;
+}
+
+.default-ad-logo {
+    font-size: 80px;
+    font-weight: 900;
+    color: #3b6cff;
+    text-shadow: 0 0 30px rgba(59, 108, 255, 0.5);
+}
+
+.default-ad-text {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
+}
+
+.default-ad-tagline {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+/* Right: Form Section */
+.verify-form-section {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+}
+
+/* Compact Verify Card */
+.verify-card-compact {
+    width: 600px;
+    padding: 50px 60px;
+}
+
 .login-title,
 .auth-title,
 .verify-title {
@@ -171,16 +256,18 @@
 .resend-link:hover,
 .resend-link:focus {
     color: #fff;
-    background: #3b6cff;
-    box-shadow: 0 0 20px rgba(59, 108, 255, 0.5);
+    background: #3a3a3a;
+    border-color: #888;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
     outline: none;
 }
 
 .resend-link.disabled {
-    color: #555;
-    border-color: #333;
+    color: #888;
+    border-color: #555;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.8;
+    cursor: not-allowed;
 }
 
 /* Verify Steps */
@@ -277,7 +364,9 @@
 .error-try-again-btn:hover,
 .error-try-again-btn:focus {
     transform: scale(1.02);
-    box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+    background: #3a3a3a;
+    color: #fff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
     outline: none;
 }
 

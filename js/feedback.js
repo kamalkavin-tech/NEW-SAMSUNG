@@ -22,7 +22,7 @@ window.onload = function () {
 
         el.addEventListener("click", function () {
             if (el.classList.contains('back-btn')) {
-                window.history.back();
+                window.location.href = 'home.html';
                 return;
             }
             if (el.classList.contains('submit-btn')) {
@@ -36,16 +36,21 @@ window.onload = function () {
         });
     });
 
-    try {
-        var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
-        tizen.tvinputdevice.registerKeyBatch(keys);
-    } catch (e) { }
+    // Register All Remote Keys (supports all Samsung remote types)
+    if (typeof RemoteKeys !== 'undefined') {
+        RemoteKeys.registerAllKeys();
+    } else {
+        try {
+            var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
+            tizen.tvinputdevice.registerKeyBatch(keys);
+        } catch (e) { }
+    }
 };
 
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     if (code === 10009) { // Back
-        window.history.back();
+        window.location.href = 'home.html';
         return;
     }
 
@@ -53,8 +58,32 @@ document.addEventListener("keydown", function (e) {
     if (code === 38) moveFocus(-1);
     if (code === 40) moveFocus(1);
 
+    // Custom: Right from submit-btn moves to cancel-btn
+    var el = focusables[currentFocus];
+    if (code === 39 && el.classList.contains('submit-btn')) {
+        // Find the next focusable that is cancel-btn
+        for (let i = currentFocus + 1; i < focusables.length; i++) {
+            if (focusables[i].classList.contains('cancel-btn')) {
+                currentFocus = i;
+                focusables[currentFocus].focus();
+                break;
+            }
+        }
+        return;
+    }
+    // Custom: Left from cancel-btn moves to submit-btn
+    if (code === 37 && el.classList.contains('cancel-btn')) {
+        for (let i = currentFocus - 1; i >= 0; i--) {
+            if (focusables[i].classList.contains('submit-btn')) {
+                currentFocus = i;
+                focusables[currentFocus].focus();
+                break;
+            }
+        }
+        return;
+    }
+
     if (code === 13) {
-        var el = focusables[currentFocus];
         if (el.classList.contains('submit-btn')) {
             submitFeedback();
         } else if (el.classList.contains('star-rating')) {
@@ -115,7 +144,8 @@ function submitFeedback() {
     if (!userData) {
         console.error("[Feedback] No user data found in session");
         alert("Please login first");
-        window.location.href = 'login.html';
+        // Go to home page
+        window.location.href = 'home.html';
         return;
     }
 

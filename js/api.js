@@ -552,11 +552,33 @@ const ChannelsAPI = {
             "devslno": device.devslno || "FOFI20191129000336"
         });
 
-        // Handle array-wrapped response
-        if (Array.isArray(response) && response.length > 0) {
-            return response[0].body || response[0];
+        console.log("[ChannelsAPI] Language List Response:", response);
+
+        // Handle error responses
+        if (response.error) {
+            console.error("[ChannelsAPI] Error getting languages:", response);
+            return [];
         }
-        return response.body || response;
+
+        // Handle array-wrapped response: [{ body: ... }] or [{ languages: ... }]
+        if (Array.isArray(response) && response.length > 0 && (response[0].body || response[0].languages)) {
+            response = response[0];
+        }
+
+        // Normalize Nested Response - Extract languages from body[0].languages
+        if (response && response.body && Array.isArray(response.body)) {
+            if (response.body.length > 0 && response.body[0].languages) {
+                return response.body[0].languages;
+            }
+            return response.body;
+        }
+
+        // Fallback for direct array or other structures
+        if (Array.isArray(response)) return response;
+        if (response.languages) return response.languages;
+
+        console.warn("[ChannelsAPI] Unexpected language response format:", response);
+        return [];
     },
 
     getSubscribedChannels: function (channels) {
@@ -1028,5 +1050,154 @@ if (typeof window !== 'undefined') {
 
 // Auto-initialize device info on load
 DeviceInfo.initializeDeviceInfo();
+
+// ==========================================
+// SAMSUNG TV REMOTE KEY REGISTRATION
+// Supports all remote types (Standard, Smart, Premium)
+// ==========================================
+const RemoteKeys = {
+    // All supported remote keys for Samsung Tizen TV
+    ALL_KEYS: [
+        // Navigation keys (auto-registered but included for completeness)
+        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return",
+        
+        // Number keys (0-9)
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+        
+        // Media control keys
+        "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
+        "MediaFastForward", "MediaRewind", "MediaRecord",
+        "MediaTrackPrevious", "MediaTrackNext",
+        
+        // Channel control keys
+        "ChannelUp", "ChannelDown", "ChannelList", "PreviousChannel",
+        
+        // Volume keys
+        "VolumeUp", "VolumeDown", "VolumeMute",
+        
+        // Color buttons (Samsung remotes)
+        "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue",
+        
+        // Function keys
+        "Menu", "Tools", "Info", "Source", "Exit",
+        "Caption", "E-Manual", "3D", "Extra",
+        "PictureSize", "Soccer", "Teletext", "MTS",
+        "Search", "Guide", "Minus"
+    ],
+    
+    // Key codes mapping for reference
+    KEY_CODES: {
+        // Navigation
+        ArrowLeft: 37,
+        ArrowUp: 38,
+        ArrowRight: 39,
+        ArrowDown: 40,
+        Enter: 13,
+        Back: 10009,
+        
+        // Numbers
+        Num0: 48, Num1: 49, Num2: 50, Num3: 51, Num4: 52,
+        Num5: 53, Num6: 54, Num7: 55, Num8: 56, Num9: 57,
+        Minus: 189,
+        
+        // Volume & Channel
+        VolumeUp: 447, VolumeDown: 448, VolumeMute: 449,
+        ChannelUp: 427, ChannelDown: 428, ChannelList: 10073,
+        PreviousChannel: 10190,
+        
+        // Media
+        MediaPlayPause: 10252, MediaRewind: 412, MediaFastForward: 417,
+        MediaPlay: 415, MediaPause: 19, MediaStop: 413, MediaRecord: 416,
+        MediaTrackPrevious: 10232, MediaTrackNext: 10233,
+        
+        // Color buttons
+        ColorF0Red: 403, ColorF1Green: 404, ColorF2Yellow: 405, ColorF3Blue: 406,
+        
+        // Function keys
+        Menu: 18, Tools: 10135, Info: 457, Source: 10072, Exit: 10182,
+        Caption: 10221, EManual: 10146, ThreeD: 10199, Extra: 10253,
+        PictureSize: 10140, Soccer: 10228, Teletext: 10200, MTS: 10195,
+        Search: 10225, Guide: 458
+    },
+    
+    /**
+     * Register all remote keys for comprehensive remote support
+     * Call this once on page load
+     */
+    registerAllKeys: function() {
+        try {
+            if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
+                // Get supported keys on this device
+                var supportedKeys = tizen.tvinputdevice.getSupportedKeys();
+                var supportedKeyNames = supportedKeys.map(function(k) { return k.name; });
+                
+                // Filter to only register keys that are supported on this device
+                var keysToRegister = this.ALL_KEYS.filter(function(key) {
+                    return supportedKeyNames.indexOf(key) !== -1;
+                });
+                
+                // Register in batch for performance
+                if (keysToRegister.length > 0) {
+                    tizen.tvinputdevice.registerKeyBatch(keysToRegister);
+                    console.log("[RemoteKeys] Registered " + keysToRegister.length + " keys successfully");
+                }
+                
+                return true;
+            }
+        } catch (e) {
+            console.log("[RemoteKeys] Not running on Tizen or key registration failed:", e.message);
+        }
+        return false;
+    },
+    
+    /**
+     * Register specific keys (for pages that need only certain keys)
+     * @param {Array} keys - Array of key names to register
+     */
+    registerKeys: function(keys) {
+        try {
+            if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
+                tizen.tvinputdevice.registerKeyBatch(keys);
+                console.log("[RemoteKeys] Registered keys:", keys.join(", "));
+                return true;
+            }
+        } catch (e) {
+            console.log("[RemoteKeys] Key registration failed:", e.message);
+        }
+        return false;
+    },
+    
+    /**
+     * Get key code by key name
+     * @param {String} keyName - The key name
+     * @returns {Number} The key code or -1 if not found
+     */
+    getKeyCode: function(keyName) {
+        try {
+            if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
+                var key = tizen.tvinputdevice.getKey(keyName);
+                return key ? key.code : this.KEY_CODES[keyName] || -1;
+            }
+        } catch (e) {
+            // Fallback to static mapping
+        }
+        return this.KEY_CODES[keyName] || -1;
+    },
+    
+    /**
+     * Check if a keyCode matches a specific key
+     * @param {Number} keyCode - The keyCode from the event
+     * @param {String} keyName - The key name to check against
+     * @returns {Boolean}
+     */
+    isKey: function(keyCode, keyName) {
+        return keyCode === this.getKeyCode(keyName) || keyCode === this.KEY_CODES[keyName];
+    }
+};
+
+// Expose RemoteKeys globally
+if (typeof window !== 'undefined') {
+    window.RemoteKeys = RemoteKeys;
+}
 
 console.log("[BBNL_API] API Service loaded successfully");

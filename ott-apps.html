@@ -7,199 +7,54 @@
     <title>Fo-Fi TV - OTT Apps</title>
     <!-- Base Styles -->
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/pages/ott-apps.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body>
+<body class="ott-apps-page">
 
-    <!-- Header -->
-    <div class="subpage-header">
-        <div class="header-left">
-            <button class="back-btn focusable" tabindex="0" data-route="home.html">
-                <span>‹</span> Back
-            </button>
-        </div>
-
-        <div class="page-title">OTT Apps</div>
-
-        <div class="header-right">
-            <div class="subpage-search">
-                <span class="search-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                </span>
-                <input type="text" placeholder="Search Apps" class="focusable" tabindex="0">
-            </div>
+    <!-- Fixed Header (Same style as Channels page) -->
+    <div class="ott-header">
+        <button class="back-btn focusable" tabindex="0" data-route="home.html">
+            <span class="back-icon">←</span>
+        </button>
+        <h1 class="page-title">OTT Apps</h1>
+        <!-- Search Bar (Same style as Home page) -->
+        <div class="search-bar">
+            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" class="search-input focusable" tabindex="0" placeholder="Search Apps..." id="searchInput">
         </div>
     </div>
 
-    <!-- Apps Grid -->
-    <section class="subpage-section">
-        <div class="grid-5" id="appsGrid">
-            <!-- Row 1 -->
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon jiohotstar-icon">
-                        <span class="star-icon">✦</span>
-                        <span class="app-name">JioHotstar</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">jioHotstart</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon prime-icon">
-                        <span class="prime-text">prime<br>video</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Prime Video</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon netflix-icon">
-                        <span class="netflix-text">NETFLIX</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Netflix</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon appletv-icon">
-                        <span class="apple-logo"></span>
-                        <span class="tv-text">tv</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Apple Tv</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon jiohotstar-icon">
-                        <span class="star-icon">✦</span>
-                        <span class="app-name">JioHotstar</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">jioHotstart</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <!-- Row 2 -->
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon prime-icon">
-                        <span class="prime-text">prime<br>video</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Prime Video</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon netflix-icon">
-                        <span class="netflix-text">NETFLIX</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Netflix</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon appletv-icon">
-                        <span class="apple-logo"></span>
-                        <span class="tv-text">tv</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Apple Tv</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon jiohotstar-icon">
-                        <span class="star-icon">✦</span>
-                        <span class="app-name">JioHotstar</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">jioHotstart</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon prime-icon">
-                        <span class="prime-text">prime<br>video</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Prime Video</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <!-- Row 3 -->
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon netflix-icon">
-                        <span class="netflix-text">NETFLIX</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Netflix</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon appletv-icon">
-                        <span class="apple-logo"></span>
-                        <span class="tv-text">tv</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Apple Tv</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon jiohotstar-icon">
-                        <span class="star-icon">✦</span>
-                        <span class="app-name">JioHotstar</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">jioHotstart</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon prime-icon">
-                        <span class="prime-text">prime<br>video</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Prime Video</div>
-                <div class="card-subtitle-bottom">Streaming Secrvices</div>
-            </div>
-
-            <div class="app-group">
-                <div class="app-card focusable" tabindex="0">
-                    <div class="app-icon netflix-icon">
-                        <span class="netflix-text">NETFLIX</span>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Netflix</div>
-                <div class="card-subtitle-bottom">Streaming Services</div>
-            </div>
-
+    <!-- Main Content Area / Apps Grid -->
+    <main class="ott-content">
+        <div class="apps-grid" id="appsGrid">
+            <!-- Apps will be loaded dynamically from API -->
+            <div class="loading-spinner">Loading Apps...</div>
         </div>
-    </section>
+    </main>
+
+    <!-- Error Popup - No Apps -->
+    <div class="error-popup-overlay" id="noAppsPopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="180" height="140" viewBox="0 0 180 140">
+                    <rect x="40" y="20" width="100" height="70" rx="8" fill="#e8e8e8" stroke="#ccc" stroke-width="2" />
+                    <rect x="50" y="30" width="80" height="50" rx="4" fill="#f5f5f5" />
+                    <text x="90" y="52" text-anchor="middle" fill="#999" font-size="10">No apps</text>
+                    <text x="90" y="65" text-anchor="middle" fill="#999" font-size="10">available</text>
+                    <line x1="70" y1="90" x2="60" y2="105" stroke="#999" stroke-width="3" />
+                    <line x1="110" y1="90" x2="120" y2="105" stroke="#999" stroke-width="3" />
+                </svg>
+            </div>
+            <h2 class="error-popup-title">No Apps Available</h2>
+            <p class="error-popup-message">Please check your network and try again</p>
+            <button class="error-popup-btn focusable" id="retryAppsBtn" tabindex="0">Try Again</button>
+        </div>
+    </div>
 
     <!-- Specific JS for this page -->
     <script src="js/api.js"></script>

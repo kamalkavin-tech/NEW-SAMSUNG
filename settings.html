@@ -14,176 +14,112 @@
     <!-- Back Header -->
     <div class="settings-back-header">
         <button class="back-btn focusable" tabindex="0" data-route="home.html">
-            <span>‹</span> Back
+            <span>←</span> Back
         </button>
     </div>
 
     <div class="settings-layout">
         <!-- Left Sidebar -->
         <div class="settings-sidebar">
-            <button class="sidebar-item focusable active" tabindex="0" data-section="parental">
-               
-                <span>Parental Controls</span>
-            </button>
-            <button class="sidebar-item focusable" tabindex="0" data-section="display">
-               
-                <span>Display</span>
-            </button>
-            <button class="sidebar-item focusable" tabindex="0" data-section="about">
-               
+            <button class="sidebar-item focusable active" tabindex="0" data-section="about">
+                <span class="sidebar-icon">ℹ️</span>
                 <span>About App</span>
+            </button>
+            <button class="sidebar-item focusable" tabindex="0" data-section="device">
+                <span class="sidebar-icon">ℹ️</span>
+                <span>Device Info</span>
             </button>
         </div>
 
         <!-- Main Content Area -->
         <div class="settings-content">
 
-            <!-- Parental Controls Section -->
-            <div class="content-panel active" id="panel-parental">
-                <div class="panel-header">
-                    <h1>Parental Controls</h1>
-                    <p>Manage content restriction and PIN settings for your device</p>
-                </div>
-
-                <div class="settings-options">
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Enable Parental Controls</h3>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="parental-toggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Set PIN</h3>
-                            <p>A PIN required to change settings and bypass restrictions.</p>
-                        </div>
-                        <button class="action-btn focusable" tabindex="0">Change</button>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Content Rating</h3>
-                            <p>Restrict Movies and TV shows on their rating</p>
-                        </div>
-                        <button class="action-btn focusable" tabindex="0">Set Rating</button>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>App Restriction</h3>
-                            <p>Block access to specific app</p>
-                        </div>
-                        <button class="action-btn focusable" tabindex="0">Manage</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Display Settings Section -->
-            <div class="content-panel" id="panel-display">
-                <div class="panel-header">
-                    <h1>Display Settings</h1>
-                    <p>Manage your display settings and its size</p>
-                </div>
-
-                <div class="settings-options">
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Streaming Quality</h3>
-                            <p>Set the video quality for streaming</p>
-                        </div>
-                        <select class="dropdown-select focusable" tabindex="0">
-                            <option value="auto">Auto</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Auto Play Previews</h3>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="autoplay-toggle" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Display Size</h3>
-                            <p>Adjust the screen area to fit your TV</p>
-                        </div>
-                        <button class="action-btn focusable" tabindex="0">Adjust</button>
-                    </div>
-
-                    <div class="option-row">
-                        <div class="option-info">
-                            <h3>Aspect Ratio</h3>
-                            <p>Match the display shape to your screen format</p>
-                        </div>
-                        <select class="dropdown-select focusable" tabindex="0">
-                            <option value="auto">Auto</option>
-                            <option value="16:9">16:9</option>
-                            <option value="4:3">4:3</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
             <!-- About App Section -->
-            <div class="content-panel" id="panel-about">
+            <div class="content-panel active" id="panel-about">
                 <div class="panel-header">
                     <h1>About App</h1>
                     <p>Learn information about our app</p>
                 </div>
 
                 <div class="info-sections">
-                    <!-- App Information -->
+                    <!-- Software Version -->
                     <div class="info-card">
-                        <h2>App Information</h2>
-                        <div class="info-grid">
-                            <div class="info-row">
-                                <span class="label">Model Name</span>
-                                <span class="value" id="model-name">BBNL IPTV</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="label">Software Version</span>
-                                <span class="value" id="software-version">Loading...</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="label">Serial Number</span>
-                                <span class="value" id="serial-number">Loading...</span>
-                            </div>
+                        <div class="info-row-simple">
+                            <span class="label">Software Version</span>
+                            <span class="value" id="software-version">Loading...</span>
                         </div>
                     </div>
 
-                    <!-- Network Information -->
+                    <!-- Version Message -->
                     <div class="info-card">
-                        <h2>Network Information</h2>
-                        <div class="info-grid">
-                            <div class="info-row">
-                                <span class="label">IP Address</span>
-                                <span class="value" id="ip-address">Loading...</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="label">Mac Address</span>
-                                <span class="value" id="mac-address">Loading...</span>
-                            </div>
+                        <div class="info-row-simple">
+                            <span class="label">Version Message</span>
+                            <span class="value version-message" id="version-message">Loading...</span>
                         </div>
                     </div>
 
                     <!-- Software Updates -->
-                    <div class="option-row update-row">
-                        <div class="option-info">
-                            <h3>Software Updates</h3>
-                            <p id="update-status">Your App software is up to date</p>
+                    <div class="info-card update-card">
+                        <div class="update-row">
+                            <div class="update-info">
+                                <h3>Software Updates</h3>
+                                <p id="update-status">Your App software is up to date</p>
+                            </div>
+                            <button class="check-btn focusable" tabindex="0" id="checkUpdateBtn">Check</button>
                         </div>
-                        <button class="action-btn focusable" tabindex="0" onclick="checkForUpdates()">Check</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device Info Section -->
+            <div class="content-panel" id="panel-device">
+                <div class="panel-header">
+                    <h1>Device Information</h1>
+                    <p>View your device details and network information</p>
+                </div>
+
+                <div class="info-sections">
+                    <!-- Device Info Card -->
+                    <div class="info-card device-card">
+                        <div class="device-card-header">
+                            <div class="device-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                                </svg>
+                            </div>
+                            <div class="device-title">
+                                <h2>Smart TV</h2>
+                                <p id="device-model-name">Samsung Tizen</p>
+                            </div>
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-row">
+                                <span class="label">Public IPv4 Address</span>
+                                <span class="value" id="device-ipv4">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Public IPv6 Address</span>
+                                <span class="value" id="device-ipv6">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Device ID</span>
+                                <span class="value" id="device-id">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Connection Type</span>
+                                <span class="value" id="device-connection-type">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Wired MAC Address</span>
+                                <span class="value" id="device-wired-mac">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">WiFi MAC Address</span>
+                                <span class="value" id="device-wifi-mac">Loading...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
