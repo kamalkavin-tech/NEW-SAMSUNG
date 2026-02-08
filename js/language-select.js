@@ -2,6 +2,16 @@
    BBNL IPTV - LANGUAGE SELECT PAGE CONTROLLER
    ================================ */
 
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 var focusables = [];
 var currentFocus = 0;
 var allLanguages = [];
@@ -204,18 +214,33 @@ document.addEventListener("keydown", function (e) {
 
     // Back button
     if (code === 10009) {
+        e.preventDefault();
         window.location.href = 'channels.html';
         return;
     }
 
+    // Prevent default for navigation keys
+    if ([37, 38, 39, 40, 13].indexOf(code) !== -1) {
+        e.preventDefault();
+    }
+
     const active = document.activeElement;
+
+    // Compute grid columns dynamically from CSS
+    var columnsPerRow = 4;
+    var grid = document.getElementById('languageGrid');
+    if (grid) {
+        var computedStyle = window.getComputedStyle(grid);
+        var columns = computedStyle.gridTemplateColumns.split(' ').length;
+        if (columns > 0) columnsPerRow = columns;
+    }
 
     if (code === 37) { // LEFT
         moveFocus(-1);
     }
 
     if (code === 38) { // UP
-        moveFocus(-4); // Move up by 4 (grid has 4 columns)
+        moveFocus(-columnsPerRow); // Dynamic grid step
     }
 
     if (code === 39) { // RIGHT
@@ -223,7 +248,7 @@ document.addEventListener("keydown", function (e) {
     }
 
     if (code === 40) { // DOWN
-        moveFocus(4); // Move down by 4 (grid has 4 columns)
+        moveFocus(columnsPerRow); // Dynamic grid step
     }
 
     if (code === 13) { // ENTER

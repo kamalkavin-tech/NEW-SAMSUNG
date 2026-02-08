@@ -14,7 +14,7 @@
     <!-- Back Header -->
     <div class="settings-back-header">
         <button class="back-btn focusable" tabindex="0" data-route="home.html">
-            <span>←</span> Back
+            <span class="back-icon">←</span>
         </button>
     </div>
 
@@ -26,8 +26,17 @@
                 <span>About App</span>
             </button>
             <button class="sidebar-item focusable" tabindex="0" data-section="device">
-                <span class="sidebar-icon">ℹ️</span>
+                <span class="sidebar-icon">📱</span>
                 <span>Device Info</span>
+            </button>
+            
+            <!-- Spacer to push logout to bottom -->
+            <div class="sidebar-spacer"></div>
+            
+            <!-- Logout Button -->
+            <button class="sidebar-item logout-btn focusable" tabindex="0" id="logoutBtn">
+                <span class="sidebar-icon">🚪</span>
+                <span>Logout</span>
             </button>
         </div>
 
@@ -90,26 +99,34 @@
                                 </svg>
                             </div>
                             <div class="device-title">
-                                <h2>Smart TV</h2>
-                                <p id="device-model-name">Samsung Tizen</p>
+                                <h2 id="device-model-name">Loading...</h2>
+                                <p id="device-firmware">Loading...</p>
                             </div>
                         </div>
                         <div class="info-grid">
                             <div class="info-row">
-                                <span class="label">Public IPv4 Address</span>
-                                <span class="value" id="device-ipv4">Loading...</span>
+                                <span class="label">User ID</span>
+                                <span class="value" id="device-user-id">Loading...</span>
                             </div>
                             <div class="info-row">
-                                <span class="label">Public IPv6 Address</span>
-                                <span class="value" id="device-ipv6">Loading...</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="label">Device ID</span>
+                                <span class="label">Device ID (DUID)</span>
                                 <span class="value" id="device-id">Loading...</span>
                             </div>
                             <div class="info-row">
                                 <span class="label">Connection Type</span>
                                 <span class="value" id="device-connection-type">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">IP Address</span>
+                                <span class="value" id="device-ipv4">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Gateway</span>
+                                <span class="value" id="device-gateway">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">DNS Server</span>
+                                <span class="value" id="device-dns">Loading...</span>
                             </div>
                             <div class="info-row">
                                 <span class="label">Wired MAC Address</span>
@@ -118,6 +135,14 @@
                             <div class="info-row">
                                 <span class="label">WiFi MAC Address</span>
                                 <span class="value" id="device-wifi-mac">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Screen Resolution</span>
+                                <span class="value" id="device-resolution">Loading...</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Tizen Version</span>
+                                <span class="value" id="device-tizen-version">Loading...</span>
                             </div>
                         </div>
                     </div>

@@ -12,49 +12,63 @@
 
 <body>
     <!-- Back Header -->
-    <div class="subpage-header transparent-header">
-        <button class="back-btn focusable" tabindex="0" onclick="window.history.back()">
-            <span>‹</span> Back
+    <div class="feedback-back-header">
+        <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
+            <span class="back-icon">←</span>
         </button>
     </div>
 
-    <div class="feedback-container">
+    <div class="feedback-layout">
+        <div class="feedback-outer-card">
+            <!-- Title Area - Inside the card -->
+            <div class="feedback-title-area">
+                <h1 class="page-title">Give Feedback</h1>
+                <p class="page-subtitle">Help us improving viewer experience</p>
+            </div>
 
-        <div class="header-text">
-            <h1 class="page-title">Give Feedback</h1>
-            <p class="page-subtitle">Help us improving viewer experience</p>
-        </div>
-
-        <div class="feedback-card">
-            <div class="card-header">
-                <span class="header-icon">💬</span>
-                <div>
-                    <h2>Submit Feedback</h2>
-                    <p>Tell us about experience</p>
+            <!-- Form Card - Nested inside outer card -->
+            <div class="feedback-card">
+                <div class="card-header">
+                    <div class="header-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="card-title">Submit Feedback</h2>
+                        <p class="card-subtitle">Tell us about your experience</p>
+                    </div>
                 </div>
-            </div>
 
-            <div class="form-group">
-                <label>How would you rate us? *</label>
-                <div class="star-rating focusable" tabindex="0">
-                    <span class="star">☆</span>
-                    <span class="star">☆</span>
-                    <span class="star">☆</span>
-                    <span class="star">☆</span>
-                    <span class="star">☆</span>
+                <div class="form-group">
+                    <label class="form-label">User ID *</label>
+                    <input type="text" class="input-field focusable" id="userIdField" placeholder="e.g., CAS23894" tabindex="0" readonly>
                 </div>
-                <p class="rating-sub">Tap a star to rate</p>
-            </div>
 
-            <div class="form-group">
-                <label>Detailed Feedback *</label>
-                <textarea class="textarea-field focusable" placeholder="What did you like? what can we do better?"
-                    rows="5" tabindex="0"></textarea>
-            </div>
+                <div class="form-group">
+                    <label class="form-label">How would you rate us?</label>
+                    <div class="star-rating focusable" tabindex="0">
+                        <span class="star">&#9734;</span>
+                        <span class="star">&#9734;</span>
+                        <span class="star">&#9734;</span>
+                        <span class="star">&#9734;</span>
+                        <span class="star">&#9734;</span>
+                    </div>
+                    <p class="rating-hint">Tap a star to rate</p>
+                </div>
 
-            <div class="form-actions">
-                <button class="submit-btn focusable" tabindex="0">Submit</button>
-                <button class="cancel-btn focusable" tabindex="0" onclick="window.history.back()">Cancel</button>
+                <div class="form-group">
+                    <label class="form-label">Detailed Feedback *</label>
+                    <textarea class="textarea-field focusable" placeholder="What did you like? what can we do better?" rows="4" tabindex="0"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button class="submit-btn focusable" tabindex="0">Submit</button>
+                    <button class="cancel-btn focusable" tabindex="0" onclick="window.location.href='home.html'">Cancel</button>
+                </div>
             </div>
         </div>
     </div>

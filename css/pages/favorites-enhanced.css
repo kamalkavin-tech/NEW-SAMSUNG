@@ -22,19 +22,33 @@ body {
 }
 
 .back-btn {
-    background: transparent;
+    background: #1a1a1a;
     color: #fff;
     font-size: 20px;
-    padding: 10px 20px;
-    border: none;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: all 0.2s;
+}
+
+.back-btn .back-icon {
+    line-height: 1;
+    width: 20px;
+    height: 20px;
 }
 
 .back-btn:hover,
 .back-btn:focus {
-    transform: translateX(-5px);
+    background: #333;
+    border-color: #666;
     outline: none;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
 }
 
 .page-title {

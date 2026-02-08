@@ -18,7 +18,7 @@
     <div class="subpage-header">
         <div class="header-left">
             <button class="back-btn focusable" tabindex="0" onclick="window.location.href='home.html'">
-                <span>‹</span> Back
+                <span class="back-icon">←</span>
             </button>
             <div class="page-title">Favorite TV Channels</div>
         </div>
@@ -42,46 +42,11 @@
     <!-- Favorites Grid -->
     <div class="subpage-section">
         <div class="grid-5" id="favoritesGrid">
-            <!-- Udaya TV -->
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon udaya-icon">
-                        <div class="sun-logo"></div>
-                        <span class="channel-name">UDAYA</span>
-                        <div class="heart-icon active">❤</div>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Udhaya TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <!-- Colors Super -->
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon colors-icon">
-                        <span class="colors-text">colors<br><strong>SUPER</strong></span>
-                        <div class="heart-icon active">❤</div>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Colors Super TV</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
-
-            <!-- Zee Kannada -->
-            <div class="channel-group">
-                <div class="channel-card focusable" tabindex="0">
-                    <div class="channel-icon zee-icon">
-                        <span class="zee-logo">ZEE</span>
-                        <span class="zee-kannada">ಕನ್ನಡ</span>
-                        <div class="heart-icon active">❤</div>
-                    </div>
-                </div>
-                <div class="card-title-bottom">Zee-kanada</div>
-                <div class="card-subtitle-bottom">live Channels</div>
-            </div>
+            <!-- Channels will be loaded dynamically from API -->
         </div>
     </div>
 
+    <script src="js/api.js"></script>
     <script src="js/favorites.js"></script>
 </body>
 

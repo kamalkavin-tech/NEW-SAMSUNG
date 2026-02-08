@@ -39,6 +39,30 @@
             </form>
         </div>
     </div>
+
+    <!-- OTP Popup Modal -->
+    <div id="otpPopup" class="otp-popup-overlay" style="display: none;">
+        <div class="otp-popup-container">
+            <div class="otp-popup-icon">
+                <span>✉️</span>
+            </div>
+            <h3 class="otp-popup-title">OTP Sent!</h3>
+            <p class="otp-popup-message" id="otpPopupMessage">A new OTP has been sent to your registered mobile number.</p>
+            <button type="button" id="otpPopupCloseBtn" class="otp-popup-btn focusable">OK</button>
+        </div>
+    </div>
+
+    <!-- Error Popup Modal -->
+    <div id="errorPopup" class="otp-popup-overlay error-popup" style="display: none;">
+        <div class="otp-popup-container error-container">
+            <div class="otp-popup-icon error-icon">
+                <span>❌</span>
+            </div>
+            <h3 class="otp-popup-title error-title">Failed!</h3>
+            <p class="otp-popup-message" id="errorPopupMessage">Failed to send OTP.</p>
+            <button type="button" id="errorPopupCloseBtn" class="otp-popup-btn error-btn focusable">OK</button>
+        </div>
+    </div>
     
     <script src="js/main.js"></script>
 </body>

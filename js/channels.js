@@ -12,6 +12,16 @@
    8. DOWN from Back/Search: Move to tabs
    ================================ */
 
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 var focusables = [];
 var currentFocus = 0;
 var allChannels = [];
@@ -22,6 +32,7 @@ var searchTimeout = null;
 
 // Navigation zones: 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
 var currentZone = 'tabs';
+var lastTopControlElement = null; // Track last focused top control for UP navigation
 
 window.onload = function () {
     console.log("=== BBNL Channels Page Initialized ===");
@@ -62,6 +73,7 @@ function addZoneTrackingListeners() {
     topControls.forEach(function(el) {
         el.addEventListener('focus', function() {
             currentZone = 'topControls';
+            lastTopControlElement = el; // Remember which top control was focused
             console.log('[Channels Navigation] Zone: Top Controls');
         });
     });
@@ -98,7 +110,7 @@ async function initPage() {
         showErrorPopup('internet');
     }
 
-    // Check if returning from language selection page
+    // Check if returning from language selection page OR from player
     const selectedLangId = sessionStorage.getItem('selectedLanguageId');
     const selectedLangName = sessionStorage.getItem('selectedLanguageName');
 
@@ -119,8 +131,8 @@ async function initPage() {
             await loadChannels({ langid: selectedLangId });
         }
 
-        sessionStorage.removeItem('selectedLanguageId');
-        sessionStorage.removeItem('selectedLanguageName');
+        // DON'T remove the filter here - keep it for back navigation from player
+        // Filter will be cleared when user presses BACK from channels page
     } else {
         await loadChannels();
     }
@@ -441,7 +453,18 @@ document.addEventListener("keydown", function (e) {
 
     // BACK key
     if (code === 10009) {
-        window.location.href = "home.html";
+        e.preventDefault();
+        // Check if we came from language filter
+        var selectedLang = sessionStorage.getItem('selectedLanguageId');
+        if (selectedLang && selectedLang !== '') {
+            console.log('[Channels] Navigating back to language-select (filtered view)');
+            // Clear the filter and go to language-select
+            sessionStorage.removeItem('selectedLanguageId');
+            sessionStorage.removeItem('selectedLanguageName');
+            window.location.href = "language-select.html";
+        } else {
+            window.location.href = "home.html";
+        }
         return;
     }
 
@@ -490,8 +513,13 @@ function handleUpNavigation() {
         // Already at top, do nothing
         console.log('[UP] Already at top controls');
     } else if (currentZone === 'tabs') {
-        // UP from tabs: Move to Back button
-        moveToBackButton();
+        // UP from tabs: Move to last focused top control (Back or Search)
+        if (lastTopControlElement) {
+            lastTopControlElement.focus();
+            currentZone = 'topControls';
+        } else {
+            moveToBackButton();
+        }
     } else if (currentZone === 'cards') {
         // UP in cards: Try to move up in grid, or go to tabs
         var moved = moveWithinCardsGrid(0, -1);
@@ -622,7 +650,8 @@ function moveWithinCardsGrid(deltaX, deltaY) {
 
     if (newIndex >= 0 && newIndex < cards.length) {
         cards[newIndex].focus();
-        cards[newIndex].scrollIntoView({ block: "center", behavior: "smooth" });
+        // Use instant scroll for faster navigation
+        cards[newIndex].scrollIntoView({ block: "nearest", behavior: "auto" });
         return true;
     }
 

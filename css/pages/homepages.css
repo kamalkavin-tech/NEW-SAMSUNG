@@ -320,20 +320,23 @@ body.channels-page {
 
 .hero-banner {
     position: relative;
-    width: calc(100% - 50px);
-    height: 350px;
+    width: calc(100% - 30px);
+    height: 450px;
     overflow: hidden;
     background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
     border-radius: 16px;
-    margin: 10px 25px 20px 25px;
+    margin: 0 15px 5px 15px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    flex-shrink: 0;
 }
 
 .hero-banner:empty {
-    display: none;
-    height: 0;
-    margin: 0;
-    padding: 0;
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden;
 }
 
 .ad-slider {
@@ -397,11 +400,15 @@ body.channels-page {
    ======================================== */
 
 .content-section {
-    padding: 5px 25px 15px 25px;
+    padding: 5px 15px 10px 15px;
 }
 
 .content-section:first-of-type {
     padding-top: 5px;
+}
+
+.content-section:last-child {
+    padding-bottom: 10px;
 }
 
 .section-title {
@@ -428,6 +435,22 @@ body.channels-page {
     flex-wrap: wrap;
     gap: 15px;
     margin-bottom: 30px;
+}
+
+/* Languages section when it's the only content on home page */
+.languages-section {
+    padding: 5px 15px 10px 15px;
+}
+
+.languages-section .section-title {
+    margin-bottom: 16px;
+}
+
+.languages-section .channels-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 20px !important;
+    margin-bottom: 0;
 }
 
 .language-pill-home {
@@ -993,12 +1016,12 @@ body.light-mode .app-label {
 
     .hero-banner {
         height: 400px;
-        margin: 20px 30px 30px 30px;
-        width: calc(100% - 60px);
+        margin: 0 15px 5px 15px;
+        width: calc(100% - 30px);
     }
 
     .content-section {
-        padding: 20px 30px 30px 30px;
+        padding: 5px 15px 10px 15px;
     }
 
     body.channels-page {
@@ -1116,4 +1139,125 @@ body.light-mode .exit-btn-yes {
     background: rgba(0, 0, 0, 0.05);
     color: rgba(0, 0, 0, 0.7);
     border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* ========================================
+   APP LOCK SCREEN OVERLAY
+   ======================================== */
+
+.applock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20000;
+    backdrop-filter: blur(8px);
+}
+
+.applock-card {
+    display: flex;
+    align-items: center;
+    gap: 60px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 28px;
+    padding: 60px 80px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    max-width: 900px;
+}
+
+.applock-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    gap: 20px;
+}
+
+.applock-icon-circle {
+    width: 90px;
+    height: 90px;
+    background: rgba(255, 107, 107, 0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.applock-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    letter-spacing: 0.3px;
+}
+
+.applock-message {
+    font-size: 17px;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.6;
+    margin: 0;
+    max-width: 340px;
+}
+
+.applock-message strong {
+    color: #4dd4ac;
+    font-weight: 600;
+}
+
+.applock-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 36px;
+    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 10px;
+    min-height: 52px;
+}
+
+.applock-btn:hover,
+.applock-btn:focus {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 8px 24px rgba(59, 92, 255, 0.3);
+    outline: none;
+}
+
+.applock-right {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.applock-mascot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.applock-warning-diamond {
+    position: absolute;
+    top: -20px;
+    right: -10px;
+    z-index: 2;
+    filter: drop-shadow(0 4px 12px rgba(245, 166, 35, 0.4));
+}
+
+.applock-mascot-svg {
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.3));
 }

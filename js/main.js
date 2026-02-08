@@ -5,6 +5,24 @@
 var focusables = [];
 var currentFocus = 0;
 
+// Check authentication on page load - redirect logged in users away from auth pages
+(function checkAuthRedirect() {
+    var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+    var authPages = ['index.html', 'login.html', 'verify.html', ''];
+    var isAuthPage = authPages.indexOf(currentPage) !== -1;
+    
+    // If user is logged in and on an auth page, redirect to home
+    if (isAuthPage) {
+        var userData = localStorage.getItem("bbnl_user");
+        if (userData) {
+            console.log("[Auth] User already logged in, redirecting to home...");
+            // Replace history to prevent back navigation to login
+            window.location.replace("home.html");
+            return;
+        }
+    }
+})();
+
 /* INIT */
 window.onload = function () {
     console.log("=== BBNL IPTV Initialized ===");
@@ -744,6 +762,9 @@ window.addEventListener('load', function () {
 function initOTPPage() {
     // Start countdown timer
     startCountdown();
+    
+    // Initialize popup handlers
+    initPopupHandlers();
 
     // Add input handlers to OTP inputs for auto-advance
     var otpInputs = document.querySelectorAll('.otp-input');
@@ -868,17 +889,123 @@ function resendOTP() {
             currentOtpIndex = 0;
             if (focusables.length > 0) focusables[0].focus();
 
-            alert("OTP sent successfully to " + mobile);
+            // Show success popup instead of alert
+            showOtpPopup(mobile, email);
         } else {
             var errorMsg = response && response.status ? response.status.err_msg : "Unknown error";
             console.error("[Resend OTP] API Error:", errorMsg);
-            alert("Failed: " + errorMsg);
+            showErrorPopup(errorMsg);
         }
 
     }).catch(e => {
         console.error("Resend Failed", e);
         if (resendLink) resendLink.innerText = "Resend OTP";
-        alert("Failed to resend OTP: " + e.message);
+        showErrorPopup("Failed to resend OTP: " + e.message);
     });
+}
+
+// Show OTP Success Popup
+function showOtpPopup(mobile, email) {
+    var popup = document.getElementById('otpPopup');
+    var message = document.getElementById('otpPopupMessage');
+    var closeBtn = document.getElementById('otpPopupCloseBtn');
+    
+    if (popup && message) {
+        message.textContent = 'A new OTP has been sent to your registered mobile number.';
+        popup.style.display = 'flex';
+        
+        // Focus on close button for TV remote navigation
+        if (closeBtn) {
+            setTimeout(function() {
+                closeBtn.focus();
+            }, 100);
+        }
+        
+        // Auto close after 5 seconds
+        setTimeout(function() {
+            hideOtpPopup();
+        }, 5000);
+    }
+}
+
+// Hide OTP Popup
+function hideOtpPopup() {
+    var popup = document.getElementById('otpPopup');
+    if (popup) {
+        popup.style.display = 'none';
+        // Return focus to first OTP input
+        var firstInput = document.getElementById('otp1');
+        if (firstInput) firstInput.focus();
+    }
+}
+
+// Show Error Popup
+function showErrorPopup(errorMessage) {
+    var popup = document.getElementById('errorPopup');
+    var message = document.getElementById('errorPopupMessage');
+    var closeBtn = document.getElementById('errorPopupCloseBtn');
+    
+    if (popup && message) {
+        message.textContent = errorMessage || 'Failed to send OTP. Please try again.';
+        popup.style.display = 'flex';
+        
+        // Focus on close button for TV remote navigation
+        if (closeBtn) {
+            setTimeout(function() {
+                closeBtn.focus();
+            }, 100);
+        }
+    }
+}
+
+// Hide Error Popup
+function hideErrorPopup() {
+    var popup = document.getElementById('errorPopup');
+    if (popup) {
+        popup.style.display = 'none';
+        // Return focus to resend link
+        var resendLink = document.getElementById('resendLink');
+        if (resendLink) resendLink.focus();
+    }
+}
+
+// Initialize popup close handlers
+function initPopupHandlers() {
+    var otpCloseBtn = document.getElementById('otpPopupCloseBtn');
+    var errorCloseBtn = document.getElementById('errorPopupCloseBtn');
+    
+    if (otpCloseBtn) {
+        otpCloseBtn.addEventListener('click', hideOtpPopup);
+        otpCloseBtn.addEventListener('keydown', function(e) {
+            if (e.keyCode === 13) { // Enter key
+                hideOtpPopup();
+            }
+        });
+    }
+    
+    if (errorCloseBtn) {
+        errorCloseBtn.addEventListener('click', hideErrorPopup);
+        errorCloseBtn.addEventListener('keydown', function(e) {
+            if (e.keyCode === 13) { // Enter key
+                hideErrorPopup();
+            }
+        });
+    }
+    
+    // Close popup on overlay click
+    var otpPopup = document.getElementById('otpPopup');
+    var errorPopup = document.getElementById('errorPopup');
+    
+    if (otpPopup) {
+        otpPopup.addEventListener('click', function(e) {
+            if (e.target === otpPopup) hideOtpPopup();
+        });
+    }
+    
+    if (errorPopup) {
+        errorPopup.addEventListener('click', function(e) {
+            if (e.target === errorPopup) hideErrorPopup();
+        });
+    }
 }
 

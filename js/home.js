@@ -4,6 +4,22 @@ BBNL IPTV - HOME PAGE SCRIPT
 
 var focusables = [];
 var currentFocus = 0;
+var exitPopupOpen = false; // Track if exit/logout popup is open
+
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+    
+    // Clear browser history to prevent back navigation to login pages
+    if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.href);
+    }
+})();
 
 // Initialize on page load
 window.onload = function () {
@@ -82,6 +98,23 @@ window.onload = function () {
 document.addEventListener('keydown', function (e) {
     console.log("Key pressed - Code:", e.keyCode, "Key:", e.key);
 
+    // Check if app lock screen is active - handle BACK key to retry
+    if (appLockActive) {
+        e.preventDefault();
+        if (e.keyCode === 10009 || e.keyCode === 13) {
+            // BACK or ENTER - retry lock check
+            retryAppLockCheck();
+        }
+        return;
+    }
+
+    // Check if exit popup is open - handle navigation within popup only
+    if (exitPopupOpen) {
+        e.preventDefault();
+        handleExitPopupNavigation(e.keyCode);
+        return;
+    }
+
     switch (e.keyCode) {
         case 37: // LEFT
             e.preventDefault();
@@ -120,8 +153,115 @@ document.addEventListener('keydown', function (e) {
             console.log("Back Pressed on Home");
             handleBackNavigation();
             break;
+        case 447: // VolumeUp
+        case 448: // VolumeDown
+        case 449: // VolumeMute
+            // Handle volume keys
+            handleVolumeKeys(e.keyCode);
+            break;
     }
 });
+
+// ==========================================
+// VOLUME CONTROL (for Home page)
+// ==========================================
+var homeCurrentVolume = 50;
+var homeIsMuted = false;
+
+function handleVolumeKeys(keyCode) {
+    try {
+        if (typeof tizen !== 'undefined' && tizen.tvaudiocontrol) {
+            switch (keyCode) {
+                case 447: // VolumeUp
+                    tizen.tvaudiocontrol.setVolumeUp();
+                    homeCurrentVolume = tizen.tvaudiocontrol.getVolume();
+                    showVolumeIndicator(homeCurrentVolume);
+                    console.log("Volume Up:", homeCurrentVolume);
+                    break;
+                case 448: // VolumeDown
+                    tizen.tvaudiocontrol.setVolumeDown();
+                    homeCurrentVolume = tizen.tvaudiocontrol.getVolume();
+                    showVolumeIndicator(homeCurrentVolume);
+                    console.log("Volume Down:", homeCurrentVolume);
+                    break;
+                case 449: // VolumeMute
+                    homeIsMuted = !homeIsMuted;
+                    tizen.tvaudiocontrol.setMute(homeIsMuted);
+                    showVolumeIndicator(homeIsMuted ? 0 : homeCurrentVolume, homeIsMuted);
+                    console.log("Mute:", homeIsMuted);
+                    break;
+            }
+        }
+    } catch (e) {
+        console.error("Volume control error:", e);
+    }
+}
+
+function showVolumeIndicator(volume, muted) {
+    var indicator = document.getElementById('volume-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'volume-indicator';
+        indicator.style.cssText = 'position:fixed;top:50px;right:50px;background:rgba(0,0,0,0.8);color:#fff;padding:15px 25px;border-radius:10px;font-size:18px;z-index:9999;display:flex;align-items:center;gap:15px;';
+        document.body.appendChild(indicator);
+    }
+    
+    var icon = muted ? '\ud83d\udd07' : (volume > 50 ? '\ud83d\udd0a' : (volume > 0 ? '\ud83d\udd09' : '\ud83d\udd08'));
+    indicator.innerHTML = '<span style=\"font-size:24px;\">' + icon + '</span><span>' + (muted ? 'Muted' : volume + '%') + '</span>';
+    indicator.style.display = 'flex';
+    
+    clearTimeout(indicator.hideTimeout);
+    indicator.hideTimeout = setTimeout(function() {
+        indicator.style.display = 'none';
+    }, 2000);
+}
+
+/**
+ * Handle navigation within exit popup
+ */
+function handleExitPopupNavigation(keyCode) {
+    var noBtn = document.getElementById('exitNoBtn');
+    var yesBtn = document.getElementById('exitYesBtn');
+    var active = document.activeElement;
+    
+    switch (keyCode) {
+        case 37: // LEFT
+        case 39: // RIGHT
+            // Toggle between No and Yes buttons
+            if (active === noBtn) {
+                yesBtn.focus();
+            } else if (active === yesBtn) {
+                noBtn.focus();
+            } else {
+                // Focus on No button by default
+                noBtn.focus();
+            }
+            break;
+        case 38: // UP
+        case 40: // DOWN
+            // Toggle between buttons (same as left/right)
+            if (active === noBtn) {
+                yesBtn.focus();
+            } else if (active === yesBtn) {
+                noBtn.focus();
+            } else {
+                noBtn.focus();
+            }
+            break;
+        case 13: // ENTER
+            // Trigger click on focused button
+            if (active === noBtn) {
+                cancelExit();
+            } else if (active === yesBtn) {
+                confirmExit();
+            }
+            break;
+        case 10009: // BACK
+            // Close popup
+            cancelExit();
+            break;
+    }
+}
 
 // Smart back navigation handler
 function handleBackNavigation() {
@@ -754,11 +894,11 @@ function renderLanguagesInHomeGrid(languages) {
     // Clear any existing content
     container.innerHTML = '';
 
-    // Take first 3 languages (+ View All = 4 cards total)
-    var firstThreeLanguages = languages.slice(0, 3);
+    // Take first 7 languages (+ View All = 8 cards = 2 rows of 4)
+    var displayLanguages = languages.slice(0, 7);
 
     // Create language cards
-    firstThreeLanguages.forEach(function (lang) {
+    displayLanguages.forEach(function (lang) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
         var langLogo = lang.langlogo || "";
@@ -1194,8 +1334,6 @@ function updateNetworkStatus() {
 // EXIT CONFIRMATION FUNCTIONALITY
 // ==========================================
 
-var exitPopupOpen = false;
-
 /**
  * Show exit confirmation popup
  */
@@ -1260,7 +1398,127 @@ document.addEventListener('DOMContentLoaded', function() {
     if (exitNoBtn) {
         exitNoBtn.addEventListener('click', cancelExit);
     }
+
+    // App lock retry button
+    var appLockRetryBtn = document.getElementById('appLockRetryBtn');
+    if (appLockRetryBtn) {
+        appLockRetryBtn.addEventListener('click', retryAppLockCheck);
+    }
 });
+
+// ==========================================
+// APP LOCK FUNCTIONALITY
+// ==========================================
+
+var appLockActive = false;
+
+/**
+ * Check app lock status on startup
+ * If locked, shows the lock overlay and prevents app usage
+ */
+function checkAppLockStatus() {
+    console.log("[HOME] Checking app lock status...");
+
+    if (typeof AppLockAPI === 'undefined') {
+        console.warn("[HOME] AppLockAPI not available");
+        return;
+    }
+
+    AppLockAPI.checkAppLock()
+        .then(function(response) {
+            console.log("[HOME] App lock response:", response);
+
+            // Check if app is locked based on API response
+            // Response typically has status/locked field
+            var isLocked = false;
+
+            if (response) {
+                // Check common response patterns
+                if (response.status === "locked" || response.locked === true || response.lock === true) {
+                    isLocked = true;
+                } else if (response.status === "0" || response.status === 0 || response.status === "fail" || response.status === "error") {
+                    isLocked = true;
+                } else if (response.message && response.message.toLowerCase().includes("lock")) {
+                    isLocked = true;
+                }
+            }
+
+            if (isLocked) {
+                console.log("[HOME] App is LOCKED - showing lock screen");
+                showAppLockScreen();
+            } else {
+                console.log("[HOME] App is UNLOCKED - proceeding normally");
+                hideAppLockScreen();
+            }
+        })
+        .catch(function(error) {
+            console.error("[HOME] App lock check failed:", error);
+            // On error, allow app to work (fail-open)
+            console.log("[HOME] Allowing access on error (fail-open)");
+        });
+}
+
+/**
+ * Show the app lock overlay screen
+ */
+function showAppLockScreen() {
+    var overlay = document.getElementById('appLockOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        appLockActive = true;
+
+        // Focus on retry button
+        var retryBtn = document.getElementById('appLockRetryBtn');
+        if (retryBtn) retryBtn.focus();
+
+        console.log("[HOME] Lock screen displayed");
+    }
+}
+
+/**
+ * Hide the app lock overlay screen
+ */
+function hideAppLockScreen() {
+    var overlay = document.getElementById('appLockOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+        appLockActive = false;
+        console.log("[HOME] Lock screen hidden");
+    }
+}
+
+/**
+ * Retry app lock check (triggered by button or BACK key)
+ */
+function retryAppLockCheck() {
+    console.log("[HOME] Retrying app lock check...");
+    checkAppLockStatus();
+}
+
+// ==========================================
+// TRP DATA TRACKING
+// ==========================================
+
+/**
+ * Send TRP data on page load for analytics/viewership tracking
+ */
+function sendTRPDataOnLoad() {
+    console.log("[HOME] Sending TRP data for home page view...");
+
+    if (typeof TRPDataAPI === 'undefined') {
+        console.warn("[HOME] TRPDataAPI not available");
+        return;
+    }
+
+    TRPDataAPI.sendTRPData("home_page_view")
+        .then(function(response) {
+            console.log("[HOME] TRP data sent successfully:", response);
+        })
+        .catch(function(error) {
+            // Fail silently - analytics should never block the user
+            console.error("[HOME] TRP data send failed:", error);
+        });
+}
 
 // ==========================================
 // PAGE LOAD - INITIALIZE ALL FEATURES
@@ -1274,8 +1532,13 @@ window.addEventListener('load', function () {
     // Initialize network status
     initNetworkStatus();
 
+    // Check app lock status first
+    setTimeout(checkAppLockStatus, 50);
+
+    // Send TRP data for analytics
+    setTimeout(sendTRPDataOnLoad, 200);
+
     // Use setTimeout to ensure they load after critical content
     setTimeout(loadHomeAds, 100);
     setTimeout(loadHomeLanguages, 150); // Load languages
-    setTimeout(loadHomeChannels, 200); // Load channels slightly after ads
 });

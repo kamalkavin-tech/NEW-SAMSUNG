@@ -3,6 +3,16 @@
    About App & Device Info
    ================================ */
 
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 var focusables = [];
 var currentFocus = 0;
 
@@ -25,6 +35,12 @@ window.onload = function () {
     var checkBtn = document.getElementById('checkUpdateBtn');
     if (checkBtn) {
         checkBtn.addEventListener('click', checkForUpdates);
+    }
+
+    // Setup Logout button
+    var logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
     }
 
     // Get all focusable elements
@@ -118,8 +134,34 @@ function handleEnter() {
         return;
     }
 
+    // Check for logout button
+    if (el.id === 'logoutBtn' || el.classList.contains('logout-btn')) {
+        handleLogout();
+        return;
+    }
+
     // Default click
     el.click();
+}
+
+/**
+ * Handle logout - show confirmation and clear session
+ */
+function handleLogout() {
+    var confirmLogout = confirm('Are you sure you want to logout?');
+    if (confirmLogout) {
+        console.log("[Settings] User confirmed logout");
+        // Clear session using API
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
+            BBNL_API.logout();
+        } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
+            AuthAPI.logout();
+        } else {
+            // Fallback: manually clear and redirect
+            localStorage.removeItem('bbnl_user');
+            window.location.href = 'login.html';
+        }
+    }
 }
 
 function moveFocusHorizontal(direction) {
@@ -350,169 +392,249 @@ function checkForUpdates() {
 }
 
 // ==========================================
-// DEVICE INFO PANEL
+// DEVICE INFO PANEL - PRODUCTION
+// All values fetched dynamically from Tizen APIs
 // ==========================================
 
 /**
  * Load device information for the Device Info panel
+ * Uses Tizen WebAPIs for real device, graceful fallback for emulator
  */
 function loadDeviceInfoPanel() {
-    console.log("[Settings] Loading device info panel...");
+    console.log("[Settings] Loading device info panel (Production)...");
+
+    var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
+    var isTizen = (typeof webapis !== 'undefined');
+
+    // 1. User ID from session
+    loadUserId();
+
+    // 2. Model Name & Firmware
+    loadModelInfo(isTizen);
+
+    // 3. Device ID (DUID)
+    loadDeviceId(deviceInfo, isTizen);
+
+    // 4. Network Info (Connection, IP, Gateway, DNS, MACs)
+    loadNetworkInfo(deviceInfo, isTizen);
+
+    // 5. Screen Resolution
+    loadScreenResolution();
+
+    // 6. Tizen Version
+    loadTizenVersion(isTizen);
+}
+
+/**
+ * Load User ID from localStorage session
+ */
+function loadUserId() {
+    var userIdEl = document.getElementById('device-user-id');
+    if (!userIdEl) return;
 
     try {
-        // Get device info from DeviceInfo utility (api.js)
-        var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
-
-        // Update Model Name
-        var modelNameEl = document.getElementById('device-model-name');
-        if (modelNameEl) {
-            try {
-                if (typeof webapis !== 'undefined' && webapis.productinfo) {
-                    modelNameEl.innerText = webapis.productinfo.getModelCode() || "Samsung Tizen";
-                } else {
-                    modelNameEl.innerText = "Samsung Tizen";
-                }
-            } catch (e) {
-                modelNameEl.innerText = "Samsung Tizen";
-            }
+        var userData = localStorage.getItem('bbnl_user');
+        if (userData) {
+            var parsed = JSON.parse(userData);
+            userIdEl.innerText = parsed.userid || parsed.user_id || parsed.casid || 'N/A';
+        } else {
+            userIdEl.innerText = 'Not logged in';
         }
-
-        // Load Network Information (IPv4, IPv6, Connection Type, MACs)
-        loadNetworkInfo(deviceInfo);
-
-        // Load Device ID
-        loadDeviceId(deviceInfo);
-
-    } catch (error) {
-        console.error("[Settings] Error loading device info panel:", error);
+    } catch (e) {
+        userIdEl.innerText = 'N/A';
     }
 }
 
 /**
- * Load network information
+ * Load Model Name and Firmware from Tizen productinfo API
  */
-function loadNetworkInfo(deviceInfo) {
+function loadModelInfo(isTizen) {
+    var modelNameEl = document.getElementById('device-model-name');
+    var firmwareEl = document.getElementById('device-firmware');
+
+    if (modelNameEl) {
+        try {
+            if (isTizen && webapis.productinfo) {
+                var model = webapis.productinfo.getModel ? webapis.productinfo.getModel() : null;
+                var modelCode = webapis.productinfo.getModelCode ? webapis.productinfo.getModelCode() : null;
+                modelNameEl.innerText = model || modelCode || 'Samsung Smart TV';
+            } else {
+                modelNameEl.innerText = 'Emulator';
+            }
+        } catch (e) {
+            modelNameEl.innerText = 'Samsung Smart TV';
+        }
+    }
+
+    if (firmwareEl) {
+        try {
+            if (isTizen && webapis.productinfo && webapis.productinfo.getFirmware) {
+                firmwareEl.innerText = 'Firmware: ' + webapis.productinfo.getFirmware();
+            } else {
+                firmwareEl.innerText = 'Firmware: N/A';
+            }
+        } catch (e) {
+            firmwareEl.innerText = 'Firmware: N/A';
+        }
+    }
+}
+
+/**
+ * Load Device ID (DUID) from Tizen API or DeviceInfo
+ */
+function loadDeviceId(deviceInfo, isTizen) {
+    var deviceIdEl = document.getElementById('device-id');
+    if (!deviceIdEl) return;
+
     try {
-        if (typeof webapis !== 'undefined' && webapis.network) {
+        if (isTizen && webapis.productinfo && webapis.productinfo.getDuid) {
+            deviceIdEl.innerText = webapis.productinfo.getDuid() || 'N/A';
+        } else if (deviceInfo && deviceInfo.devslno) {
+            deviceIdEl.innerText = deviceInfo.devslno;
+        } else {
+            deviceIdEl.innerText = 'N/A';
+        }
+    } catch (e) {
+        console.error("[Settings] Device ID error:", e);
+        deviceIdEl.innerText = 'N/A';
+    }
+}
+
+/**
+ * Load all network information from Tizen APIs
+ */
+function loadNetworkInfo(deviceInfo, isTizen) {
+    try {
+        if (isTizen && webapis.network) {
             var networkType = webapis.network.getActiveConnectionType();
 
             // Connection Type
-            var connTypeEl = document.getElementById('device-connection-type');
-            if (connTypeEl) {
-                var types = {
-                    0: "Disconnected",
-                    1: "WiFi",
-                    2: "Cellular",
-                    3: "Ethernet"
-                };
-                connTypeEl.innerText = types[networkType] || "Unknown";
+            setElementText('device-connection-type', getConnectionTypeName(networkType));
+
+            // IP Address
+            if (networkType > 0) {
+                setElementText('device-ipv4', safeCall(function () {
+                    return webapis.network.getIp(networkType);
+                }, 'N/A'));
+            } else {
+                setElementText('device-ipv4', 'Disconnected');
             }
 
-            // Public IPv4 Address
-            var ipv4El = document.getElementById('device-ipv4');
-            if (ipv4El) {
-                if (networkType > 0) {
-                    var ipv4 = webapis.network.getIp(networkType);
-                    ipv4El.innerText = ipv4 || "Not Available";
-                } else {
-                    ipv4El.innerText = "Disconnected";
-                }
-            }
+            // Gateway
+            setElementText('device-gateway', safeCall(function () {
+                return webapis.network.getGateway(networkType);
+            }, 'N/A'));
 
-            // Public IPv6 Address
-            var ipv6El = document.getElementById('device-ipv6');
-            if (ipv6El) {
-                try {
-                    if (networkType > 0 && webapis.network.getIpv6) {
-                        var ipv6 = webapis.network.getIpv6(networkType);
-                        ipv6El.innerText = ipv6 || "Not Available";
-                    } else {
-                        ipv6El.innerText = "Not Available";
-                    }
-                } catch (e) {
-                    ipv6El.innerText = "Not Available";
-                }
-            }
+            // DNS Server
+            setElementText('device-dns', safeCall(function () {
+                return webapis.network.getDns(networkType);
+            }, 'N/A'));
 
-            // Wired MAC Address (Ethernet)
-            var wiredMacEl = document.getElementById('device-wired-mac');
-            if (wiredMacEl) {
-                try {
-                    var wiredMac = webapis.network.getMac ? webapis.network.getMac(3) : null;
-                    if (!wiredMac && deviceInfo) {
-                        wiredMac = deviceInfo.mac_address || deviceInfo.macaddress;
-                    }
-                    wiredMacEl.innerText = formatMacAddress(wiredMac) || "Not Available";
-                } catch (e) {
-                    wiredMacEl.innerText = "Not Available";
-                }
+            // Wired MAC Address (Ethernet = type 3)
+            var wiredMac = safeCall(function () {
+                return webapis.network.getMac(3);
+            }, null);
+            if (!wiredMac && deviceInfo) {
+                wiredMac = deviceInfo.mac_address;
             }
+            setElementText('device-wired-mac', formatMacAddress(wiredMac) || 'N/A');
 
-            // WiFi MAC Address
-            var wifiMacEl = document.getElementById('device-wifi-mac');
-            if (wifiMacEl) {
-                try {
-                    var wifiMac = webapis.network.getMac ? webapis.network.getMac(1) : null;
-                    wifiMacEl.innerText = formatMacAddress(wifiMac) || "Not Available";
-                } catch (e) {
-                    wifiMacEl.innerText = "Not Available";
-                }
-            }
+            // WiFi MAC Address (WiFi = type 1)
+            setElementText('device-wifi-mac', formatMacAddress(safeCall(function () {
+                return webapis.network.getMac(1);
+            }, null)) || 'N/A');
 
         } else {
-            setEmulatorNetworkInfo();
+            // Non-Tizen environment (emulator/browser)
+            setElementText('device-connection-type', 'Browser/Emulator');
+            setElementText('device-ipv4', 'N/A');
+            setElementText('device-gateway', 'N/A');
+            setElementText('device-dns', 'N/A');
+            setElementText('device-wired-mac', deviceInfo ? formatMacAddress(deviceInfo.mac_address) || 'N/A' : 'N/A');
+            setElementText('device-wifi-mac', 'N/A');
         }
     } catch (e) {
         console.error("[Settings] Network info error:", e);
-        setEmulatorNetworkInfo();
+        setElementText('device-connection-type', 'Error');
+        setElementText('device-ipv4', 'N/A');
+        setElementText('device-gateway', 'N/A');
+        setElementText('device-dns', 'N/A');
+        setElementText('device-wired-mac', 'N/A');
+        setElementText('device-wifi-mac', 'N/A');
     }
 }
 
 /**
- * Load Device ID
+ * Load screen resolution
  */
-function loadDeviceId(deviceInfo) {
-    var deviceIdEl = document.getElementById('device-id');
-    if (deviceIdEl) {
-        try {
-            if (typeof webapis !== 'undefined' && webapis.productinfo && webapis.productinfo.getDuid) {
-                var duid = webapis.productinfo.getDuid();
-                deviceIdEl.innerText = duid || "Not Available";
-            } else if (deviceInfo && deviceInfo.devslno) {
-                deviceIdEl.innerText = deviceInfo.devslno;
-            } else if (deviceInfo && deviceInfo.serial) {
-                deviceIdEl.innerText = deviceInfo.serial;
-            } else {
-                deviceIdEl.innerText = "Not Available";
-            }
-        } catch (e) {
-            console.error("[Settings] Device ID error:", e);
-            deviceIdEl.innerText = "Not Available";
+function loadScreenResolution() {
+    var resEl = document.getElementById('device-resolution');
+    if (!resEl) return;
+
+    try {
+        resEl.innerText = screen.width + ' x ' + screen.height;
+    } catch (e) {
+        resEl.innerText = 'N/A';
+    }
+}
+
+/**
+ * Load Tizen platform version
+ */
+function loadTizenVersion(isTizen) {
+    var versionEl = document.getElementById('device-tizen-version');
+    if (!versionEl) return;
+
+    try {
+        if (isTizen && typeof tizen !== 'undefined' && tizen.systeminfo) {
+            tizen.systeminfo.getPropertyValue("BUILD", function (build) {
+                versionEl.innerText = build.buildVersion || 'N/A';
+            }, function () {
+                versionEl.innerText = 'N/A';
+            });
+        } else {
+            versionEl.innerText = 'N/A (Not Tizen)';
         }
+    } catch (e) {
+        versionEl.innerText = 'N/A';
+    }
+}
+
+// ==========================================
+// DEVICE INFO HELPERS
+// ==========================================
+
+/**
+ * Get human-readable connection type name
+ */
+function getConnectionTypeName(type) {
+    var types = {
+        0: "Disconnected",
+        1: "WiFi",
+        2: "Cellular",
+        3: "Ethernet"
+    };
+    return types[type] || "Unknown (" + type + ")";
+}
+
+/**
+ * Safely call a function, return fallback on error
+ */
+function safeCall(fn, fallback) {
+    try {
+        var result = fn();
+        return result || fallback;
+    } catch (e) {
+        return fallback;
     }
 }
 
 /**
- * Set fallback network info for emulator
+ * Set text content of an element by ID
  */
-function setEmulatorNetworkInfo() {
-    var connTypeEl = document.getElementById('device-connection-type');
-    if (connTypeEl) connTypeEl.innerText = "Web/Emulator";
-
-    var ipv4El = document.getElementById('device-ipv4');
-    if (ipv4El) ipv4El.innerText = "127.0.0.1";
-
-    var ipv6El = document.getElementById('device-ipv6');
-    if (ipv6El) ipv6El.innerText = "::1";
-
-    var deviceIdEl = document.getElementById('device-id');
-    if (deviceIdEl) deviceIdEl.innerText = "EMULATOR-001";
-
-    var wiredMacEl = document.getElementById('device-wired-mac');
-    if (wiredMacEl) wiredMacEl.innerText = "00:00:00:00:00:00";
-
-    var wifiMacEl = document.getElementById('device-wifi-mac');
-    if (wifiMacEl) wifiMacEl.innerText = "00:00:00:00:00:00";
+function setElementText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.innerText = text;
 }
 
 // ==========================================

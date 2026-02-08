@@ -2,6 +2,16 @@
  * BBNL Player Controller - Uses AVPlayer Module
  */
 
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 // ==========================================
 // CONFIGURATION
 // ==========================================
@@ -405,6 +415,129 @@ function setupPlayer(channel) {
             });
         }
     }
+
+    // Load stream ads for this channel (non-blocking)
+    var chid = channel.chid || channel.channelno || channel.urno || "";
+    if (chid) {
+        setTimeout(function () {
+            loadStreamAds(String(chid));
+        }, 3000); // Delay 3 seconds to let stream start first
+    }
+}
+
+// ==========================================
+// STREAM ADS - Right side ad overlay
+// ==========================================
+var streamAdTimer = null;
+var streamAdRotateTimer = null;
+var streamAdAds = [];
+var streamAdCurrentIndex = 0;
+
+/**
+ * Load and display stream ads for the current channel
+ * @param {String} chid - Channel ID
+ */
+function loadStreamAds(chid) {
+    // Clear any existing timers
+    clearStreamAdTimers();
+
+    console.log("[StreamAd] Loading ads for chid:", chid);
+
+    AdsAPI.getStreamAds(chid)
+        .then(function (ads) {
+            if (ads && ads.length > 0) {
+                console.log("[StreamAd] Got", ads.length, "stream ad(s)");
+                streamAdAds = ads;
+                streamAdCurrentIndex = 0;
+                showStreamAd();
+            } else {
+                console.log("[StreamAd] No stream ads available");
+                hideStreamAd();
+            }
+        })
+        .catch(function (err) {
+            console.error("[StreamAd] Failed to load:", err);
+        });
+}
+
+/**
+ * Show the stream ad panel with the current ad
+ */
+function showStreamAd() {
+    var panel = document.getElementById('streamAdPanel');
+    var img = document.getElementById('streamAdImage');
+    if (!panel || !img || streamAdAds.length === 0) return;
+
+    var ad = streamAdAds[streamAdCurrentIndex];
+    var adUrl = ad.adpath || ad.adimage || ad.image || '';
+
+    if (!adUrl) {
+        console.log("[StreamAd] No ad URL, hiding panel");
+        hideStreamAd();
+        return;
+    }
+
+    img.src = adUrl;
+    img.onerror = function () {
+        console.warn("[StreamAd] Image failed to load:", adUrl);
+        hideStreamAd();
+    };
+
+    panel.style.display = 'flex';
+    panel.style.animation = 'streamAdSlideIn 0.5s ease-out';
+    console.log("[StreamAd] Showing ad:", adUrl);
+
+    // Auto-rotate if multiple ads (every 8 seconds)
+    if (streamAdAds.length > 1) {
+        streamAdRotateTimer = setInterval(function () {
+            streamAdCurrentIndex = (streamAdCurrentIndex + 1) % streamAdAds.length;
+            var nextAd = streamAdAds[streamAdCurrentIndex];
+            var nextUrl = nextAd.adpath || nextAd.adimage || nextAd.image || '';
+            if (nextUrl && img) {
+                img.src = nextUrl;
+                console.log("[StreamAd] Rotated to ad:", nextUrl);
+            }
+        }, 8000);
+    }
+
+    // Auto-hide after 30 seconds, then reload after 60 seconds
+    streamAdTimer = setTimeout(function () {
+        hideStreamAd();
+        // Reload ads after a pause
+        setTimeout(function () {
+            if (streamAdAds.length > 0) {
+                showStreamAd();
+            }
+        }, 60000);
+    }, 30000);
+}
+
+/**
+ * Hide the stream ad panel
+ */
+function hideStreamAd() {
+    var panel = document.getElementById('streamAdPanel');
+    if (panel) {
+        panel.style.animation = 'streamAdSlideOut 0.5s ease-in';
+        setTimeout(function () {
+            panel.style.display = 'none';
+        }, 500);
+    }
+    clearStreamAdTimers();
+}
+
+/**
+ * Clear all stream ad timers
+ */
+function clearStreamAdTimers() {
+    if (streamAdTimer) {
+        clearTimeout(streamAdTimer);
+        streamAdTimer = null;
+    }
+    if (streamAdRotateTimer) {
+        clearInterval(streamAdRotateTimer);
+        streamAdRotateTimer = null;
+    }
 }
 
 function changeChannel(step) {
@@ -421,6 +554,8 @@ function changeChannel(step) {
 }
 
 function closePlayer() {
+    clearStreamAdTimers();
+    hideStreamAd();
     if (typeof AVPlayer !== 'undefined') {
         AVPlayer.destroy();
     }
@@ -431,9 +566,21 @@ function handleKeydown(e) {
     console.log("Player Key:", code);
 
     if (code === 10009 || code === 27) { // Back / ESC
+        e.preventDefault();
         closePlayer();
-        // Use history.back() for natural navigation flow
-        window.history.back();
+
+        // Check if we came from language filtered channels
+        var selectedLang = sessionStorage.getItem('selectedLanguageId');
+
+        if (selectedLang && selectedLang !== '') {
+            // Go back to channels page with filter still applied
+            console.log('[Player] Navigating back to filtered channels page');
+            window.location.href = 'channels.html';
+        } else {
+            // Normal flow - go back to home
+            console.log('[Player] Navigating back to home');
+            window.location.href = 'home.html';
+        }
         return;
     }
 
@@ -441,6 +588,7 @@ function handleKeydown(e) {
     // Standard number keys: 48-57 (0-9)
     // Numpad number keys: 96-105 (0-9)
     if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+        e.preventDefault();
         var digit;
         if (code >= 48 && code <= 57) {
             digit = String(code - 48); // Convert keycode to digit
@@ -448,6 +596,21 @@ function handleKeydown(e) {
             digit = String(code - 96); // Convert numpad keycode to digit
         }
         handleNumberInput(digit);
+        showOverlay();
+        return;
+    }
+
+    // Prevent default for navigation keys
+    if ([37, 38, 39, 40, 13, 415, 19, 413, 417, 412, 427, 428, 33, 34, 447, 448, 449].indexOf(code) !== -1) {
+        e.preventDefault();
+    }
+
+    // Enter key - handle overlay interaction
+    if (code === 13) {
+        var activeEl = document.activeElement;
+        if (activeEl && activeEl.classList.contains('focusable')) {
+            activeEl.click();
+        }
         showOverlay();
         return;
     }
@@ -478,8 +641,89 @@ function handleKeydown(e) {
         }
     }
 
+    // Volume Control (works on all pages)
+    handleVolumeKeys(code);
+
     // Show overlay on any key press
     showOverlay();
+}
+
+// ==========================================
+// VOLUME CONTROL
+// ==========================================
+var currentVolume = 50; // Default volume 50%
+var isMuted = false;
+
+function handleVolumeKeys(keyCode) {
+    try {
+        if (typeof tizen !== 'undefined' && tizen.tvaudiocontrol) {
+            switch (keyCode) {
+                case 447: // VolumeUp
+                    tizen.tvaudiocontrol.setVolumeUp();
+                    currentVolume = tizen.tvaudiocontrol.getVolume();
+                    showVolumeIndicator(currentVolume);
+                    console.log("Volume Up:", currentVolume);
+                    break;
+                case 448: // VolumeDown
+                    tizen.tvaudiocontrol.setVolumeDown();
+                    currentVolume = tizen.tvaudiocontrol.getVolume();
+                    showVolumeIndicator(currentVolume);
+                    console.log("Volume Down:", currentVolume);
+                    break;
+                case 449: // VolumeMute
+                    isMuted = !isMuted;
+                    tizen.tvaudiocontrol.setMute(isMuted);
+                    showVolumeIndicator(isMuted ? 0 : currentVolume, isMuted);
+                    console.log("Mute:", isMuted);
+                    break;
+            }
+        } else {
+            // Fallback for emulator/browser - use HTML5 video volume
+            var video = document.querySelector('video');
+            if (video) {
+                switch (keyCode) {
+                    case 447: // VolumeUp
+                        video.volume = Math.min(1, video.volume + 0.1);
+                        currentVolume = Math.round(video.volume * 100);
+                        showVolumeIndicator(currentVolume);
+                        break;
+                    case 448: // VolumeDown
+                        video.volume = Math.max(0, video.volume - 0.1);
+                        currentVolume = Math.round(video.volume * 100);
+                        showVolumeIndicator(currentVolume);
+                        break;
+                    case 449: // VolumeMute
+                        video.muted = !video.muted;
+                        isMuted = video.muted;
+                        showVolumeIndicator(isMuted ? 0 : currentVolume, isMuted);
+                        break;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Volume control error:", e);
+    }
+}
+
+function showVolumeIndicator(volume, muted) {
+    // Create or get volume indicator
+    var indicator = document.getElementById('volume-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'volume-indicator';
+        indicator.style.cssText = 'position:fixed;top:50px;right:50px;background:rgba(0,0,0,0.8);color:#fff;padding:15px 25px;border-radius:10px;font-size:18px;z-index:9999;display:flex;align-items:center;gap:15px;';
+        document.body.appendChild(indicator);
+    }
+    
+    var icon = muted ? '🔇' : (volume > 50 ? '🔊' : (volume > 0 ? '🔉' : '🔈'));
+    indicator.innerHTML = '<span style="font-size:24px;">' + icon + '</span><span>' + (muted ? 'Muted' : volume + '%') + '</span>';
+    indicator.style.display = 'flex';
+    
+    // Hide after 2 seconds
+    clearTimeout(indicator.hideTimeout);
+    indicator.hideTimeout = setTimeout(function() {
+        indicator.style.display = 'none';
+    }, 2000);
 }
 
 // ==========================================

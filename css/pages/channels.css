@@ -190,7 +190,7 @@ body.channels-page {
     cursor: pointer;
     outline: none;
     white-space: nowrap;
-    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: background 0.1s ease-out, border-color 0.1s ease-out, color 0.1s ease-out;
     flex-shrink: 0;
 }
 
@@ -298,7 +298,7 @@ body.channels-page {
     border-radius: 14px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -308,14 +308,14 @@ body.channels-page {
 }
 
 .channel-card:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 
 .channel-card:focus {
     outline: none;
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 0 0 3px #4169e1, 0 8px 24px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 0 0 3px #4169e1, 0 6px 16px rgba(0, 0, 0, 0.12);
     z-index: 5;
 }
 

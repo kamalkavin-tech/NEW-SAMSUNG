@@ -2,11 +2,32 @@
    BBNL Feedback CONTROLLER
    ================================ */
 
+// Check authentication - redirect to login if not logged in
+(function checkAuth() {
+    var userData = localStorage.getItem("bbnl_user");
+    if (!userData) {
+        console.log("[Auth] User not logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 var focusables = [];
 var currentFocus = 0;
 
 window.onload = function () {
     console.log("=== BBNL Feedback Page Initialized ===");
+
+    // Auto-populate User ID field from session
+    var userIdField = document.getElementById('userIdField');
+    if (userIdField) {
+        var userData = AuthAPI.getUserData();
+        if (userData) {
+            var userId = userData.userid || userData.userId || userData.id || userData.username || "";
+            userIdField.value = userId;
+        }
+    }
+
     focusables = document.querySelectorAll(".focusable");
 
     if (focusables.length > 0) {
@@ -21,7 +42,7 @@ window.onload = function () {
         });
 
         el.addEventListener("click", function () {
-            if (el.classList.contains('back-btn')) {
+            if (el.classList.contains('back-btn') || el.classList.contains('back-link')) {
                 window.location.href = 'home.html';
                 return;
             }
@@ -50,8 +71,14 @@ window.onload = function () {
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     if (code === 10009) { // Back
+        e.preventDefault();
         window.location.href = 'home.html';
         return;
+    }
+
+    // Prevent default for navigation keys
+    if ([37, 38, 39, 40, 13].indexOf(code) !== -1) {
+        e.preventDefault();
     }
 
     // Linear navigation

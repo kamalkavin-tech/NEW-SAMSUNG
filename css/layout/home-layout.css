@@ -32,8 +32,8 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 20px 0 25px 0;
-    gap: 20px;
+    padding: 20px 0 30px 0;
+    gap: 0;
     position: fixed;
     left: 0;
     top: 0;
@@ -45,10 +45,11 @@ body {
 /* BBNL Branding */
 .sidebar-brand {
     width: 100%;
-    padding: 10px 0;
+    padding: 15px 0;
     text-align: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 10px;
+    margin-bottom: 0;
+    flex-shrink: 0;
 }
 
 .sidebar-brand .brand-text {
@@ -79,17 +80,20 @@ body {
 .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
     width: 100%;
     align-items: center;
+    padding: 15px 0;
+    flex: 1;
+    justify-content: center;
 }
 
 .sidebar-icon-btn {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     background: transparent;
     border: none;
-    border-radius: 28px;
+    border-radius: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -236,14 +240,14 @@ body {
 .main-content {
     grid-column: 2 / 3;
     grid-row: 2 / 3;
-    margin-left: 120px;
-    margin-top: 60px;
     padding-top: 0;
     padding-left: 0;
     overflow-y: auto;
     overflow-x: hidden;
     height: calc(100vh - 60px);
     background: #000;
+    display: flex;
+    flex-direction: column;
 }
 
 /* ==========================================
@@ -253,13 +257,13 @@ body {
 /* hero-banner styles moved to homepages.css to avoid duplicates */
 
 .content-section {
-    padding: 10px 25px 20px 25px;
+    padding: 5px 15px 10px 15px;
 }
 
 .section-title {
     font-size: 24px;
     font-weight: 700;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
     color: #fff;
     padding-left: 4px;
 }
@@ -269,7 +273,7 @@ body {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 18px;
-    margin-bottom: 25px;
+    margin-bottom: 10px;
 }
 
 /* ==========================================

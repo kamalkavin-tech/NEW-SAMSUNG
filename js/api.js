@@ -67,11 +67,11 @@ console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
 console.log("[API CONFIG] Ads Endpoint: " + API_BASE_URL_PROD + "/iptvads");
 console.log("=".repeat(60));
 
-// Default headers for all API requests
+// Default headers for all API requests (devmac & devslno populated by DeviceInfo.initializeDeviceInfo)
 const DEFAULT_HEADERS = {
     "Content-Type": "application/json",
     "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
-    "devmac": "26:F2:AE:D8:3F:99",
+    "devmac": "68:1D:EF:14:6C:21",
     "devslno": "FOFI20191129000336"
 };
 
@@ -106,8 +106,9 @@ const API_ENDPOINTS = {
     CHANNEL_DATA: `${API_BASE_URL_PROD}/chnl_data`,        // Alias for compatibility (same as CHANNEL_LIST)
     CHANNEL_EXPIRING: `${API_BASE_URL_PROD}/expiringchnl_list`,
 
-    // Ads endpoint
+    // Ads endpoints
     IPTV_ADS: `${API_BASE_URL_PROD}/iptvads`,
+    STREAM_ADS: `${API_BASE_URL_PROD}/streamAds`,
 
     // Other endpoints
     OTT_APPS: `${API_BASE_URL_PROD}/allowedapps`,
@@ -118,12 +119,13 @@ const API_ENDPOINTS = {
     APP_VERSION: `${API_BASE_URL_PROD}/appversion`
 };
 
-// Device info (will be updated by initializeDeviceInfo)
+// Device info - registered values for API authentication
+// These are the registered device credentials required by the BBNL backend
 const DEVICE_INFO = {
-    ip_address: "192.168.101.110",
-    mac_address: "26:F2:AE:D8:3F:99",   // Reverted to registered MAC (to avoid "already registered" error)
+    ip_address: "103.5.132.130",
+    mac_address: "26:F2:AE:D8:3F:99",
     device_name: "rk3368_box_",
-    device_type: "FOFI_LG",
+    device_type: "FOFI_SAMSUNG",
     devslno: "FOFI20191129000336"
 };
 
@@ -183,24 +185,19 @@ function mapBBNLError(msg) {
 const DeviceInfo = {
     initializeDeviceInfo: function () {
         try {
-            if (typeof webapis !== 'undefined' && webapis.network) {
-                const ip = webapis.network.getIp();
-                // const mac = webapis.network.getMac();  // DISABLED: Don't auto-detect MAC
-
-                if (ip) DEVICE_INFO.ip_address = ip;
-
-                // IMPORTANT: Don't overwrite MAC address
-                // We're using the registered MAC: 26:F2:AE:D8:3F:99
-                // If you enable auto-detection, it will cause "User ID already registered" error
-
-                // if (mac) {
-                //     DEVICE_INFO.mac_address = mac;
-                    //     DEFAULT_HEADERS["devmac"] = mac;
-                // }
+            if (typeof webapis !== 'undefined') {
+                // Only detect device model name from TV
+                if (webapis.productinfo) {
+                    try {
+                        var model = webapis.productinfo.getModel ? webapis.productinfo.getModel() : null;
+                        if (model && model !== "NA") DEVICE_INFO.device_name = model;
+                    } catch (e) {
+                        console.warn("[DeviceInfo] Model detection failed:", e);
+                    }
+                }
             }
-            // Ensure default headers reflect the device MAC
-            DEFAULT_HEADERS["devmac"] = DEVICE_INFO.mac_address;
             console.log("[DeviceInfo] Initialized:", DEVICE_INFO);
+            console.log("[DeviceInfo] Headers - devmac:", DEFAULT_HEADERS["devmac"], "devslno:", DEFAULT_HEADERS["devslno"]);
         } catch (e) {
             console.warn("[DeviceInfo] Tizen WebAPIs not available, using defaults");
         }
@@ -356,7 +353,7 @@ const ChannelsAPI = {
             payload,
             {
                 "devmac": device.mac_address,  // FIXED: Use device MAC dynamically
-                "devslno": device.devslno || "FOFI20191129000336"
+                "devslno": device.devslno
             }
         );
 
@@ -409,8 +406,8 @@ const ChannelsAPI = {
         const payload = {
             userid: userid,
             mobile: mobile,
-            ip_address: device.ip_address || "192.168.101.110",
-            mac_address: ""  // Empty string as per new API format
+            ip_address: device.ip_address,
+            mac_address: device.mac_address
         };
 
         console.log("[ChannelsAPI] Getting Channel List with payload:", payload);
@@ -420,9 +417,8 @@ const ChannelsAPI = {
             API_ENDPOINTS.CHANNEL_LIST,
             payload,
             {
-                "devmac": "68:1D:EF:14:6C:21",
-                "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
-                "devslno": "FOFI20191129000336"
+                "devmac": device.mac_address,
+                "devslno": device.devslno
             }
         );
 
@@ -549,7 +545,7 @@ const ChannelsAPI = {
 
         const response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, {
             "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
+            "devslno": device.devslno
         });
 
         console.log("[ChannelsAPI] Language List Response:", response);
@@ -605,6 +601,9 @@ const ChannelsAPI = {
     playChannel: function (channel) {
         const url = this.getStreamUrl(channel);
         if (url) {
+            // Store the current page as referrer for back navigation
+            sessionStorage.setItem('playerReferrer', window.location.href);
+            
             const data = encodeURIComponent(JSON.stringify(channel));
             window.location.href = `player.html?data=${data}`;
         } else {
@@ -842,6 +841,82 @@ const AdsAPI = {
             displayarea: 'homepage',
             displaytype: 'multiple'
         });
+    },
+
+    /**
+     * Get Stream Ads for player page
+     * Shows ads alongside live TV playback
+     *
+     * Endpoint: /streamAds
+     * Method: POST
+     *
+     * Request Payload:
+     * {
+     *   "userid": "testiser1",
+     *   "mobile": "7800000001",
+     *   "ip_address": "192.168.101.110",
+     *   "mac_address": "26:F2:AE:D8:3F:99",
+     *   "grid": "3",
+     *   "chid": "202"
+     * }
+     *
+     * @param {String} chid - Channel ID for the current stream
+     * @param {String} grid - Grid/layout position (default "3")
+     * @returns {Promise<Array>} Array of stream ad objects, or empty array on error
+     */
+    getStreamAds: async function (chid, grid) {
+        const user = AuthAPI.getUserData();
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            if (user.userid) userid = user.userid;
+            else if (user.userId) userid = user.userId;
+            else if (user.id) userid = user.id;
+
+            if (user.mobile) mobile = user.mobile;
+            else if (user.phone) mobile = user.phone;
+        }
+
+        var device = DeviceInfo.getDeviceInfo();
+
+        var payload = {
+            userid: userid,
+            mobile: mobile,
+            ip_address: device.ip_address || DEVICE_INFO.ip_address,
+            mac_address: device.mac_address || DEVICE_INFO.mac_address,
+            grid: grid || "3",
+            chid: chid || ""
+        };
+
+        console.log("[AdsAPI] 📺 Fetching Stream Ads for chid:", chid);
+        console.log("[AdsAPI] 📦 Stream Ads Payload:", payload);
+
+        try {
+            var response = await fetch(API_ENDPOINTS.STREAM_ADS, {
+                method: "POST",
+                headers: DEFAULT_HEADERS,
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                console.warn("[AdsAPI] Stream Ads HTTP Error:", response.status);
+                return [];
+            }
+
+            var data = await response.json();
+            console.log("[AdsAPI] Stream Ads Response:", data);
+
+            if (data && data.status && data.status.err_code === 0 && data.body && Array.isArray(data.body)) {
+                console.log("[AdsAPI] Stream Ads loaded:", data.body.length);
+                return data.body;
+            }
+
+            return [];
+        } catch (error) {
+            console.error("[AdsAPI] Stream Ads error:", error.message);
+            return [];
+        }
     }
 };
 
@@ -878,7 +953,7 @@ const FeedbackAPI = {
 
         return await apiCall(API_ENDPOINTS.FEED_BACK, payload, {
             "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
+            "devslno": device.devslno
         });
     }
 };
@@ -900,7 +975,7 @@ const AppVersionAPI = {
         const payload = {
             userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
             mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
-            ip_address: device.ip_address || "192.168.101.110",
+            ip_address: device.ip_address,
             device_type: "",  // Empty string as per API format
             mac_address: "",  // Empty string as per API format
             device_name: "",  // Empty string as per API format
@@ -911,7 +986,7 @@ const AppVersionAPI = {
 
         return await apiCall(API_ENDPOINTS.APP_VERSION, payload, {
             "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
+            "devslno": device.devslno
         });
     }
 };
@@ -933,15 +1008,15 @@ const OTTAppsAPI = {
         const payload = {
             userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
             mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
-            ip_address: device.ip_address || "192.168.101.110",
-            mac: device.mac_address || "26:F2:AE:D8:3F:99"
+            ip_address: device.ip_address,
+            mac: device.mac_address
         };
 
         console.log("[OTTAppsAPI] Getting allowed apps:", payload);
 
         return await apiCall(API_ENDPOINTS.OTT_APPS, payload, {
             "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
+            "devslno": device.devslno
         });
     }
 };
@@ -963,7 +1038,7 @@ const AppLockAPI = {
         const payload = {
             userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
             mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
-            ip_address: device.ip_address || "192.168.101.110",
+            ip_address: device.ip_address,
             appversion: "1.0"
         };
 
@@ -971,7 +1046,70 @@ const AppLockAPI = {
 
         return await apiCall(API_ENDPOINTS.APP_LOCK, payload, {
             "devmac": device.mac_address,
-            "devslno": device.devslno || "FOFI20191129000336"
+            "devslno": device.devslno
+        });
+    }
+};
+
+// ==========================================
+// TRP DATA API
+// ==========================================
+const TRPDataAPI = {
+    /**
+     * Send TRP (Television Rating Point) data to BBNL server
+     * Used for analytics/viewership tracking
+     *
+     * Endpoint: /trpdata
+     * Method: POST
+     *
+     * @param {String} comment - Comment/tracking data (e.g. email)
+     * @returns {Promise<Object>} API response
+     */
+    sendTRPData: async function(comment) {
+        const user = AuthAPI.getUserData();
+
+        const payload = {
+            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            comment: comment || ""
+        };
+
+        console.log("[TRPDataAPI] Sending TRP data:", payload);
+
+        return await apiCall(API_ENDPOINTS.TRP_DATA, payload, {
+            "devmac": DEVICE_INFO.mac_address,
+            "devslno": DEVICE_INFO.devslno
+        });
+    }
+};
+
+// ==========================================
+// RAISE TICKET API
+// ==========================================
+const RaiseTicketAPI = {
+    /**
+     * Raise a support ticket to BBNL server
+     *
+     * Endpoint: /raiseTicket
+     * Method: POST
+     *
+     * @param {String} comment - Ticket description/comment
+     * @returns {Promise<Object>} API response
+     */
+    raiseTicket: async function(comment) {
+        const user = AuthAPI.getUserData();
+
+        const payload = {
+            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
+            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            comment: comment || ""
+        };
+
+        console.log("[RaiseTicketAPI] Raising ticket:", payload);
+
+        return await apiCall(API_ENDPOINTS.RAISE_TICKET, payload, {
+            "devmac": DEVICE_INFO.mac_address,
+            "devslno": DEVICE_INFO.devslno
         });
     }
 };
@@ -1026,6 +1164,12 @@ const BBNL_API = {
     // App Lock Methods
     checkAppLock: AppLockAPI.checkAppLock.bind(AppLockAPI),
 
+    // TRP Data Methods
+    sendTRPData: TRPDataAPI.sendTRPData.bind(TRPDataAPI),
+
+    // Raise Ticket Methods
+    raiseTicket: RaiseTicketAPI.raiseTicket.bind(RaiseTicketAPI),
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -1044,6 +1188,8 @@ if (typeof window !== 'undefined') {
     window.AppVersionAPI = AppVersionAPI;
     window.OTTAppsAPI = OTTAppsAPI;
     window.AppLockAPI = AppLockAPI;
+    window.TRPDataAPI = TRPDataAPI;
+    window.RaiseTicketAPI = RaiseTicketAPI;
     window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
 }
