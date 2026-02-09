@@ -43,6 +43,9 @@ window.onload = function () {
     showNetworkIP();
     showMacAddress();
 
+    // 4a. Listen for network changes to auto-update IP
+    startNetworkChangeListener();
+
     // 4. Add MOUSE Click Support for all focusable elements
     focusables.forEach(function (el, index) {
         console.log("Adding listeners to:", el.id || el.className);
@@ -163,6 +166,30 @@ function showMacAddress() {
     } catch (e) {
         console.error("MAC Fetch Error:", e);
         macText.innerText = "MAC: " + e.name;
+    }
+}
+
+/* NETWORK CHANGE LISTENER */
+function startNetworkChangeListener() {
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            webapis.network.addNetworkStateChangeListener(function (networkState) {
+                // networkState: 1=LAN_CABLE_ATTACHED, 2=LAN_CABLE_DETACHED,
+                //               3=LAN_CABLE_STATE_CHANGED, 4=WIFI_MODULE_STATE_CHANGED,
+                //               5=GATEWAY_CONNECTED, 6=GATEWAY_DISCONNECTED
+                console.log("[Network] State changed:", networkState);
+
+                // Small delay to let the new connection fully establish
+                setTimeout(function () {
+                    showNetworkIP();
+                    showMacAddress();
+                    console.log("[Network] IP and MAC refreshed after network change");
+                }, 2000);
+            });
+            console.log("[Network] Network change listener registered");
+        }
+    } catch (e) {
+        console.warn("[Network] Could not register network listener:", e.message);
     }
 }
 

@@ -309,8 +309,40 @@ const AuthAPI = {
         return !!localStorage.getItem("bbnl_user");
     },
 
-    logout: function () {
+    logout: async function () {
+        // Call server logout API first
+        var user = this.getUserData();
+        var device = DeviceInfo.getDeviceInfo();
+
+        var userid = DEFAULT_USER.userid;
+        var mobile = DEFAULT_USER.mobile;
+
+        if (user) {
+            if (user.userid) userid = user.userid;
+            if (user.mobile) mobile = user.mobile;
+        }
+
+        var payload = {
+            userid: userid,
+            mobile: mobile,
+            mac_address: device.mac_address,
+            device_name: device.device_name,
+            ip_address: device.ip_address,
+            device_type: device.device_type
+        };
+
+        console.log("[AuthAPI] Logout Payload:", payload);
+
+        try {
+            var response = await apiCall(API_ENDPOINTS.USER_LOGOUT, payload);
+            console.log("[AuthAPI] Logout Response:", response);
+        } catch (e) {
+            console.warn("[AuthAPI] Logout API error (proceeding with local cleanup):", e.message);
+        }
+
+        // Always clear local session and redirect regardless of API response
         localStorage.removeItem("bbnl_user");
+        sessionStorage.clear();
         window.location.href = "login.html";
     },
 

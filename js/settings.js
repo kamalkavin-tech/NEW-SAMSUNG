@@ -147,18 +147,19 @@ function handleEnter() {
 /**
  * Handle logout - show confirmation and clear session
  */
-function handleLogout() {
+async function handleLogout() {
     var confirmLogout = confirm('Are you sure you want to logout?');
     if (confirmLogout) {
         console.log("[Settings] User confirmed logout");
-        // Clear session using API
+        // Call server logout API then clear local session
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
-            BBNL_API.logout();
+            await BBNL_API.logout();
         } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
-            AuthAPI.logout();
+            await AuthAPI.logout();
         } else {
             // Fallback: manually clear and redirect
             localStorage.removeItem('bbnl_user');
+            sessionStorage.clear();
             window.location.href = 'login.html';
         }
     }
