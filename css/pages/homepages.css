@@ -124,10 +124,10 @@ body.channels-page {
 }
 
 .filter-chip.active {
-    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%) !important;
-    color: #fff !important;
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%) !important;
+    color: #000 !important;
     font-weight: 600;
-    box-shadow: 0 4px 12px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
 }
 
 .filter-chip:hover,
@@ -171,6 +171,8 @@ body.channels-page {
     grid-template-columns: repeat(4, 1fr) !important;
     gap: 28px !important;
     margin-bottom: 50px;
+    overflow: visible;
+    padding: 16px;
 }
 
 /* Channel Group - Enhanced spacing */
@@ -185,7 +187,7 @@ body.channels-page {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
     border-radius: 18px !important;
     padding: 0 !important;
-    overflow: hidden;
+    overflow: visible;
     cursor: pointer;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
@@ -195,11 +197,12 @@ body.channels-page {
 
 .channel-card:hover,
 .channel-card:focus {
-    transform: translateY(-6px) scale(1.02) !important;
-    border-color: #3b5cff !important;
-    box-shadow: 0 12px 32px rgba(59, 92, 255, 0.35) !important;
+    transform: translateY(-8px) scale(1.05) !important;
+    border-color: #fff !important;
+    box-shadow: 0 0 0 3px #fff, 0 12px 36px rgba(255, 255, 255, 0.4) !important;
     outline: none !important;
-    background: linear-gradient(135deg, rgba(59, 92, 255, 0.15) 0%, rgba(80, 128, 255, 0.05) 100%) !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+    z-index: 10;
 }
 
 /* Channel Icon Container - Fixed 3:2 ratio to prevent elongation */
@@ -212,7 +215,7 @@ body.channels-page {
     justify-content: center;
     position: relative;
     overflow: hidden;
-    border-radius: 16px !important;
+    border-radius: 16px 16px 0 0 !important;
     padding: 20px;
 }
 
@@ -400,15 +403,16 @@ body.channels-page {
    ======================================== */
 
 .content-section {
-    padding: 5px 15px 10px 15px;
+    padding: 10px 20px 15px 20px;
+    overflow: visible;
 }
 
 .content-section:first-of-type {
-    padding-top: 5px;
+    padding-top: 10px;
 }
 
 .content-section:last-child {
-    padding-bottom: 10px;
+    padding-bottom: 20px;
 }
 
 .section-title {
@@ -439,7 +443,8 @@ body.channels-page {
 
 /* Languages section when it's the only content on home page */
 .languages-section {
-    padding: 5px 15px 10px 15px;
+    padding: 10px 20px 20px 20px;
+    overflow: visible;
 }
 
 .languages-section .section-title {
@@ -449,8 +454,10 @@ body.channels-page {
 .languages-section .channels-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 20px !important;
-    margin-bottom: 0;
+    gap: 24px !important;
+    margin-bottom: 10px;
+    overflow: visible;
+    padding: 16px;
 }
 
 .language-pill-home {
@@ -488,8 +495,8 @@ body.channels-page {
 .app-card:hover,
 .app-card:focus {
     transform: translateY(-8px);
-    border-color: #3b5cff;
-    box-shadow: 0 8px 24px rgba(59, 92, 255, 0.4);
+    border-color: #fff;
+    box-shadow: 0 8px 24px rgba(255, 255, 255, 0.4);
     outline: none;
 }
 
@@ -619,7 +626,7 @@ body.channels-page {
 }
 
 .darkmode-toggle:focus .toggle-switch {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
 }
 
 .toggle-label {
@@ -679,7 +686,7 @@ body.channels-page {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.5);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
 
 .network-btn .network-icon {
@@ -757,7 +764,7 @@ body.channels-page {
 }
 
 .network-option:focus {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
 }
 
 .network-option-icon {
@@ -824,7 +831,7 @@ body.channels-page {
 .settings-btn:focus {
     background: rgba(255, 255, 255, 0.2);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
 }
 
 .settings-btn svg {
@@ -837,17 +844,17 @@ body.channels-page {
    ======================================== */
 .focusable:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
 }
 
 .menu-btn:focus,
 .search-input:focus {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
 }
 
 .channel-card:focus,
 .app-card:focus {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 12px 32px rgba(59, 92, 255, 0.35) !important;
+    box-shadow: 0 0 0 3px #fff, 0 12px 32px rgba(255, 255, 255, 0.35) !important;
 }
 
 /* Light Mode Theme Variables */
@@ -891,8 +898,8 @@ body.light-mode .channel-card:hover,
 body.light-mode .channel-card:focus,
 body.light-mode .app-card:hover,
 body.light-mode .app-card:focus {
-    background: rgba(59, 92, 255, 0.1) !important;
-    border-color: #3b5cff !important;
+    background: rgba(255, 255, 255, 0.8) !important;
+    border-color: #fff !important;
 }
 
 body.light-mode .card-title-bottom {
@@ -1021,7 +1028,7 @@ body.light-mode .app-label {
     }
 
     .content-section {
-        padding: 5px 15px 10px 15px;
+        padding: 10px 20px 15px 20px;
     }
 
     body.channels-page {
@@ -1096,14 +1103,14 @@ body.light-mode .app-label {
 }
 
 .exit-btn-no {
-    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%);
-    color: #fff;
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+    color: #000;
 }
 
 .exit-btn-no:hover,
 .exit-btn-no:focus {
     transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(59, 92, 255, 0.4);
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.4);
     outline: none;
 }
 
@@ -1217,8 +1224,8 @@ body.light-mode .exit-btn-yes {
     align-items: center;
     gap: 10px;
     padding: 16px 36px;
-    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%);
-    color: #fff;
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+    color: #000;
     border: none;
     border-radius: 14px;
     font-size: 17px;
@@ -1232,7 +1239,7 @@ body.light-mode .exit-btn-yes {
 .applock-btn:hover,
 .applock-btn:focus {
     transform: scale(1.03);
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 8px 24px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 24px rgba(255, 255, 255, 0.3);
     outline: none;
 }
 

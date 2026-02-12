@@ -47,26 +47,26 @@
 /* Menu and Settings buttons */
 .menu-btn:focus,
 .settings-btn:focus {
-    background: rgba(59, 92, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.3) !important;
     transform: scale(1.1);
     border-radius: 12px;
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.5);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 /* Back button */
 .back-btn:focus {
     color: #fff !important;
-    background: rgba(59, 92, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.2) !important;
     border-radius: 8px;
     transform: translateX(-3px);
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.4);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
 }
 
 /* Theme toggle button */
 .theme-toggle-btn:focus {
-    background: rgba(59, 92, 255, 0.4) !important;
+    background: rgba(255, 255, 255, 0.4) !important;
     transform: scale(1.1);
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
 }
 
 /* General button focus - visible white border for all buttons */
@@ -82,18 +82,18 @@ button.focusable:focus {
 /* Channel cards */
 .channel-card:focus {
     transform: translateY(-8px) scale(1.03) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 15px 40px rgba(59, 92, 255, 0.4) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 15px 40px rgba(255, 255, 255, 0.4) !important;
     z-index: 10;
 }
 
 /* App cards */
 .app-card:focus {
     transform: translateY(-8px) scale(1.03) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 15px 40px rgba(59, 92, 255, 0.4) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 15px 40px rgba(255, 255, 255, 0.4) !important;
     z-index: 10;
 }
 
@@ -101,9 +101,9 @@ button.focusable:focus {
 .view-all:focus,
 .app-card.view-all:focus {
     transform: translateY(-8px) scale(1.05) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 15px 40px rgba(59, 92, 255, 0.4) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 15px 40px rgba(255, 255, 255, 0.4) !important;
 }
 
 /* ========================================
@@ -112,17 +112,17 @@ button.focusable:focus {
 
 /* Filter chips in sidebar */
 .filter-chip:focus {
-    background: rgba(59, 92, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.3) !important;
     color: #fff !important;
     transform: translateX(8px) scale(1.02) !important;
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.5),
-                0 4px 15px rgba(59, 92, 255, 0.3) !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5),
+                0 4px 15px rgba(255, 255, 255, 0.3) !important;
 }
 
 .filter-chip.active:focus {
     transform: translateX(8px) scale(1.02) !important;
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5),
-                0 6px 20px rgba(59, 92, 255, 0.5) !important;
+                0 6px 20px rgba(255, 255, 255, 0.5) !important;
 }
 
 /* ========================================
@@ -131,16 +131,16 @@ button.focusable:focus {
 
 /* Side menu items */
 .menu-item:focus {
-    background: linear-gradient(90deg, rgba(59, 92, 255, 0.3) 0%, transparent 100%) !important;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%) !important;
     color: #fff !important;
     transform: translateX(10px);
-    border-left: 4px solid #3b5cff;
+    border-left: 4px solid #ffffff;
     padding-left: 20px;
 }
 
 .menu-item.active:focus {
-    background: linear-gradient(90deg, rgba(59, 92, 255, 0.5) 0%, rgba(59, 92, 255, 0.2) 100%) !important;
-    box-shadow: 0 0 20px rgba(59, 92, 255, 0.3);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 100%) !important;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
 }
 
 /* ========================================
@@ -190,22 +190,22 @@ button.focusable:focus {
 
 /* Sidebar items */
 .sidebar-item:focus {
-    background: linear-gradient(90deg, rgba(59, 92, 255, 0.4) 0%, transparent 100%) !important;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%) !important;
     color: #fff !important;
     transform: translateX(5px);
-    border-left: 3px solid #3b5cff;
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.3);
+    border-left: 3px solid #ffffff;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
 
 .sidebar-item.active:focus {
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.5),
-                inset 0 0 20px rgba(59, 92, 255, 0.2) !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5),
+                inset 0 0 20px rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Toggle switches */
 .toggle-switch:focus,
 .toggle-switch input:focus + .slider {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5) !important;
     border-radius: 20px;
 }
 
@@ -217,9 +217,9 @@ button.focusable:focus {
 
 /* Info cards in settings */
 .info-card:focus {
-    border-color: #3b5cff !important;
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.4),
-                0 8px 25px rgba(59, 92, 255, 0.2) !important;
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4),
+                0 8px 25px rgba(255, 255, 255, 0.2) !important;
 }
 
 /* ========================================
@@ -262,15 +262,15 @@ a.focusable:focus,
 .plan-card:focus,
 .subscription-card:focus {
     transform: translateY(-5px) scale(1.02) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 15px 40px rgba(59, 92, 255, 0.3) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 15px 40px rgba(255, 255, 255, 0.3) !important;
 }
 
 /* Notification items */
 .notification-item:focus {
-    background: rgba(59, 92, 255, 0.15) !important;
-    border-left: 3px solid #3b5cff;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-left: 3px solid #ffffff;
     transform: translateX(5px);
 }
 
@@ -278,9 +278,9 @@ a.focusable:focus,
 .favorite-item:focus,
 .favorite-card:focus {
     transform: translateY(-5px) scale(1.02) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 10px 30px rgba(59, 92, 255, 0.3) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 10px 30px rgba(255, 255, 255, 0.3) !important;
 }
 
 /* ========================================
@@ -315,9 +315,9 @@ textarea.focusable:focus {
 .ott-card:focus,
 .ott-app-card:focus {
     transform: translateY(-8px) scale(1.05) !important;
-    border: 2px solid #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                0 15px 40px rgba(59, 92, 255, 0.4) !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 15px 40px rgba(255, 255, 255, 0.4) !important;
 }
 
 /* ========================================
@@ -352,12 +352,12 @@ textarea.focusable:focus {
 
 @keyframes focusPulse {
     0%, 100% {
-        box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4),
-                    0 10px 30px rgba(59, 92, 255, 0.3);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                    0 10px 30px rgba(255, 255, 255, 0.3);
     }
     50% {
-        box-shadow: 0 0 0 5px rgba(59, 92, 255, 0.2),
-                    0 15px 40px rgba(59, 92, 255, 0.4);
+        box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.2),
+                    0 15px 40px rgba(255, 255, 255, 0.4);
     }
 }
 

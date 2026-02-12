@@ -4,6 +4,11 @@
     box-sizing: border-box;
 }
 
+/* Global smooth scrolling for all scrollable containers */
+html {
+    scroll-behavior: smooth;
+}
+
 body {
     width: 1920px;
     height: 1080px;
@@ -13,6 +18,8 @@ body {
     overflow-x: hidden;
     overflow-y: auto;
     transition: background 0.3s, color 0.3s;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ==========================================
@@ -31,7 +38,7 @@ body {
 
 .focusable:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 0 20px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
     transform: scale(1.02);
 }
 
@@ -39,9 +46,9 @@ body {
 button.focusable:focus,
 .btn:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 4px 12px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 4px 12px rgba(255, 255, 255, 0.3);
     transform: scale(1.02);
-    background: rgba(59, 92, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* Card focus styles */
@@ -50,8 +57,8 @@ button.focusable:focus,
 .app-card:focus,
 .movie-card:focus {
     outline: none;
-    border-color: #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5), 0 8px 24px rgba(59, 92, 255, 0.35);
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 24px rgba(255, 255, 255, 0.35);
     transform: translateY(-4px) scale(1.02);
 }
 
@@ -60,8 +67,8 @@ input.focusable:focus,
 select.focusable:focus,
 textarea.focusable:focus {
     outline: none;
-    border-color: #3b5cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.3);
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
 
 /* Navigation item focus */
@@ -69,11 +76,11 @@ textarea.focusable:focus {
 .sidebar-item:focus,
 .filter-chip:focus {
     outline: none;
-    background: rgba(59, 92, 255, 0.2) !important;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.4);
+    background: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
 }
 
 /* Active state for selected items */
 .focusable.active:focus {
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.6), 0 4px 16px rgba(59, 92, 255, 0.4);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6), 0 4px 16px rgba(255, 255, 255, 0.4);
 }

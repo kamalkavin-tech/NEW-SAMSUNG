@@ -54,7 +54,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" class="search-input focusable" tabindex="0" placeholder="Search for movies, TV shows..." id="searchInput">
+                <input type="tel" class="search-input focusable" tabindex="0" placeholder="Enter Channel Number..." id="searchInput" inputmode="numeric" pattern="[0-9]*">
             </div>
         </div>
         <div class="header-right">
@@ -133,6 +133,153 @@
         </section>
 
     </main>
+
+    <!-- Error Popup - Failed to Load Channels -->
+    <div class="error-popup-overlay" id="failedLoadPopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="320" height="200" viewBox="0 0 320 200">
+                    <!-- Monitor -->
+                    <rect x="80" y="15" width="160" height="105" rx="10" fill="#ffffff" stroke="#e0e0e0" stroke-width="2"/>
+                    <rect x="80" y="15" width="160" height="25" rx="10" fill="#2d6a4f"/>
+                    <rect x="80" y="30" width="160" height="10" fill="#2d6a4f"/>
+                    <text x="160" y="33" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">FAILED TO LOAD CHANNELS</text>
+                    <!-- Monitor screen -->
+                    <rect x="95" y="50" width="130" height="55" rx="4" fill="#e8e8e8"/>
+                    <text x="160" y="72" text-anchor="middle" fill="#888" font-size="10">No channels</text>
+                    <text x="160" y="86" text-anchor="middle" fill="#888" font-size="10">available</text>
+                    <!-- Warning triangle -->
+                    <circle cx="210" cy="45" r="12" fill="#f5a623"/>
+                    <text x="210" y="50" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">!</text>
+                    <!-- Monitor stand -->
+                    <rect x="145" y="120" width="30" height="8" fill="#ccc" rx="2"/>
+                    <rect x="130" y="128" width="60" height="5" fill="#ddd" rx="2"/>
+                    <!-- Dog (left) -->
+                    <ellipse cx="65" cy="155" rx="28" ry="22" fill="#c8913e"/>
+                    <circle cx="65" cy="130" r="18" fill="#c8913e"/>
+                    <ellipse cx="52" cy="120" rx="7" ry="10" fill="#c8913e"/>
+                    <ellipse cx="78" cy="120" rx="7" ry="10" fill="#c8913e"/>
+                    <circle cx="58" cy="128" r="3" fill="#333"/>
+                    <circle cx="72" cy="128" r="3" fill="#333"/>
+                    <ellipse cx="65" cy="135" rx="4" ry="3" fill="#333"/>
+                    <path d="M58,140 Q65,146 72,140" stroke="#333" stroke-width="1.5" fill="none"/>
+                    <!-- Cat (right) -->
+                    <ellipse cx="255" cy="155" rx="25" ry="22" fill="#d48a3e"/>
+                    <circle cx="255" cy="130" r="16" fill="#d48a3e"/>
+                    <polygon points="240,120 244,108 250,120" fill="#d48a3e"/>
+                    <polygon points="260,120 266,108 270,120" fill="#d48a3e"/>
+                    <circle cx="248" cy="128" r="3" fill="#333"/>
+                    <circle cx="262" cy="128" r="3" fill="#333"/>
+                    <ellipse cx="255" cy="134" rx="3" ry="2" fill="#ff9999"/>
+                    <!-- Cat paws holding cable -->
+                    <line x1="240" y1="150" x2="225" y2="135" stroke="#666" stroke-width="2"/>
+                    <circle cx="225" cy="135" r="4" fill="#666"/>
+                </svg>
+            </div>
+            <h2 class="error-popup-title">Failed to Load Channels</h2>
+            <p class="error-popup-message">Please Check your network and try again</p>
+            <button class="error-popup-btn focusable" id="retryLoadBtn" tabindex="0">Try Again</button>
+        </div>
+    </div>
+
+    <!-- Error Popup - Login Required -->
+    <div class="error-popup-overlay" id="loginRequiredPopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="280" height="180" viewBox="0 0 280 180">
+                    <!-- Monitor -->
+                    <rect x="60" y="10" width="160" height="105" rx="10" fill="#fff8ee" stroke="#e0d0b0" stroke-width="2"/>
+                    <text x="140" y="30" text-anchor="middle" fill="#2d6a4f" font-size="13" font-weight="bold">LOGIN REQUIRED</text>
+                    <!-- Mail icon -->
+                    <rect x="85" y="50" width="30" height="22" rx="3" fill="#4a90d9" stroke="#3a7abd" stroke-width="1"/>
+                    <polyline points="85,50 100,64 115,50" fill="none" stroke="#fff" stroke-width="2"/>
+                    <!-- Warning icon -->
+                    <circle cx="140" cy="60" r="10" fill="#f5a623"/>
+                    <text x="140" y="65" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">!</text>
+                    <!-- Password field -->
+                    <rect x="100" y="75" width="80" height="18" rx="3" fill="#fff" stroke="#ccc" stroke-width="1"/>
+                    <text x="110" y="88" fill="#666" font-size="10">****</text>
+                    <!-- X icon -->
+                    <circle cx="190" cy="60" r="10" fill="#e74c3c"/>
+                    <line x1="186" y1="56" x2="194" y2="64" stroke="#fff" stroke-width="2"/>
+                    <line x1="194" y1="56" x2="186" y2="64" stroke="#fff" stroke-width="2"/>
+                    <!-- Login button -->
+                    <rect x="120" y="95" width="40" height="14" rx="3" fill="#4a90d9"/>
+                    <text x="140" y="105" text-anchor="middle" fill="#fff" font-size="8">Log in</text>
+                    <!-- Monitor stand -->
+                    <rect x="125" y="115" width="30" height="6" fill="#ccc" rx="2"/>
+                    <rect x="115" y="121" width="50" height="4" fill="#ddd" rx="2"/>
+                    <!-- Dog (left) -->
+                    <ellipse cx="48" cy="145" rx="25" ry="20" fill="#d4a534"/>
+                    <circle cx="48" cy="122" r="16" fill="#d4a534"/>
+                    <ellipse cx="37" cy="112" rx="6" ry="9" fill="#d4a534"/>
+                    <ellipse cx="59" cy="112" rx="6" ry="9" fill="#d4a534"/>
+                    <circle cx="42" cy="120" r="3" fill="#333"/>
+                    <circle cx="54" cy="120" r="3" fill="#333"/>
+                    <ellipse cx="48" cy="127" rx="4" ry="3" fill="#333"/>
+                    <path d="M42,132 Q48,137 54,132" stroke="#f06292" stroke-width="1.5" fill="none"/>
+                    <!-- Cat (right) -->
+                    <ellipse cx="232" cy="145" rx="22" ry="20" fill="#d48a3e"/>
+                    <circle cx="232" cy="122" r="14" fill="#d48a3e"/>
+                    <polygon points="220,115 223,103 228,115" fill="#d48a3e"/>
+                    <polygon points="236,115 241,103 244,115" fill="#d48a3e"/>
+                    <circle cx="226" cy="120" r="3" fill="#333"/>
+                    <circle cx="238" cy="120" r="3" fill="#333"/>
+                    <ellipse cx="232" cy="126" rx="3" ry="2" fill="#ff9999"/>
+                </svg>
+            </div>
+            <h2 class="error-popup-title">Login Required</h2>
+            <p class="error-popup-message">Please login to access your channels</p>
+            <button class="error-popup-btn focusable" id="retryLoginBtn" tabindex="0">Try Again</button>
+        </div>
+    </div>
+
+    <!-- Error Popup - No Channels Available -->
+    <div class="error-popup-overlay" id="noChannelsPopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="240" height="180" viewBox="0 0 240 180">
+                    <!-- TV Monitor -->
+                    <rect x="55" y="15" width="130" height="90" rx="8" fill="#f5f5f5" stroke="#ddd" stroke-width="2"/>
+                    <rect x="65" y="25" width="110" height="65" rx="4" fill="#e8e8e8"/>
+                    <text x="120" y="53" text-anchor="middle" fill="#999" font-size="10">No channels</text>
+                    <text x="120" y="67" text-anchor="middle" fill="#999" font-size="10">available</text>
+                    <!-- TV Antenna -->
+                    <line x1="100" y1="15" x2="85" y2="2" stroke="#888" stroke-width="2"/>
+                    <line x1="140" y1="15" x2="155" y2="2" stroke="#888" stroke-width="2"/>
+                    <!-- TV Stand -->
+                    <rect x="100" y="105" width="40" height="6" fill="#ccc" rx="2"/>
+                    <rect x="90" y="111" width="60" height="4" fill="#ddd" rx="2"/>
+                    <!-- Cat -->
+                    <ellipse cx="195" cy="145" rx="28" ry="24" fill="#333"/>
+                    <circle cx="195" cy="118" r="18" fill="#333"/>
+                    <!-- Cat ears -->
+                    <polygon points="180,108 183,92 190,108" fill="#333"/>
+                    <polygon points="200,108 207,92 210,108" fill="#333"/>
+                    <polygon points="183,105 185,96 189,105" fill="#ffb6c1"/>
+                    <polygon points="201,105 205,96 207,105" fill="#ffb6c1"/>
+                    <!-- Cat face -->
+                    <circle cx="188" cy="115" r="3" fill="#4CAF50"/>
+                    <circle cx="202" cy="115" r="3" fill="#4CAF50"/>
+                    <ellipse cx="195" cy="122" rx="3" ry="2" fill="#e74c3c"/>
+                    <path d="M189,126 Q195,130 201,126" stroke="#fff" stroke-width="1.5" fill="none"/>
+                    <!-- Cat whiskers -->
+                    <line x1="175" y1="120" x2="187" y2="121" stroke="#666" stroke-width="1"/>
+                    <line x1="175" y1="124" x2="187" y2="123" stroke="#666" stroke-width="1"/>
+                    <line x1="203" y1="121" x2="215" y2="120" stroke="#666" stroke-width="1"/>
+                    <line x1="203" y1="123" x2="215" y2="124" stroke="#666" stroke-width="1"/>
+                    <!-- Cat tail -->
+                    <path d="M220,140 Q235,130 228,115" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                    <!-- Cat paw on cable -->
+                    <line x1="180" y1="145" x2="165" y2="120" stroke="#666" stroke-width="2"/>
+                    <circle cx="165" cy="118" r="3" fill="#555"/>
+                </svg>
+            </div>
+            <h2 class="error-popup-title">No Channels Available</h2>
+            <p class="error-popup-message">Please Check your network and try again</p>
+            <button class="error-popup-btn focusable" id="retryNoChannelsBtn" tabindex="0">Try Again</button>
+        </div>
+    </div>
 
     <!-- App Lock Screen Overlay -->
     <div class="applock-overlay" id="appLockOverlay" style="display: none;">

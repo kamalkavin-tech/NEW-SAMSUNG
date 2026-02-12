@@ -1,9 +1,27 @@
 /* ================================
    BBNL SETTINGS PAGE CONTROLLER
-   About App & Device Info
+   Zone-based Remote Navigation
+
+   Flow:
+   ┌──────────────────────────────────────────────┐
+   │ [← Back]   (UP from sidebar/content)         │
+   ├────────────┬─────────────────────────────────┤
+   │ SIDEBAR    │  CONTENT (active panel)          │
+   │ [About App]──RIGHT──► [Check Update btn]      │
+   │ [Device]   │  ◄LEFT── content items           │
+   │            │                                  │
+   │ [Logout]   │                                  │
+   └────────────┴─────────────────────────────────┘
+
+   BACK BTN: DOWN/RIGHT = sidebar, ENTER = home
+   SIDEBAR:  UP = back btn (from first), DOWN = next, RIGHT = content, LEFT = back btn
+             ENTER on About/Device = switch + enter content
+             ENTER on Logout = logout
+   CONTENT:  UP/DOWN = navigate items, LEFT = back to sidebar
+   BACK KEY: always go to home.html
    ================================ */
 
-// Check authentication - redirect to login if not logged in
+// Check authentication
 (function checkAuth() {
     var userData = localStorage.getItem("bbnl_user");
     if (!userData) {
@@ -13,22 +31,28 @@
     }
 })();
 
-var focusables = [];
-var currentFocus = 0;
+// Navigation state
+var settingsNav = {
+    zone: 'sidebar',           // 'sidebar' or 'content'
+    sidebarIndex: 0,           // Current sidebar item index
+    contentIndex: 0            // Current content focusable index
+};
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
 
 window.onload = function () {
     console.log("=== BBNL Settings Page Initialized ===");
 
-    // Initialize Dark Mode from localStorage
+    // Initialize Dark Mode
     initDarkMode();
 
-    // Initialize sidebar navigation
+    // Initialize sidebar click handlers
     initializeSidebar();
 
-    // Load About App data (version info)
+    // Load data
     loadAboutAppInfo();
-
-    // Load Device Info data
     loadDeviceInfoPanel();
 
     // Setup Check Update button
@@ -43,236 +67,282 @@ window.onload = function () {
         logoutBtn.addEventListener('click', handleLogout);
     }
 
-    // Get all focusable elements
-    focusables = document.querySelectorAll(".focusable");
-    console.log("Found focusable elements:", focusables.length);
-
-    // Set initial focus on "About App" sidebar button (not Back button)
-    var aboutAppBtn = document.querySelector('.sidebar-item[data-section="about"]');
-    if (aboutAppBtn) {
-        aboutAppBtn.focus();
-        // Update currentFocus index to match
-        for (var i = 0; i < focusables.length; i++) {
-            if (focusables[i] === aboutAppBtn) {
-                currentFocus = i;
-                console.log("Initial focus set to About App button, index:", i);
-                break;
-            }
-        }
-    } else if (focusables.length > 0) {
-        currentFocus = 0;
-        focusables[0].focus();
+    // Set initial focus on "About App" sidebar item
+    var sidebarItems = getSidebarItems();
+    if (sidebarItems.length > 0) {
+        sidebarItems[0].focus();
+        settingsNav.zone = 'sidebar';
+        settingsNav.sidebarIndex = 0;
+        console.log("[NAV] Initial focus: About App");
     }
 
-    // Add mouse support
-    focusables.forEach(function (el, index) {
-        el.addEventListener("mouseenter", function () {
-            currentFocus = index;
-            el.focus();
-        });
-    });
-
-    // Register All Remote Keys (supports all Samsung remote types)
+    // Register remote keys
     if (typeof RemoteKeys !== 'undefined') {
         RemoteKeys.registerAllKeys();
     } else {
         try {
             var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
             tizen.tvinputdevice.registerKeyBatch(keys);
-            console.log("Tizen keys registered (fallback)");
         } catch (e) {
             console.log("Not on Tizen");
         }
     }
 };
 
-// Keyboard navigation
+// ==========================================
+// HELPERS - Get elements
+// ==========================================
+
+function getSidebarItems() {
+    return Array.from(document.querySelectorAll('.sidebar-item'));
+}
+
+function getContentFocusables() {
+    // Get focusable elements ONLY inside the active content panel
+    var activePanel = document.querySelector('.content-panel.active');
+    if (!activePanel) return [];
+    return Array.from(activePanel.querySelectorAll('.focusable'));
+}
+
+// Focus sidebar item and update state
+function focusSidebarItem(index) {
+    var items = getSidebarItems();
+    if (index < 0) index = 0;
+    if (index >= items.length) index = items.length - 1;
+    if (items[index]) {
+        items[index].focus();
+        settingsNav.zone = 'sidebar';
+        settingsNav.sidebarIndex = index;
+
+        // Auto-switch panel when navigating sidebar (only for section items)
+        var section = items[index].getAttribute('data-section');
+        if (section) {
+            switchSection(section);
+        }
+
+        console.log('[NAV] Sidebar focused:', index);
+        return true;
+    }
+    return false;
+}
+
+// Focus content item and update state
+function focusContentItem(index) {
+    var items = getContentFocusables();
+    if (items.length === 0) return false;
+    if (index < 0) index = 0;
+    if (index >= items.length) index = items.length - 1;
+    if (items[index]) {
+        items[index].focus();
+        settingsNav.zone = 'content';
+        settingsNav.contentIndex = index;
+        items[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        console.log('[NAV] Content focused:', index);
+        return true;
+    }
+    return false;
+}
+
+// Focus back button and update state
+function focusBackButton() {
+    var backBtn = document.querySelector('.settings-back-header .back-btn');
+    if (backBtn) {
+        backBtn.focus();
+        settingsNav.zone = 'back';
+        console.log('[NAV] Back button focused');
+    }
+}
+
+// ==========================================
+// KEY HANDLER
+// ==========================================
+
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     e.preventDefault();
 
-    console.log("Settings Key pressed:", code);
+    console.log("[Settings] Key:", code, "Zone:", settingsNav.zone);
 
-    if (code === 10009) { // Back
+    // BACK key - always go home
+    if (code === 10009) {
         window.location.href = 'home.html';
         return;
     }
 
-    switch(code) {
-        case 37: // Left
-            moveFocusHorizontal(-1);
-            break;
-        case 39: // Right
-            moveFocusHorizontal(1);
-            break;
+    switch (code) {
         case 38: // UP
-            moveFocusVertical(-1);
+            handleUp();
             break;
         case 40: // DOWN
-            moveFocusVertical(1);
+            handleDown();
             break;
-        case 13: // Enter
+        case 37: // LEFT
+            handleLeft();
+            break;
+        case 39: // RIGHT
+            handleRight();
+            break;
+        case 13: // ENTER
             handleEnter();
             break;
     }
 });
 
+// ==========================================
+// NAVIGATION - UP
+// ==========================================
+
+function handleUp() {
+    if (settingsNav.zone === 'back') {
+        // Already at back button, stay
+        return;
+    }
+    if (settingsNav.zone === 'sidebar') {
+        // UP in sidebar: previous item, or go to back button from first item
+        if (settingsNav.sidebarIndex > 0) {
+            focusSidebarItem(settingsNav.sidebarIndex - 1);
+        } else {
+            // At first sidebar item: go to back button
+            focusBackButton();
+        }
+    }
+    else if (settingsNav.zone === 'content') {
+        // UP in content: previous focusable, or back to sidebar from first item
+        if (settingsNav.contentIndex > 0) {
+            focusContentItem(settingsNav.contentIndex - 1);
+        } else {
+            focusSidebarItem(settingsNav.sidebarIndex);
+        }
+    }
+}
+
+// ==========================================
+// NAVIGATION - DOWN
+// ==========================================
+
+function handleDown() {
+    if (settingsNav.zone === 'back') {
+        // DOWN from back button: go to first sidebar item
+        focusSidebarItem(0);
+        return;
+    }
+    if (settingsNav.zone === 'sidebar') {
+        // DOWN in sidebar: next item
+        var items = getSidebarItems();
+        if (settingsNav.sidebarIndex < items.length - 1) {
+            focusSidebarItem(settingsNav.sidebarIndex + 1);
+        }
+    }
+    else if (settingsNav.zone === 'content') {
+        // DOWN in content: next focusable
+        var contentItems = getContentFocusables();
+        if (settingsNav.contentIndex < contentItems.length - 1) {
+            focusContentItem(settingsNav.contentIndex + 1);
+        }
+    }
+}
+
+// ==========================================
+// NAVIGATION - LEFT
+// ==========================================
+
+function handleLeft() {
+    if (settingsNav.zone === 'back') {
+        // Already at back button, do nothing
+        return;
+    }
+    if (settingsNav.zone === 'sidebar') {
+        // LEFT from sidebar: go to back button
+        focusBackButton();
+    }
+    else if (settingsNav.zone === 'content') {
+        // LEFT from content: go back to sidebar
+        console.log('[LEFT] Content → Sidebar');
+        focusSidebarItem(settingsNav.sidebarIndex);
+    }
+}
+
+// ==========================================
+// NAVIGATION - RIGHT
+// ==========================================
+
+function handleRight() {
+    if (settingsNav.zone === 'back') {
+        // RIGHT from back button: go to first sidebar item
+        focusSidebarItem(0);
+        return;
+    }
+    if (settingsNav.zone === 'sidebar') {
+        // RIGHT from sidebar: enter content area
+        var contentItems = getContentFocusables();
+        if (contentItems.length > 0) {
+            console.log('[RIGHT] Sidebar → Content');
+            focusContentItem(0);
+        } else {
+            console.log('[RIGHT] No focusable content in this panel');
+        }
+    }
+    else if (settingsNav.zone === 'content') {
+        // Already in content, do nothing
+        console.log('[RIGHT] Already in content');
+    }
+}
+
+// ==========================================
+// NAVIGATION - ENTER
+// ==========================================
+
 function handleEnter() {
-    var el = focusables[currentFocus];
-    if (!el) return;
+    var active = document.activeElement;
+    if (!active) return;
+
+    console.log('[ENTER] Element:', active.className, active.id);
+
+    // Back button
+    if (active.classList.contains('back-btn')) {
+        window.location.href = 'home.html';
+        return;
+    }
+
+    // Logout button
+    if (active.id === 'logoutBtn' || active.classList.contains('logout-btn')) {
+        handleLogout();
+        return;
+    }
+
+    // Sidebar item with data-section: switch section and enter content
+    if (active.classList.contains('sidebar-item')) {
+        var section = active.getAttribute('data-section');
+        if (section) {
+            switchSection(section);
+            // After switching, enter the content area
+            setTimeout(function () {
+                var contentItems = getContentFocusables();
+                if (contentItems.length > 0) {
+                    focusContentItem(0);
+                }
+            }, 50);
+        }
+        return;
+    }
 
     // Check for data-route
-    var route = el.getAttribute('data-route');
+    var route = active.getAttribute('data-route');
     if (route) {
         window.location.href = route;
         return;
     }
 
-    // Check for back button
-    if (el.classList.contains('back-btn')) {
-        window.location.href = 'home.html';
-        return;
-    }
-
-    // Check for logout button
-    if (el.id === 'logoutBtn' || el.classList.contains('logout-btn')) {
-        handleLogout();
-        return;
-    }
-
-    // Default click
-    el.click();
-}
-
-/**
- * Handle logout - show confirmation and clear session
- */
-async function handleLogout() {
-    var confirmLogout = confirm('Are you sure you want to logout?');
-    if (confirmLogout) {
-        console.log("[Settings] User confirmed logout");
-        // Call server logout API then clear local session
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
-            await BBNL_API.logout();
-        } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
-            await AuthAPI.logout();
-        } else {
-            // Fallback: manually clear and redirect
-            localStorage.removeItem('bbnl_user');
-            sessionStorage.clear();
-            window.location.href = 'login.html';
-        }
-    }
-}
-
-function moveFocusHorizontal(direction) {
-    if (focusables.length === 0) return;
-
-    var current = focusables[currentFocus];
-    var currentRect = current.getBoundingClientRect();
-    var currentCenterX = currentRect.left + currentRect.width / 2;
-    var currentCenterY = currentRect.top + currentRect.height / 2;
-
-    var candidates = [];
-
-    for (var i = 0; i < focusables.length; i++) {
-        if (i === currentFocus) continue;
-
-        var el = focusables[i];
-        var rect = el.getBoundingClientRect();
-        var centerX = rect.left + rect.width / 2;
-
-        // Looking for elements to the right
-        if (direction > 0 && centerX > currentCenterX + 50) {
-            candidates.push({
-                index: i,
-                centerY: rect.top + rect.height / 2,
-                distance: centerX - currentCenterX
-            });
-        }
-        // Looking for elements to the left
-        else if (direction < 0 && centerX < currentCenterX - 50) {
-            candidates.push({
-                index: i,
-                centerY: rect.top + rect.height / 2,
-                distance: currentCenterX - centerX
-            });
-        }
-    }
-
-    if (candidates.length === 0) return;
-
-    // Sort by vertical proximity first, then horizontal distance
-    candidates.sort(function(a, b) {
-        var vertDiff = Math.abs(a.centerY - currentCenterY) - Math.abs(b.centerY - currentCenterY);
-        if (Math.abs(vertDiff) < 100) {
-            return a.distance - b.distance;
-        }
-        return vertDiff;
-    });
-
-    currentFocus = candidates[0].index;
-    focusables[currentFocus].focus();
-    focusables[currentFocus].scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-function moveFocusVertical(direction) {
-    if (focusables.length === 0) return;
-
-    var current = focusables[currentFocus];
-    var currentRect = current.getBoundingClientRect();
-    var currentCenterX = currentRect.left + currentRect.width / 2;
-    var currentCenterY = currentRect.top + currentRect.height / 2;
-
-    var candidates = [];
-
-    for (var i = 0; i < focusables.length; i++) {
-        if (i === currentFocus) continue;
-
-        var el = focusables[i];
-        var rect = el.getBoundingClientRect();
-        var centerY = rect.top + rect.height / 2;
-
-        if (direction < 0 && centerY < currentCenterY - 20) {
-            candidates.push({
-                index: i,
-                centerX: rect.left + rect.width / 2,
-                distance: currentCenterY - centerY
-            });
-        } else if (direction > 0 && centerY > currentCenterY + 20) {
-            candidates.push({
-                index: i,
-                centerX: rect.left + rect.width / 2,
-                distance: centerY - currentCenterY
-            });
-        }
-    }
-
-    if (candidates.length === 0) return;
-
-    candidates.sort(function(a, b) {
-        var rowDiff = Math.abs(a.distance - b.distance);
-        if (rowDiff < 50) {
-            return Math.abs(a.centerX - currentCenterX) - Math.abs(b.centerX - currentCenterX);
-        }
-        return a.distance - b.distance;
-    });
-
-    currentFocus = candidates[0].index;
-    focusables[currentFocus].focus();
-    focusables[currentFocus].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Default: click the element
+    active.click();
 }
 
 // ==========================================
-// SIDEBAR NAVIGATION
+// SIDEBAR SECTION SWITCHING
 // ==========================================
 
-/**
- * Initialize sidebar navigation
- */
 function initializeSidebar() {
     var sidebarItems = document.querySelectorAll(".sidebar-item");
-
     sidebarItems.forEach(function (item) {
         item.addEventListener("click", function () {
             var section = this.getAttribute("data-section");
@@ -283,9 +353,6 @@ function initializeSidebar() {
     });
 }
 
-/**
- * Switch between settings sections
- */
 function switchSection(section) {
     console.log("[Settings] Switching to section:", section);
 
@@ -308,22 +375,32 @@ function switchSection(section) {
     if (targetPanel) {
         targetPanel.classList.add("active");
     }
-
-    // Refresh focusables after switching
-    setTimeout(function () {
-        focusables = document.querySelectorAll(".focusable");
-    }, 100);
 }
 
 // ==========================================
-// ABOUT APP SECTION
+// LOGOUT
 // ==========================================
 
-/**
- * Load About App information from API
- * API: http://124.40.244.211/netmon/cabletvapis/appversion
- * Response: { body: { appversion, verchngmsg, appdwnldlink, tvappdwnldlink }, status: { err_code, err_msg } }
- */
+async function handleLogout() {
+    var confirmLogout = confirm('Are you sure you want to logout?');
+    if (confirmLogout) {
+        console.log("[Settings] User confirmed logout");
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
+            await BBNL_API.logout();
+        } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
+            await AuthAPI.logout();
+        } else {
+            localStorage.removeItem('bbnl_user');
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+        }
+    }
+}
+
+// ==========================================
+// ABOUT APP - Version Info
+// ==========================================
+
 function loadAboutAppInfo() {
     console.log("[Settings] Loading About App info...");
 
@@ -331,18 +408,15 @@ function loadAboutAppInfo() {
         .then(function (response) {
             console.log("[Settings] App Version Response:", response);
 
-            // Check if response is successful
             if (response && response.status && response.status.err_code === 0) {
                 if (response.body) {
                     var versionData = response.body;
 
-                    // Update Software Version
                     var versionEl = document.getElementById('software-version');
                     if (versionEl) {
                         versionEl.innerText = versionData.appversion || "Unknown";
                     }
 
-                    // Update Version Message (field is "verchngmsg" in API response)
                     var messageEl = document.getElementById('version-message');
                     if (messageEl) {
                         messageEl.innerText = versionData.verchngmsg || "No message available";
@@ -362,9 +436,6 @@ function loadAboutAppInfo() {
         });
 }
 
-/**
- * Set error state for About App
- */
 function setAboutAppError() {
     var versionEl = document.getElementById('software-version');
     if (versionEl) versionEl.innerText = "Error loading";
@@ -373,9 +444,6 @@ function setAboutAppError() {
     if (messageEl) messageEl.innerText = "Error loading";
 }
 
-/**
- * Check for software updates
- */
 function checkForUpdates() {
     console.log("[Settings] Checking for updates...");
 
@@ -384,7 +452,6 @@ function checkForUpdates() {
         updateStatus.innerText = "Checking for updates...";
     }
 
-    // Simulate update check
     setTimeout(function () {
         if (updateStatus) {
             updateStatus.innerText = "Your App software is up to date";
@@ -393,42 +460,23 @@ function checkForUpdates() {
 }
 
 // ==========================================
-// DEVICE INFO PANEL - PRODUCTION
-// All values fetched dynamically from Tizen APIs
+// DEVICE INFO PANEL
 // ==========================================
 
-/**
- * Load device information for the Device Info panel
- * Uses Tizen WebAPIs for real device, graceful fallback for emulator
- */
 function loadDeviceInfoPanel() {
-    console.log("[Settings] Loading device info panel (Production)...");
+    console.log("[Settings] Loading device info panel...");
 
     var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
     var isTizen = (typeof webapis !== 'undefined');
 
-    // 1. User ID from session
     loadUserId();
-
-    // 2. Model Name & Firmware
     loadModelInfo(isTizen);
-
-    // 3. Device ID (DUID)
     loadDeviceId(deviceInfo, isTizen);
-
-    // 4. Network Info (Connection, IP, Gateway, DNS, MACs)
     loadNetworkInfo(deviceInfo, isTizen);
-
-    // 5. Screen Resolution
     loadScreenResolution();
-
-    // 6. Tizen Version
     loadTizenVersion(isTizen);
 }
 
-/**
- * Load User ID from localStorage session
- */
 function loadUserId() {
     var userIdEl = document.getElementById('device-user-id');
     if (!userIdEl) return;
@@ -446,9 +494,6 @@ function loadUserId() {
     }
 }
 
-/**
- * Load Model Name and Firmware from Tizen productinfo API
- */
 function loadModelInfo(isTizen) {
     var modelNameEl = document.getElementById('device-model-name');
     var firmwareEl = document.getElementById('device-firmware');
@@ -480,9 +525,6 @@ function loadModelInfo(isTizen) {
     }
 }
 
-/**
- * Load Device ID (DUID) from Tizen API or DeviceInfo
- */
 function loadDeviceId(deviceInfo, isTizen) {
     var deviceIdEl = document.getElementById('device-id');
     if (!deviceIdEl) return;
@@ -496,23 +538,17 @@ function loadDeviceId(deviceInfo, isTizen) {
             deviceIdEl.innerText = 'N/A';
         }
     } catch (e) {
-        console.error("[Settings] Device ID error:", e);
         deviceIdEl.innerText = 'N/A';
     }
 }
 
-/**
- * Load all network information from Tizen APIs
- */
 function loadNetworkInfo(deviceInfo, isTizen) {
     try {
         if (isTizen && webapis.network) {
             var networkType = webapis.network.getActiveConnectionType();
 
-            // Connection Type
             setElementText('device-connection-type', getConnectionTypeName(networkType));
 
-            // IP Address
             if (networkType > 0) {
                 setElementText('device-ipv4', safeCall(function () {
                     return webapis.network.getIp(networkType);
@@ -521,17 +557,14 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 setElementText('device-ipv4', 'Disconnected');
             }
 
-            // Gateway
             setElementText('device-gateway', safeCall(function () {
                 return webapis.network.getGateway(networkType);
             }, 'N/A'));
 
-            // DNS Server
             setElementText('device-dns', safeCall(function () {
                 return webapis.network.getDns(networkType);
             }, 'N/A'));
 
-            // Wired MAC Address (Ethernet = type 3)
             var wiredMac = safeCall(function () {
                 return webapis.network.getMac(3);
             }, null);
@@ -540,13 +573,11 @@ function loadNetworkInfo(deviceInfo, isTizen) {
             }
             setElementText('device-wired-mac', formatMacAddress(wiredMac) || 'N/A');
 
-            // WiFi MAC Address (WiFi = type 1)
             setElementText('device-wifi-mac', formatMacAddress(safeCall(function () {
                 return webapis.network.getMac(1);
             }, null)) || 'N/A');
 
         } else {
-            // Non-Tizen environment (emulator/browser)
             setElementText('device-connection-type', 'Browser/Emulator');
             setElementText('device-ipv4', 'N/A');
             setElementText('device-gateway', 'N/A');
@@ -565,13 +596,9 @@ function loadNetworkInfo(deviceInfo, isTizen) {
     }
 }
 
-/**
- * Load screen resolution
- */
 function loadScreenResolution() {
     var resEl = document.getElementById('device-resolution');
     if (!resEl) return;
-
     try {
         resEl.innerText = screen.width + ' x ' + screen.height;
     } catch (e) {
@@ -579,9 +606,6 @@ function loadScreenResolution() {
     }
 }
 
-/**
- * Load Tizen platform version
- */
 function loadTizenVersion(isTizen) {
     var versionEl = document.getElementById('device-tizen-version');
     if (!versionEl) return;
@@ -602,25 +626,14 @@ function loadTizenVersion(isTizen) {
 }
 
 // ==========================================
-// DEVICE INFO HELPERS
+// HELPERS
 // ==========================================
 
-/**
- * Get human-readable connection type name
- */
 function getConnectionTypeName(type) {
-    var types = {
-        0: "Disconnected",
-        1: "WiFi",
-        2: "Cellular",
-        3: "Ethernet"
-    };
+    var types = { 0: "Disconnected", 1: "WiFi", 2: "Cellular", 3: "Ethernet" };
     return types[type] || "Unknown (" + type + ")";
 }
 
-/**
- * Safely call a function, return fallback on error
- */
 function safeCall(fn, fallback) {
     try {
         var result = fn();
@@ -630,49 +643,23 @@ function safeCall(fn, fallback) {
     }
 }
 
-/**
- * Set text content of an element by ID
- */
-function setElementText(id, text) {
+function setElementText(id, text) {  
     var el = document.getElementById(id);
     if (el) el.innerText = text;
 }
 
-// ==========================================
-// DARK MODE FUNCTIONALITY
-// ==========================================
+function formatMacAddress(mac) {
+    if (!mac) return null;
+    var cleaned = mac.replace(/[:-]/g, '').toUpperCase();
+    if (cleaned.length !== 12) return mac;
+    return cleaned.match(/.{1,2}/g).join(':');
+}
 
-/**
- * Initialize dark mode from localStorage
- */
 function initDarkMode() {
-    console.log("[Settings] Initializing dark mode...");
     var isDarkMode = localStorage.getItem('darkMode') !== 'false';
-
     if (isDarkMode) {
         document.body.classList.remove('light-mode');
     } else {
         document.body.classList.add('light-mode');
     }
-
-    console.log("[Settings] Dark mode:", isDarkMode ? "ON" : "OFF");
-}
-
-// ==========================================
-// MAC ADDRESS FORMATTING
-// ==========================================
-
-/**
- * Format MAC address to consistent format (uppercase with colons)
- */
-function formatMacAddress(mac) {
-    if (!mac) return null;
-
-    var cleaned = mac.replace(/[:-]/g, '').toUpperCase();
-
-    if (cleaned.length !== 12) return mac;
-
-    var formatted = cleaned.match(/.{1,2}/g).join(':');
-
-    return formatted;
 }

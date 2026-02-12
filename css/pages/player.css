@@ -1,11 +1,13 @@
-/* Player Page Styles */
+/* Player Page Styles - FULL SCREEN for Samsung TV */
 .player-page {
     background: #000 !important;
     overflow: hidden;
     margin: 0;
     padding: 0;
-    height: 100vh;
-    width: 100vw;
+    height: 1080px;
+    width: 1920px;
+    min-height: 1080px;
+    min-width: 1920px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -15,32 +17,38 @@
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 1920px;
+    height: 1080px;
     background: #000;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
 }
 
-/* AVPlayer object element - fullscreen */
+/* AVPlayer object element - FULL SCREEN 1920x1080 */
 #av-player {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
+    width: 1920px !important;
+    height: 1080px !important;
     z-index: 0 !important;
-    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
 }
 
 video {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
-    object-fit: contain; /* Show full video without cropping */
+    width: 1920px;
+    height: 1080px;
+    object-fit: fill; /* Fill entire screen */
     background: #000;
     z-index: 1;
+    margin: 0;
+    padding: 0;
 }
 
 /* OVERLAY CONTAINER */
@@ -142,6 +150,114 @@ video {
 
 .channel-expiry {
     color: #9a9a9a;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+/* Subscription expiry color indicators */
+.channel-expiry.expiry-pink {
+    color: #ffffff;
+    background-color: #ec4899;
+    animation: pulse-pink 2s infinite;
+}
+
+.channel-expiry.expiry-yellow {
+    color: #000000;
+    background-color: #fbbf24;
+    animation: pulse-yellow 2s infinite;
+}
+
+.channel-expiry.expiry-red {
+    color: #ffffff;
+    background-color: #ef4444;
+    animation: pulse-red 1.5s infinite;
+}
+
+.channel-expiry.expiry-expired {
+    color: #ffffff;
+    background-color: #6b7280;
+}
+
+.channel-expiry.expiry-active {
+    color: #10b981;
+    background-color: transparent;
+}
+
+@keyframes pulse-pink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes pulse-yellow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+/* QR Code popup for renewal */
+.renewal-qr-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.renewal-qr-container {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 2px solid #ef4444;
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(239, 68, 68, 0.3);
+}
+
+.renewal-qr-title {
+    color: #ef4444;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.renewal-qr-subtitle {
+    color: #94a3b8;
+    font-size: 16px;
+    margin-bottom: 25px;
+}
+
+.renewal-qr-code {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    display: inline-block;
+}
+
+.renewal-qr-code img {
+    width: 200px;
+    height: 200px;
+}
+
+.renewal-qr-hint {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.renewal-qr-close {
+    margin-top: 20px;
+    color: #94a3b8;
     font-size: 12px;
 }
 

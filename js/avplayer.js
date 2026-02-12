@@ -1,7 +1,8 @@
 /**
  * COMPLETE FINAL AVPlayer for Tizen Real TV
  * Includes: HTTP Headers, Localhost URL Fix, Stream Validation, Enhanced Error Handling
- * Version: ULTIMATE 3.0
+ * DVB/FTA Channel Support Added
+ * Version: ULTIMATE 4.0
  */
 
 var AVPlayer = (function () {
@@ -9,6 +10,8 @@ var AVPlayer = (function () {
     var avplay = null;
     var isTizenProp = false;
     var currentStreamUrl = "";
+    var isDVBStream = false; // Track if current stream is DVB/FTA
+    var tvWindow = null; // TV Window for FTA display
 
     // CRITICAL: Your IPTV server IP for localhost URL replacement
     var SERVER_IP = "124.40.244.211";
@@ -31,6 +34,63 @@ var AVPlayer = (function () {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Check if TV Window API is available for FTA/DVB playback
+     */
+    function checkTVWindowEnv() {
+        try {
+            if (typeof tizen !== 'undefined' && tizen.tvwindow) {
+                tvWindow = tizen.tvwindow;
+                console.log("[AVPlayer] ✓ TV Window API available for FTA playback");
+                return true;
+            }
+        } catch (e) {
+            console.warn("[AVPlayer] TV Window API not available:", e);
+        }
+        return false;
+    }
+
+    /**
+     * Check if URL is a DVB/FTA stream
+     * DVB URLs format: dvb://ONID.TSID.SID or dvb://frequency.programNumber
+     */
+    function isDVBUrl(url) {
+        if (!url) return false;
+        return url.toLowerCase().startsWith('dvb://');
+    }
+
+    /**
+     * Parse DVB URL to extract tuning parameters
+     * @param {string} url - DVB URL like dvb://ONID.TSID.SID
+     * @returns {object} Tuning parameters
+     */
+    function parseDVBUrl(url) {
+        if (!url) return null;
+        
+        try {
+            // Remove dvb:// prefix
+            var dvbPath = url.replace(/^dvb:\/\//i, '');
+            var parts = dvbPath.split('.');
+            
+            if (parts.length >= 3) {
+                return {
+                    originalNetworkId: parseInt(parts[0], 10),
+                    transportStreamId: parseInt(parts[1], 10),
+                    serviceId: parseInt(parts[2], 10)
+                };
+            } else if (parts.length === 2) {
+                // Alternate format: frequency.programNumber
+                return {
+                    frequency: parseInt(parts[0], 10),
+                    programNumber: parseInt(parts[1], 10)
+                };
+            }
+        } catch (e) {
+            console.error("[AVPlayer] Failed to parse DVB URL:", e);
+        }
+        return null;
     }
 
     /**
@@ -72,6 +132,7 @@ var AVPlayer = (function () {
         init: function (options) {
             console.log("[AVPlayer] Init called");
             checkEnv();
+            checkTVWindowEnv(); // Check for FTA/DVB support
             if (options && options.callbacks) {
                 this.setCallbacks(options.callbacks);
             }
@@ -198,23 +259,62 @@ var AVPlayer = (function () {
                             console.warn("[AVPlayer] Buffering config warning:", bufferError);
                         }
 
-                        // STEP 5: Set display rectangle and method
+                        // STEP 5: Set display rectangle and method for FULL SCREEN
                         try {
-                            console.log("[AVPlayer] Setting display...");
-                            // Set display area (full screen dimensions)
+                            console.log("[AVPlayer] Setting FULL SCREEN display (1920x1080)...");
+                            
+                            // CRITICAL: Set display area to full screen dimensions (1920x1080)
+                            // x=0, y=0, width=1920, height=1080
                             avplay.setDisplayRect(0, 0, 1920, 1080);
+                            console.log("[AVPlayer] ✓ Display rect set: 0, 0, 1920, 1080");
 
-                            // Use AUTO_ASPECT_RATIO mode for full screen with proper aspect ratio
-                            // This fills the screen while allowing HTML overlays
+                            // Try multiple display modes for TRUE FULL SCREEN (no black bars)
+                            var displayModeSet = false;
+                            
+                            // Option 1: FULL_SCREEN - Stretches to fill entire screen (no black bars)
+                            // Best for filling 100% of TV screen without any borders
                             try {
-                                avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
-                                console.log("[AVPlayer] ✓ Display method set: AUTO_ASPECT_RATIO (full screen with overlay support)");
-                            } catch (methodErr) {
-                                console.warn("[AVPlayer] Could not set AUTO_ASPECT_RATIO mode, trying alternatives:", methodErr);
-                                // Fallback: don't set display method, use default
+                                avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+                                console.log("[AVPlayer] ✓ Display method: FULL_SCREEN (fills entire screen, no black bars)");
+                                displayModeSet = true;
+                            } catch (e1) {
+                                console.log("[AVPlayer] FULL_SCREEN not available, trying ZOOM_16_9...");
+                            }
+                            
+                            // Option 2: ZOOM_16_9 - Zooms to 16:9 ratio, fills screen
+                            if (!displayModeSet) {
+                                try {
+                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9');
+                                    console.log("[AVPlayer] ✓ Display method: ZOOM_16_9 (fills 16:9 screen)");
+                                    displayModeSet = true;
+                                } catch (e2) {
+                                    console.log("[AVPlayer] ZOOM_16_9 not available, trying ZOOM...");
+                                }
+                            }
+                            
+                            // Option 3: ZOOM - Zooms to fill screen
+                            if (!displayModeSet) {
+                                try {
+                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM');
+                                    console.log("[AVPlayer] ✓ Display method: ZOOM (zooms to fill)");
+                                    displayModeSet = true;
+                                } catch (e3) {
+                                    console.log("[AVPlayer] ZOOM not available, trying AUTO_ASPECT_RATIO...");
+                                }
+                            }
+                            
+                            // Option 4: AUTO_ASPECT_RATIO - Auto adjusts
+                            if (!displayModeSet) {
+                                try {
+                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
+                                    console.log("[AVPlayer] ✓ Display method: AUTO_ASPECT_RATIO");
+                                    displayModeSet = true;
+                                } catch (e4) {
+                                    console.warn("[AVPlayer] No display method could be set, using default");
+                                }
                             }
 
-                            console.log("[AVPlayer] ✓ Display configured");
+                            console.log("[AVPlayer] ✓ FULL SCREEN display configured");
                         } catch (displayError) {
                             console.error("[AVPlayer] Display error:", displayError);
                         }
@@ -339,6 +439,12 @@ var AVPlayer = (function () {
         },
 
         stop: function () {
+            // Stop DVB stream if playing
+            if (isDVBStream) {
+                this.stopDVBStream();
+                return;
+            }
+            
             if (!isTizenProp) return;
             try {
                 avplay.stop();
@@ -350,6 +456,11 @@ var AVPlayer = (function () {
         },
 
         destroy: function () {
+            // Stop DVB stream if playing
+            if (isDVBStream) {
+                this.stopDVBStream();
+            }
+            
             if (!isTizenProp) return;
             try {
                 console.log("[AVPlayer] Destroying player...");
@@ -357,6 +468,7 @@ var AVPlayer = (function () {
                 avplay.close();
                 playerState = "NONE";
                 currentStreamUrl = "";
+                isDVBStream = false;
                 console.log("[AVPlayer] ✓ Destroyed");
             } catch (e) {
                 console.log("[AVPlayer] Destroy cleanup:", e);
@@ -365,12 +477,174 @@ var AVPlayer = (function () {
 
         changeStream: function (url) {
             console.log("[AVPlayer] Changing stream to:", url);
+            
+            // Check if this is a DVB/FTA stream
+            if (isDVBUrl(url)) {
+                console.log("[AVPlayer] 📡 DVB/FTA stream detected");
+                this.playDVBStream(url);
+                return;
+            }
+            
+            // Stop any DVB playback if switching from FTA to IPTV
+            if (isDVBStream) {
+                this.stopDVBStream();
+            }
+            
+            isDVBStream = false;
             this.destroy();
             this.setUrl(url);
             var self = this;
             setTimeout(function () {
                 self.play();
             }, 50); // ULTRA-FAST: 50ms delay for instant channel switching
+        },
+
+        /**
+         * Play DVB/FTA stream using TV Window API
+         * @param {string} url - DVB URL like dvb://ONID.TSID.SID
+         */
+        playDVBStream: function (url) {
+            console.log("[AVPlayer] ========================================");
+            console.log("[AVPlayer] 📡 STARTING DVB/FTA PLAYBACK");
+            console.log("[AVPlayer] DVB URL:", url);
+            console.log("[AVPlayer] ========================================");
+            
+            isDVBStream = true;
+            currentStreamUrl = url;
+            
+            // Stop any current IPTV playback
+            try {
+                if (avplay && playerState !== "NONE") {
+                    avplay.stop();
+                    avplay.close();
+                    playerState = "NONE";
+                }
+            } catch (e) {
+                console.log("[AVPlayer] Cleanup before DVB:", e);
+            }
+            
+            // Check if TV Window API is available
+            if (!tvWindow) {
+                checkTVWindowEnv();
+            }
+            
+            if (tvWindow) {
+                try {
+                    // Get available video sources
+                    var videoSourceList = tvWindow.getAvailableWindows();
+                    console.log("[AVPlayer] Available video sources:", videoSourceList);
+                    
+                    // Show TV window in full screen (MAIN window)
+                    // Rectangle: [x, y, width, height] - full screen 1920x1080
+                    var rectangle = [0, 0, 1920, 1080];
+                    
+                    // Show the broadcast TV window
+                    tvWindow.show(
+                        function() {
+                            console.log("[AVPlayer] ✓✓✓ DVB/FTA WINDOW SHOWN FULLSCREEN ✓✓✓");
+                            playerState = "PLAYING";
+                            
+                            // Notify buffering complete
+                            if (eventCallbacks.onBufferingComplete) {
+                                eventCallbacks.onBufferingComplete();
+                            }
+                        },
+                        function(error) {
+                            console.error("[AVPlayer] ✗✗✗ DVB SHOW FAILED ✗✗✗:", error);
+                            if (eventCallbacks.onError) {
+                                eventCallbacks.onError("FTA channel failed: " + error.message);
+                            }
+                        },
+                        rectangle,
+                        "MAIN", // Window type
+                        0 // Z-index (behind HTML overlay)
+                    );
+                    
+                    // Parse DVB URL and tune to channel if tvchannel API available
+                    if (typeof tizen !== 'undefined' && tizen.tvchannel) {
+                        var dvbParams = parseDVBUrl(url);
+                        if (dvbParams) {
+                            console.log("[AVPlayer] DVB params:", dvbParams);
+                            // The tuning would happen via tizen.tvchannel.tune() if needed
+                            // For now, tvwindow.show displays the current broadcast
+                        }
+                    }
+                    
+                } catch (e) {
+                    console.error("[AVPlayer] DVB playback error:", e);
+                    if (eventCallbacks.onError) {
+                        eventCallbacks.onError("FTA playback error: " + e.message);
+                    }
+                }
+            } else {
+                // Fallback: Try using AVPlay with DVB URL (some Samsung TVs support this)
+                console.log("[AVPlayer] TV Window not available, trying AVPlay for DVB...");
+                try {
+                    this.destroy();
+                    avplay.open(url);
+                    avplay.setDisplayRect(0, 0, 1920, 1080);
+                    try {
+                        avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+                        console.log("[AVPlayer] ✓ Display: FULL_SCREEN (no black bars)");
+                    } catch (e) {
+                        try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9'); } catch (e2) {
+                            try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e3) {}
+                        }
+                    }
+                    avplay.prepareAsync(
+                        function() {
+                            console.log("[AVPlayer] ✓ DVB via AVPlay prepared");
+                            avplay.play();
+                            playerState = "PLAYING";
+                        },
+                        function(err) {
+                            console.error("[AVPlayer] DVB via AVPlay failed:", err);
+                            if (eventCallbacks.onError) {
+                                eventCallbacks.onError("FTA channel not available on this TV");
+                            }
+                        }
+                    );
+                } catch (e) {
+                    console.error("[AVPlayer] DVB AVPlay fallback failed:", e);
+                    if (eventCallbacks.onError) {
+                        eventCallbacks.onError("FTA channels not supported on this TV");
+                    }
+                }
+            }
+        },
+
+        /**
+         * Stop DVB/FTA stream and hide TV window
+         */
+        stopDVBStream: function () {
+            if (!isDVBStream) return;
+            
+            console.log("[AVPlayer] Stopping DVB/FTA stream...");
+            
+            if (tvWindow) {
+                try {
+                    tvWindow.hide(
+                        function() {
+                            console.log("[AVPlayer] ✓ DVB window hidden");
+                        },
+                        function(error) {
+                            console.warn("[AVPlayer] DVB hide error:", error);
+                        }
+                    );
+                } catch (e) {
+                    console.warn("[AVPlayer] Error hiding DVB window:", e);
+                }
+            }
+            
+            isDVBStream = false;
+            playerState = "NONE";
+        },
+
+        /**
+         * Check if currently playing DVB/FTA stream
+         */
+        isDVBPlaying: function () {
+            return isDVBStream;
         },
 
         getCurrentTime: function () {
@@ -493,6 +767,14 @@ var AVPlayer = (function () {
                                     avplay.open(httpUrl);
                                     currentStreamUrl = httpUrl;
                                     avplay.setDisplayRect(0, 0, 1920, 1080);
+                                    try {
+                                        avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+                                        console.log("[AVPlayer] ✓ HTTP fallback: Display FULL_SCREEN");
+                                    } catch (e) {
+                                        try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9'); } catch (e2) {
+                                            try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e3) {}
+                                        }
+                                    }
                                     avplay.prepareAsync(
                                         function() {
                                             console.log("[AVPlayer] ✓ HTTP fallback succeeded!");

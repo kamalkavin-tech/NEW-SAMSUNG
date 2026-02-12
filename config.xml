@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://yourdomain/BasicProject2"
+        id="http://yourdomain/BBNLIPTV"
         version="1.0.0"
         viewmodes="maximized">
     
@@ -10,12 +10,12 @@
     
     <!-- Application identity -->
     <tizen:application
-        id="ph3Ha7N8EQ.BasicProject2"
+        id="ph3Ha7N8EQ.BBNLIPTV"
         package="ph3Ha7N8EQ"
         required_version="6.0"/>
     
     <content src="login.html"/>
-    <name>BasicProject2</name>
+    <name>BBNL IPTV</name>
     <icon src="icon.png"/>
     
     <!-- ============================================ -->
@@ -53,6 +53,10 @@
     <!-- Audio control -->
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
     <tizen:privilege name="http://tizen.org/privilege/volume.set"/>
+    
+    <!-- FTA/DVB Channel Access (for broadcast TV tuner) -->
+    <tizen:privilege name="http://tizen.org/privilege/tv.channel"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
     
     <!-- Media capture (optional, for future features) -->
     <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>

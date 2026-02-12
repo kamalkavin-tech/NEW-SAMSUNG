@@ -72,6 +72,108 @@ function fixLocalhostUrl(url) {
 
 // Track if we've hidden the loading indicator for current stream
 var hasHiddenLoadingIndicator = false;
+var playerErrorPopupOpen = false;
+
+/**
+ * Check if the network is disconnected
+ * Uses Tizen webapis on real TV, falls back to navigator.onLine in browser
+ * @returns {boolean} true if network is disconnected
+ */
+function isNetworkDisconnected() {
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            return webapis.network.getActiveConnectionType() === 0;
+        }
+    } catch (e) {
+        console.error("[Player] Network check error:", e);
+    }
+    return !navigator.onLine;
+}
+
+/**
+ * Show player error popup
+ */
+function showPlayerErrorPopup(title, message) {
+    var popup = document.getElementById('playerErrorPopup');
+    if (popup) {
+        var titleEl = document.getElementById('playerErrorTitle');
+        var msgEl = document.getElementById('playerErrorMessage');
+        if (titleEl) titleEl.textContent = title || 'Playback Error';
+        if (msgEl) msgEl.textContent = message || 'Please Check your network and try again';
+        popup.style.display = 'flex';
+        playerErrorPopupOpen = true;
+        setTimeout(function() {
+            var btn = document.getElementById('playerRetryBtn');
+            if (btn) btn.focus();
+        }, 100);
+    }
+}
+
+/**
+ * Hide player error popup
+ */
+function hidePlayerErrorPopup() {
+    var popup = document.getElementById('playerErrorPopup');
+    if (popup) {
+        popup.style.display = 'none';
+        playerErrorPopupOpen = false;
+    }
+}
+
+/**
+ * Show QR Code for subscription renewal on last day
+ * Displays a QR code overlay that users can scan to renew
+ */
+var renewalQRShown = false;
+function showRenewalQRCode() {
+    // Only show once per session
+    if (renewalQRShown) return;
+    renewalQRShown = true;
+
+    // Create QR overlay
+    var overlay = document.createElement('div');
+    overlay.id = 'renewalQROverlay';
+    overlay.className = 'renewal-qr-overlay';
+    overlay.innerHTML = `
+        <div class="renewal-qr-container">
+            <div class="renewal-qr-title">⚠️ Subscription Expires Today!</div>
+            <div class="renewal-qr-subtitle">Scan the QR code below to renew your subscription</div>
+            <div class="renewal-qr-code">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://bbnl.in/renew" alt="Renewal QR Code" id="renewalQRImg">
+            </div>
+            <div class="renewal-qr-hint">Visit: <strong>bbnl.in/renew</strong></div>
+            <div class="renewal-qr-close">Press BACK or OK to close</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Auto-hide after 15 seconds
+    setTimeout(function() {
+        hideRenewalQRCode();
+    }, 15000);
+
+    // Handle key events to close
+    overlay.tabIndex = 0;
+    overlay.focus();
+    overlay.addEventListener('keydown', function(e) {
+        // BACK, OK/Enter, or any navigation key closes the popup
+        if (e.keyCode === 10009 || e.keyCode === 13 || e.keyCode === 27 || e.keyCode === 8) {
+            hideRenewalQRCode();
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+}
+
+/**
+ * Hide renewal QR code overlay
+ */
+function hideRenewalQRCode() {
+    var overlay = document.getElementById('renewalQROverlay');
+    if (overlay) {
+        overlay.remove();
+    }
+}
 
 window.onload = function () {
     console.log("=== Player Initialized ===");
@@ -94,7 +196,9 @@ window.onload = function () {
                     console.error("Player Error:", e);
                     hideBufferingIndicator(); // Hide on error
                     hasHiddenLoadingIndicator = true;
-                    alert("Playback Error: " + e + "\n\nPlease check the stream URL or try another channel.");
+                    if (isNetworkDisconnected()) {
+                        showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
+                    }
                 },
                 onStreamCompleted: () => {
                     console.log("Playback Finished");
@@ -114,7 +218,7 @@ window.onload = function () {
         });
     } else {
         console.error("AVPlayer Module not loaded!");
-        alert("Critical Error: AVPlayer module not loaded!");
+        showPlayerErrorPopup('Player Error', 'AVPlayer module not loaded. Please restart the app.');
     }
 
     // Parse URL params
@@ -157,6 +261,15 @@ window.onload = function () {
         window.history.back();
     });
 
+    // Player error popup retry button
+    var playerRetryBtn = document.getElementById('playerRetryBtn');
+    if (playerRetryBtn) {
+        playerRetryBtn.addEventListener('click', function() {
+            hidePlayerErrorPopup();
+            window.location.href = 'channels.html';
+        });
+    }
+
     // Lifecycle
     document.addEventListener("visibilitychange", function () {
         if (typeof AVPlayer === 'undefined') return;
@@ -178,8 +291,13 @@ async function loadChannelList(lookupName = null) {
         let response = await BBNL_API.getChannelList();
 
         if (Array.isArray(response)) {
-            allChannels = response;
-            console.log("Player: Loaded " + allChannels.length + " channels for zapping.");
+            // Sort channels by LCN (channelno) for proper prev/next navigation
+            allChannels = response.sort(function(a, b) {
+                var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
+                var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+                return aNo - bNo;
+            });
+            console.log("Player: Loaded " + allChannels.length + " channels for zapping (sorted by LCN).");
 
             // IF lookupName is provided, find it and play
             if (lookupName) {
@@ -242,25 +360,59 @@ function setupPlayer(channel) {
         }
     }
 
-    // Expiry Date
+    // Expiry Date with color-coded indicators
     const uiExpiry = document.getElementById("ui-expiry");
     if (uiExpiry) {
+        // Remove all previous expiry classes
+        uiExpiry.classList.remove('expiry-pink', 'expiry-yellow', 'expiry-red', 'expiry-expired', 'expiry-active');
+        
         if (channel.expirydate && channel.expirydate.trim() !== "") {
             const expiryDate = new Date(channel.expirydate);
             const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
+            expiryDate.setHours(0, 0, 0, 0);
             const diffTime = expiryDate - today;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            if (diffDays > 0) {
-                uiExpiry.innerText = "Expires in " + diffDays + " day" + (diffDays > 1 ? "s" : "");
+            if (diffDays > 7) {
+                // More than 7 days - normal display
+                uiExpiry.innerText = "Expires in " + diffDays + " days";
+                uiExpiry.classList.add('expiry-active');
+            } else if (diffDays === 7) {
+                // 7 days remaining - Pink
+                uiExpiry.innerText = "⚠ 7 days remaining";
+                uiExpiry.classList.add('expiry-pink');
+            } else if (diffDays > 3 && diffDays < 7) {
+                // Between 4-6 days - Pink
+                uiExpiry.innerText = "⚠ " + diffDays + " days remaining";
+                uiExpiry.classList.add('expiry-pink');
+            } else if (diffDays === 3) {
+                // 3 days remaining - Yellow
+                uiExpiry.innerText = "⚠ 3 days remaining";
+                uiExpiry.classList.add('expiry-yellow');
+            } else if (diffDays === 2) {
+                // 2 days remaining - Yellow
+                uiExpiry.innerText = "⚠ 2 days remaining";
+                uiExpiry.classList.add('expiry-yellow');
+            } else if (diffDays === 1) {
+                // 1 day remaining - Red
+                uiExpiry.innerText = "🔴 1 day remaining!";
+                uiExpiry.classList.add('expiry-red');
             } else if (diffDays === 0) {
-                uiExpiry.innerText = "Expires today";
+                // Last day - Show QR code for renewal
+                uiExpiry.innerText = "🔴 LAST DAY - Renew Now!";
+                uiExpiry.classList.add('expiry-red');
+                // Show QR code popup for renewal
+                showRenewalQRCode();
             } else {
-                uiExpiry.innerText = "Expired";
+                // Expired
+                uiExpiry.innerText = "Subscription Expired";
+                uiExpiry.classList.add('expiry-expired');
             }
         } else {
             // No expiry or unlimited subscription
-            uiExpiry.innerText = "Active";
+            uiExpiry.innerText = "✓ Active";
+            uiExpiry.classList.add('expiry-active');
         }
     }
 
@@ -347,14 +499,18 @@ function setupPlayer(channel) {
     }
 
     const streamUrl = channel.streamlink || channel.channel_url;
+    const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
+    
     console.log("=== 🔍 STREAM URL DEBUG ===");
     console.log("Channel:", chName);
     console.log("Raw stream URL:", streamUrl);
     console.log("Stream URL type:", typeof streamUrl);
     console.log("Stream URL length:", streamUrl ? streamUrl.length : 0);
+    console.log("Is DVB/FTA channel:", isDVBChannel);
     if (streamUrl) {
         console.log("First 100 chars:", streamUrl.substring(0, 100));
         console.log("Starts with http:", streamUrl.startsWith('http'));
+        console.log("Starts with dvb:", streamUrl.toLowerCase().startsWith('dvb://'));
         console.log("Contains localhost:", streamUrl.includes('127.0.0.1') || streamUrl.includes('localhost'));
         console.log("Contains m3u8:", streamUrl.includes('m3u8'));
         console.log("Contains mpd:", streamUrl.includes('mpd'));
@@ -365,46 +521,64 @@ function setupPlayer(channel) {
     if (!streamUrl) {
         const errorMsg = "No Stream URL found for channel: " + chName;
         console.warn(errorMsg);
-        alert("Stream not available. Please login or check subscription.\n\nChannel: " + chName);
+        showPlayerErrorPopup('No Stream Available', 'Stream not available for ' + chName + '. Please check subscription.');
         return;
     }
 
-    // ⚠️ FIX LOCALHOST URLs - Replace 127.0.0.1 with server IP
-    var fixedStreamUrl = fixLocalhostUrl(streamUrl);
+    // For DVB/FTA channels, use the URL as-is
+    var fixedStreamUrl = streamUrl;
+    
+    if (!isDVBChannel) {
+        // ⚠️ FIX LOCALHOST URLs - Replace 127.0.0.1 with server IP (only for IPTV streams)
+        fixedStreamUrl = fixLocalhostUrl(streamUrl);
 
-    // Update debug logging with fixed URL
-    console.log("=== ✅ FINAL STREAM URL ===");
-    console.log("Stream URL (after fix):", fixedStreamUrl);
-    console.log("Contains localhost:", fixedStreamUrl.includes('127.0.0.1') || fixedStreamUrl.includes('localhost'));
-    console.log("========================");
+        // Update debug logging with fixed URL
+        console.log("=== ✅ FINAL STREAM URL ===");
+        console.log("Stream URL (after fix):", fixedStreamUrl);
+        console.log("Contains localhost:", fixedStreamUrl.includes('127.0.0.1') || fixedStreamUrl.includes('localhost'));
+        console.log("========================");
 
-
-    // Validate stream URL format (using fixed URL)
-    if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
-        const errorMsg = "Invalid stream URL format: " + streamUrl;
-        console.error(errorMsg);
-        alert("Invalid stream URL format.\n\nURL: " + streamUrl);
-        return;
+        // Validate stream URL format (using fixed URL) - only for IPTV streams
+        if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
+            const errorMsg = "Invalid stream URL format: " + streamUrl;
+            console.error(errorMsg);
+            showPlayerErrorPopup('Invalid Stream', 'Invalid stream URL format. Please try another channel.');
+            return;
+        }
+    } else {
+        console.log("=== 📡 DVB/FTA CHANNEL ===");
+        console.log("DVB URL:", fixedStreamUrl);
+        console.log("Full screen playback will be handled by TV tuner");
+        console.log("========================");
     }
 
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
         console.log("Using AVPlayer (Tizen mode)");
+        if (isDVBChannel) {
+            console.log("📡 FTA channel - using TV Window for full screen playback");
+        }
 
         // Show loading indicator immediately
         showBufferingIndicator();
 
         try {
-            // Use the FIXED stream URL (with localhost replaced)
+            // Use the FIXED stream URL (with localhost replaced for IPTV, or DVB URL for FTA)
             AVPlayer.changeStream(fixedStreamUrl);
             console.log("AVPlayer.changeStream called successfully with URL:", fixedStreamUrl);
         } catch (error) {
             console.error("Error calling AVPlayer.changeStream:", error);
             hideBufferingIndicator();
-            alert("Error starting playback: " + error.message + "\n\nURL: " + fixedStreamUrl.substring(0, 100));
+            showPlayerErrorPopup('Playback Error', 'Error starting playback. Please try another channel.');
         }
     } else {
         // Fallback or Test Mode
         console.warn("Non-Tizen Environment: Using Fallback HTML5 Video");
+
+        if (isDVBChannel) {
+            console.warn("DVB/FTA channels cannot be played in browser - requires Samsung TV tuner");
+            showPlayerErrorPopup('FTA Not Available', 'FTA channels require Samsung TV with antenna connection.');
+            return;
+        }
 
         const v = document.getElementById("video-player");
         if (v) {
@@ -549,8 +723,10 @@ function changeChannel(step) {
     if (nextIndex >= allChannels.length) nextIndex = 0;
     if (nextIndex < 0) nextIndex = allChannels.length - 1;
 
-    console.log("Zapping to channel index:", nextIndex);
-    setupPlayer(allChannels[nextIndex]);
+    var nextCh = allChannels[nextIndex];
+    var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
+    console.log("Zapping to channel LCN:", nextLCN, "index:", nextIndex, "name:", nextCh.chtitle || nextCh.channel_name);
+    setupPlayer(nextCh);
 }
 
 function closePlayer() {
@@ -565,22 +741,27 @@ function handleKeydown(e) {
     const code = e.keyCode;
     console.log("Player Key:", code);
 
+    // Handle error popup navigation
+    if (playerErrorPopupOpen) {
+        e.preventDefault();
+        if (code === 10009 || code === 27) {
+            // BACK - go back to channels/home
+            hidePlayerErrorPopup();
+            window.location.href = 'channels.html';
+        } else if (code === 13) {
+            // ENTER - retry
+            var btn = document.getElementById('playerRetryBtn');
+            if (btn) btn.click();
+        }
+        return;
+    }
+
     if (code === 10009 || code === 27) { // Back / ESC
         e.preventDefault();
         closePlayer();
-
-        // Check if we came from language filtered channels
-        var selectedLang = sessionStorage.getItem('selectedLanguageId');
-
-        if (selectedLang && selectedLang !== '') {
-            // Go back to channels page with filter still applied
-            console.log('[Player] Navigating back to filtered channels page');
-            window.location.href = 'channels.html';
-        } else {
-            // Normal flow - go back to home
-            console.log('[Player] Navigating back to home');
-            window.location.href = 'home.html';
-        }
+        // Always go back to channels page
+        console.log('[Player] Navigating back to channels page');
+        window.location.href = 'channels.html';
         return;
     }
 

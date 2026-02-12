@@ -3,445 +3,365 @@
    Optimized for Samsung Tizen TV Remote Control
 
    Navigation Flow:
-   1. Initial: Home icon in sidebar
-   2. DOWN in sidebar: Home → Channels → OTT → Notify → Feedback
-   3. RIGHT from sidebar: Move to Header (Search → Settings)
-   4. DOWN from last sidebar item (Feedback): Move to OTT Apps content
-   5. RIGHT from last sidebar item (Feedback): Move to OTT Apps content
-   6. RIGHT in content: Horizontal card navigation
-   7. DOWN from OTT Apps: Move to Live TV Channels
-   8. UP from content: Return to last visited sidebar item
-   9. LEFT from content/header: Back to Sidebar
+   ┌─────────┬──────────────────────────────────┐
+   │ SIDEBAR │  HEADER: [Search]     [Settings] │
+   │ [Home]──┼──RIGHT──►              │          │
+   │   ▼     │                     DOWN          │
+   │ [Chan]  │  [L1] [L2] [L3] [L4]  ▼          │
+   │   ▼     │   ▼                               │
+   │ [OTT]   │  [L5] [L6] [L7] [→All]           │
+   │   ▼     │   ▲                               │
+   │ [Feed]──┼──DOWN──► Cards                    │
+   └─────────┴──────────────────────────────────┘
+
+   SIDEBAR:  UP/DOWN = icons, RIGHT = header
+             DOWN from last icon = cards
+   CARDS:    UP/DOWN = rows, LEFT/RIGHT = columns
+             LEFT from col 1 = sidebar
+             UP from row 1 = header
+   HEADER:   LEFT/RIGHT = search ↔ settings
+             DOWN = cards, LEFT from search = sidebar
    ================================ */
 
+// Grid columns for the language cards
+var GRID_COLS = 4;
+
 // Navigation State
-var navigationState = {
-    currentZone: 'sidebar',  // 'sidebar', 'header', 'ott', 'channels'
-    currentSection: null,
-    previousZone: null,
-    lastSidebarIndex: 0,      // Track last visited sidebar item for UP navigation
-    sidebarCompleted: false   // Track if user has navigated to bottom of sidebar
+var navState = {
+    zone: 'sidebar',        // 'sidebar', 'header', 'cards'
+    lastSidebarIndex: 0,    // Remember sidebar position
+    lastCardIndex: 0        // Remember card position when leaving cards
 };
 
-// Initialize navigation on page load
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
 function initTVNavigation() {
-    console.log('[TV Navigation] Initializing...');
+    console.log('[NAV] Initializing TV Navigation...');
 
     // Set initial focus on Home icon in sidebar
     var homeIcon = document.querySelector('.sidebar-icon-btn[data-route="home.html"]');
     if (homeIcon) {
         homeIcon.focus();
-        navigationState.currentZone = 'sidebar';
-        console.log('[TV Navigation] Initial focus set to Home icon');
-    }
-
-    // Add focus event listeners to track zone changes
-    addZoneTrackingListeners();
-}
-
-// Add listeners to track which zone is focused
-function addZoneTrackingListeners() {
-    // Sidebar elements - track index for returning from content
-    var sidebarBtns = document.querySelectorAll('.sidebar-icon-btn');
-    sidebarBtns.forEach(function(btn, index) {
-        btn.addEventListener('focus', function() {
-            navigationState.currentZone = 'sidebar';
-            navigationState.lastSidebarIndex = index;
-            // Check if at last sidebar item (sidebar completed)
-            navigationState.sidebarCompleted = (index === sidebarBtns.length - 1);
-            console.log('[TV Navigation] Zone: Sidebar, Index:', index, 'Completed:', navigationState.sidebarCompleted);
-        });
-    });
-
-    // Header elements (search input and settings button)
-    var headerElements = document.querySelectorAll('.search-input, .header-icon-btn');
-    headerElements.forEach(function(el) {
-        el.addEventListener('focus', function() {
-            navigationState.currentZone = 'header';
-            console.log('[TV Navigation] Zone: Header');
-        });
-    });
-
-    // Language cards and Channel cards - use event delegation
-    document.addEventListener('focus', function(e) {
-        var target = e.target;
-
-        // Check if it's a language card in Languages section
-        if (target.classList.contains('channel-card')) {
-            var section = target.closest('.content-section');
-            if (section) {
-                var title = section.querySelector('.section-title');
-                if (title && title.textContent.includes('Language')) {
-                    navigationState.currentZone = 'languages';
-                    console.log('[TV Navigation] Zone: Languages');
-                    return;
-                }
-            }
-        }
-
-        // Check if it's a channel card in Channels section
-        if (target.classList.contains('channel-card')) {
-            var section = target.closest('.content-section');
-            if (section) {
-                var title = section.querySelector('.section-title');
-                if (title && (title.textContent.includes('Channel') || title.textContent.includes('Live'))) {
-                    navigationState.currentZone = 'channels';
-                    console.log('[TV Navigation] Zone: Channels');
-                }
-            }
-        }
-    }, true);
-}
-
-// Handle DOWN key navigation
-function handleDownNavigation() {
-    var activeElement = document.activeElement;
-    console.log('[DOWN] Current zone:', navigationState.currentZone);
-
-    if (navigationState.currentZone === 'sidebar') {
-        // DOWN in sidebar: Move through all sidebar icons first
-        var sidebarBtns = Array.from(document.querySelectorAll('.sidebar-icon-btn:not([style*="display: none"])'));
-        var currentIndex = sidebarBtns.indexOf(activeElement);
-
-        if (currentIndex < sidebarBtns.length - 1) {
-            // Move to next sidebar icon
-            sidebarBtns[currentIndex + 1].focus();
-            console.log('[DOWN] Moving to next sidebar icon:', currentIndex + 1);
-        } else {
-            // At last sidebar icon (Feedback), move to Languages content
-            console.log('[DOWN] At last sidebar icon, moving to Languages content');
-            moveToFirstLanguagePill();
-        }
-    } else if (navigationState.currentZone === 'header') {
-        // DOWN from header: Move to first language pill
-        console.log('[DOWN] From header, moving to Languages content');
-        moveToFirstLanguagePill();
-    } else if (navigationState.currentZone === 'languages') {
-        // DOWN in Languages: Move to first channel card
-        console.log('[DOWN] From Languages, moving to Channels');
-        moveToFirstChannelCard();
-    } else if (navigationState.currentZone === 'channels') {
-        // DOWN in channels: Move within channel grid
-        moveWithinChannelGrid(0, 1);
+        navState.zone = 'sidebar';
+        navState.lastSidebarIndex = 0;
+        console.log('[NAV] Initial focus: Home icon');
     }
 }
 
-// Handle UP key navigation
-function handleUpNavigation() {
-    var activeElement = document.activeElement;
-    console.log('[UP] Current zone:', navigationState.currentZone);
+// ==========================================
+// HELPERS - Get elements
+// ==========================================
 
-    if (navigationState.currentZone === 'sidebar') {
-        // UP in sidebar: Move to previous sidebar icon
-        var sidebarBtns = Array.from(document.querySelectorAll('.sidebar-icon-btn:not([style*="display: none"])'));
-        var currentIndex = sidebarBtns.indexOf(activeElement);
-
-        if (currentIndex > 0) {
-            sidebarBtns[currentIndex - 1].focus();
-            console.log('[UP] Moving to previous sidebar icon:', currentIndex - 1);
-        }
-    } else if (navigationState.currentZone === 'header') {
-        // UP in header: Stay in header, do nothing (already at top)
-        console.log('[UP] Already at header top');
-    } else if (navigationState.currentZone === 'languages') {
-        // UP in Languages: Return to last visited sidebar item
-        console.log('[UP] At Languages, returning to Sidebar (last index:', navigationState.lastSidebarIndex, ')');
-        moveToSidebarByIndex(navigationState.lastSidebarIndex);
-    } else if (navigationState.currentZone === 'channels') {
-        // UP in channels: Try to move within channel grid, or go to Languages
-        var moved = moveWithinChannelGrid(0, -1);
-        if (!moved) {
-            // At top of channels section, move to Languages section
-            console.log('[UP] At top of Channels, moving to Languages');
-            moveToFirstLanguagePill();
-        }
-    }
+function getSidebarBtns() {
+    return Array.from(document.querySelectorAll('.sidebar-icon-btn'));
 }
 
-// Handle LEFT key navigation
-function handleLeftNavigation() {
-    var activeElement = document.activeElement;
-    console.log('[LEFT] Current zone:', navigationState.currentZone);
+function getHeaderElements() {
+    return Array.from(document.querySelectorAll('.search-input, .header-icon-btn'));
+}
 
-    if (navigationState.currentZone === 'sidebar') {
-        // Already in sidebar, do nothing
-        console.log('[LEFT] Already in sidebar');
+function getCards() {
+    var container = document.getElementById('home-languages-container');
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.channel-card'));
+}
+
+function getSidebarIndex(el) {
+    return getSidebarBtns().indexOf(el);
+}
+
+function getHeaderIndex(el) {
+    return getHeaderElements().indexOf(el);
+}
+
+function getCardIndex(el) {
+    return getCards().indexOf(el);
+}
+
+// Get row and column from card index
+function getCardRow(index) {
+    return Math.floor(index / GRID_COLS);
+}
+
+function getCardCol(index) {
+    return index % GRID_COLS;
+}
+
+function getCardByRowCol(row, col) {
+    var cards = getCards();
+    var index = row * GRID_COLS + col;
+    if (index >= 0 && index < cards.length) {
+        return { card: cards[index], index: index };
+    }
+    return null;
+}
+
+function getTotalRows() {
+    var cards = getCards();
+    if (cards.length === 0) return 0;
+    return Math.ceil(cards.length / GRID_COLS);
+}
+
+// Scroll element into view within the main content container with padding for focus effect
+function scrollToElement(el) {
+    if (!el) return;
+
+    var container = document.querySelector('.main-content');
+    if (!container) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
         return;
-    } else if (navigationState.currentZone === 'header') {
-        // LEFT in header: Move between settings and search, then to sidebar
-        var headerElements = Array.from(document.querySelectorAll('.search-input, .header-icon-btn'));
-        var currentIndex = headerElements.indexOf(activeElement);
+    }
 
-        if (currentIndex > 0) {
-            headerElements[currentIndex - 1].focus();
-        } else {
-            // At leftmost header item (search), move to sidebar at last visited index
-            console.log('[LEFT] At leftmost header, moving to Sidebar (last index:', navigationState.lastSidebarIndex, ')');
-            moveToSidebarByIndex(navigationState.lastSidebarIndex);
-        }
-    } else if (navigationState.currentZone === 'languages') {
-        // LEFT in Languages: Move within row, or go to sidebar
-        var moved = moveWithinLanguages(-1);
-        if (!moved) {
-            // At leftmost language pill, move to sidebar at last visited index
-            console.log('[LEFT] At leftmost language pill, moving to Sidebar (last index:', navigationState.lastSidebarIndex, ')');
-            moveToSidebarByIndex(navigationState.lastSidebarIndex);
-        }
-    } else if (navigationState.currentZone === 'channels') {
-        // LEFT in channels: Move within row, or go to sidebar
-        var moved = moveWithinChannelGrid(-1, 0);
-        if (!moved) {
-            // At leftmost channel card, move to sidebar at last visited index
-            console.log('[LEFT] At leftmost channel card, moving to Sidebar (last index:', navigationState.lastSidebarIndex, ')');
-            moveToSidebarByIndex(navigationState.lastSidebarIndex);
-        }
+    var containerRect = container.getBoundingClientRect();
+    var elRect = el.getBoundingClientRect();
+
+    // Extra space for the focus transform (scale + translateY + shadow)
+    var focusPadding = 30;
+
+    // Check if element is above visible area
+    if (elRect.top - focusPadding < containerRect.top) {
+        var scrollOffset = elRect.top - containerRect.top - focusPadding;
+        container.scrollTop += scrollOffset;
+    }
+    // Check if element is below visible area
+    else if (elRect.bottom + focusPadding > containerRect.bottom) {
+        var scrollOffset = elRect.bottom - containerRect.bottom + focusPadding;
+        container.scrollTop += scrollOffset;
     }
 }
 
-// Handle RIGHT key navigation
-function handleRightNavigation() {
-    var activeElement = document.activeElement;
-    console.log('[RIGHT] Current zone:', navigationState.currentZone);
-
-    if (navigationState.currentZone === 'sidebar') {
-        // Check if at the last sidebar item (Feedback)
-        var sidebarBtns = Array.from(document.querySelectorAll('.sidebar-icon-btn:not([style*="display: none"])'));
-        var currentIndex = sidebarBtns.indexOf(activeElement);
-        var isAtLastSidebarItem = (currentIndex === sidebarBtns.length - 1);
-
-        if (isAtLastSidebarItem) {
-            // RIGHT from last sidebar item (Feedback): Move to Languages content
-            console.log('[RIGHT] From last sidebar item, moving to Languages content');
-            moveToFirstLanguagePill();
-        } else {
-            // RIGHT from sidebar (not at bottom): Move to Header
-            console.log('[RIGHT] From sidebar, moving to Header');
-            moveToHeader();
-        }
-    } else if (navigationState.currentZone === 'header') {
-        // RIGHT in header: Move between search and settings
-        var headerElements = Array.from(document.querySelectorAll('.search-input, .header-icon-btn'));
-        var currentIndex = headerElements.indexOf(activeElement);
-
-        if (currentIndex < headerElements.length - 1) {
-            headerElements[currentIndex + 1].focus();
-        }
-    } else if (navigationState.currentZone === 'languages') {
-        // RIGHT in Languages: Move within row (horizontal navigation)
-        moveWithinLanguages(1);
-    } else if (navigationState.currentZone === 'channels') {
-        // RIGHT in channels: Move within row (horizontal navigation)
-        moveWithinChannelGrid(1, 0);
-    }
-}
-
-// Helper: Move to first language card
-function moveToFirstLanguagePill() {
-    // Find the Languages section
-    var sections = document.querySelectorAll('.content-section');
-    var langSection = null;
-
-    sections.forEach(function(section) {
-        var title = section.querySelector('.section-title');
-        if (title && title.textContent.includes('Language')) {
-            langSection = section;
-        }
-    });
-
-    if (langSection) {
-        var firstCard = langSection.querySelector('.channel-card');
-        if (firstCard) {
-            firstCard.focus();
-            scrollIntoViewSmooth(firstCard);
-            navigationState.currentZone = 'languages';
-            console.log('[NAV] Moved to first language card');
-            return;
-        }
-    }
-
-    // Fallback: try container
-    var container = document.getElementById('home-languages-container');
-    if (container) {
-        var card = container.querySelector('.channel-card');
-        if (card) {
-            card.focus();
-            scrollIntoViewSmooth(card);
-            navigationState.currentZone = 'languages';
-        }
-    }
-}
-
-// Helper: Move within languages (horizontal navigation using grid)
-function moveWithinLanguages(delta) {
-    var activeElement = document.activeElement;
-    var container = document.getElementById('home-languages-container');
-    
-    if (!container) return false;
-
-    var cards = Array.from(container.querySelectorAll('.channel-card'));
-    var currentIndex = cards.indexOf(activeElement);
-
-    if (currentIndex < 0) return false;
-
-    var newIndex = currentIndex + delta;
-
-    // Check bounds
-    if (newIndex < 0 || newIndex >= cards.length) return false;
-
-    cards[newIndex].focus();
-    scrollIntoViewSmooth(cards[newIndex]);
-    return true;
-}
-
-// Helper: Move to first channel card
-function moveToFirstChannelCard() {
-    // Find the Live TV Channels section
-    var sections = document.querySelectorAll('.content-section');
-    var channelSection = null;
-
-    sections.forEach(function(section) {
-        var title = section.querySelector('.section-title');
-        if (title && (title.textContent.includes('Channel') || title.textContent.includes('Live'))) {
-            channelSection = section;
-        }
-    });
-
-    if (channelSection) {
-        var firstCard = channelSection.querySelector('.channel-card');
-        if (firstCard) {
-            firstCard.focus();
-            scrollIntoViewSmooth(firstCard);
-            navigationState.currentZone = 'channels';
-            console.log('[NAV] Moved to first channel card');
-            return;
-        }
-    }
-
-    // Fallback: try any channel card
-    var anyChannelCard = document.querySelector('.channel-card');
-    if (anyChannelCard) {
-        anyChannelCard.focus();
-        scrollIntoViewSmooth(anyChannelCard);
-        navigationState.currentZone = 'channels';
-    }
-}
-
-// Helper: Move to header (search input)
-function moveToHeader() {
-    var searchInput = document.querySelector('.search-input');
-    if (searchInput) {
-        searchInput.focus();
-        navigationState.currentZone = 'header';
-        console.log('[NAV] Moved to header (search)');
-        
-        // Scroll to show ads banner when navigating to search
-        var heroBanner = document.querySelector('.hero-banner');
-        var mainContent = document.querySelector('.main-content');
-        if (heroBanner && mainContent) {
-            mainContent.scrollTop = 0;
-            console.log('[NAV] Scrolled to show ads banner');
-        } else if (mainContent) {
-            mainContent.scrollTop = 0;
-        }
-    }
-}
-
-// Helper: Move to active sidebar icon
-function moveToActiveSidebarIcon() {
-    var activeSidebarBtn = document.querySelector('.sidebar-icon-btn.active');
-    if (!activeSidebarBtn) {
-        activeSidebarBtn = document.querySelector('.sidebar-icon-btn');
-    }
-    if (activeSidebarBtn) {
-        activeSidebarBtn.focus();
-        navigationState.currentZone = 'sidebar';
-        console.log('[NAV] Moved to sidebar');
-    }
-}
-
-// Helper: Move to sidebar by index (for returning from content)
-function moveToSidebarByIndex(index) {
-    var sidebarBtns = Array.from(document.querySelectorAll('.sidebar-icon-btn:not([style*="display: none"])'));
-
-    // Ensure index is within bounds
-    if (index < 0) index = 0;
-    if (index >= sidebarBtns.length) index = sidebarBtns.length - 1;
-
-    if (sidebarBtns[index]) {
-        sidebarBtns[index].focus();
-        navigationState.currentZone = 'sidebar';
-        navigationState.lastSidebarIndex = index;
-        console.log('[NAV] Moved to sidebar index:', index);
-    }
-}
-
-// Helper: Move within channel grid
-function moveWithinChannelGrid(deltaX, deltaY) {
-    var activeElement = document.activeElement;
-
-    // Find the Channels section
-    var sections = document.querySelectorAll('.content-section');
-    var channelSection = null;
-
-    sections.forEach(function(section) {
-        var title = section.querySelector('.section-title');
-        if (title && (title.textContent.includes('Channel') || title.textContent.includes('Live'))) {
-            channelSection = section;
-        }
-    });
-
-    if (!channelSection) return false;
-
-    var cards = Array.from(channelSection.querySelectorAll('.channel-card'));
-    var currentIndex = cards.indexOf(activeElement);
-
-    if (currentIndex < 0) return false;
-
-    // Determine grid columns (default 5)
-    var grid = channelSection.querySelector('.channels-grid');
-    var columnsPerRow = 5;
-
-    if (grid) {
-        var computedStyle = window.getComputedStyle(grid);
-        var columns = computedStyle.gridTemplateColumns.split(' ').length;
-        if (columns > 0) columnsPerRow = columns;
-    }
-
-    // Calculate new position
-    var currentRow = Math.floor(currentIndex / columnsPerRow);
-    var currentCol = currentIndex % columnsPerRow;
-
-    var newRow = currentRow + deltaY;
-    var newCol = currentCol + deltaX;
-
-    // Check bounds
-    if (newCol < 0 || newCol >= columnsPerRow) return false;
-    if (newRow < 0) return false;
-
-    var newIndex = newRow * columnsPerRow + newCol;
-
-    // Check if new index is valid
-    if (newIndex >= 0 && newIndex < cards.length) {
-        cards[newIndex].focus();
-        scrollIntoViewSmooth(cards[newIndex]);
+// Focus a card and update state
+function focusCard(index) {
+    var cards = getCards();
+    if (index >= 0 && index < cards.length) {
+        cards[index].focus();
+        navState.zone = 'cards';
+        navState.lastCardIndex = index;
+        scrollToElement(cards[index]);
+        console.log('[NAV] Card focused:', index, '(row:', getCardRow(index), 'col:', getCardCol(index), ')');
         return true;
     }
-
     return false;
 }
 
-// Helper: Smooth scroll element into view
-function scrollIntoViewSmooth(element) {
-    if (element) {
-        element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-        });
+// Focus a sidebar button and update state
+function focusSidebar(index) {
+    var btns = getSidebarBtns();
+    if (index < 0) index = 0;
+    if (index >= btns.length) index = btns.length - 1;
+    if (btns[index]) {
+        btns[index].focus();
+        navState.zone = 'sidebar';
+        navState.lastSidebarIndex = index;
+        console.log('[NAV] Sidebar focused:', index);
+        return true;
+    }
+    return false;
+}
+
+// Focus a header element and update state
+function focusHeader(index) {
+    var els = getHeaderElements();
+    if (index < 0) index = 0;
+    if (index >= els.length) index = els.length - 1;
+    if (els[index]) {
+        els[index].focus();
+        navState.zone = 'header';
+        // Scroll to top to show banner
+        var mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.scrollTop = 0;
+        console.log('[NAV] Header focused:', index);
+        return true;
+    }
+    return false;
+}
+
+// ==========================================
+// DOWN KEY
+// ==========================================
+
+function handleDownNavigation() {
+    var active = document.activeElement;
+    console.log('[DOWN] Zone:', navState.zone);
+
+    if (navState.zone === 'sidebar') {
+        // DOWN in sidebar: move to next icon, at last icon jump to cards
+        var btns = getSidebarBtns();
+        var idx = btns.indexOf(active);
+        if (idx >= 0 && idx < btns.length - 1) {
+            focusSidebar(idx + 1);
+        } else if (idx === btns.length - 1) {
+            // At last sidebar icon: DOWN goes to cards
+            console.log('[DOWN] Last sidebar icon → Cards');
+            focusCard(navState.lastCardIndex || 0);
+        }
+    }
+    else if (navState.zone === 'header') {
+        // DOWN from header: go to first card (row 0, col 0)
+        console.log('[DOWN] Header → Cards');
+        focusCard(0);
+    }
+    else if (navState.zone === 'cards') {
+        // DOWN in cards: move to same column in next row
+        var idx = getCardIndex(active);
+        if (idx < 0) return;
+
+        var row = getCardRow(idx);
+        var col = getCardCol(idx);
+        var nextRow = row + 1;
+        var totalRows = getTotalRows();
+
+        if (nextRow < totalRows) {
+            var target = getCardByRowCol(nextRow, col);
+            if (target) {
+                focusCard(target.index);
+            } else {
+                // Column doesn't exist in next row (e.g., last row has fewer cards)
+                // Focus last card in next row
+                var cards = getCards();
+                var lastInNextRow = Math.min((nextRow + 1) * GRID_COLS - 1, cards.length - 1);
+                focusCard(lastInNextRow);
+            }
+        }
+        // At last row: stop
     }
 }
 
-// Export navigation handlers
+// ==========================================
+// UP KEY
+// ==========================================
+
+function handleUpNavigation() {
+    var active = document.activeElement;
+    console.log('[UP] Zone:', navState.zone);
+
+    if (navState.zone === 'sidebar') {
+        // UP in sidebar: move to previous icon, stop at first
+        var btns = getSidebarBtns();
+        var idx = btns.indexOf(active);
+        if (idx > 0) {
+            focusSidebar(idx - 1);
+        }
+        // At first icon: stop
+    }
+    else if (navState.zone === 'header') {
+        // UP from header: nowhere to go, stop
+        console.log('[UP] Already at top (header)');
+    }
+    else if (navState.zone === 'cards') {
+        // UP in cards: move to same column in previous row
+        var idx = getCardIndex(active);
+        if (idx < 0) return;
+
+        var row = getCardRow(idx);
+        var col = getCardCol(idx);
+
+        if (row > 0) {
+            // Move to previous row, same column
+            var target = getCardByRowCol(row - 1, col);
+            if (target) {
+                focusCard(target.index);
+            }
+        } else {
+            // At row 0: UP goes to header (Search)
+            console.log('[UP] Cards row 0 → Header');
+            focusHeader(0);
+        }
+    }
+}
+
+// ==========================================
+// LEFT KEY
+// ==========================================
+
+function handleLeftNavigation() {
+    var active = document.activeElement;
+    console.log('[LEFT] Zone:', navState.zone);
+
+    if (navState.zone === 'sidebar') {
+        // Already at leftmost, do nothing
+        console.log('[LEFT] Already in sidebar');
+    }
+    else if (navState.zone === 'header') {
+        // LEFT in header: move between elements, then to sidebar
+        var els = getHeaderElements();
+        var idx = els.indexOf(active);
+
+        if (idx > 0) {
+            // Move to previous header element (Settings → Search)
+            focusHeader(idx - 1);
+        } else {
+            // At Search (leftmost): go to sidebar
+            console.log('[LEFT] Header → Sidebar');
+            focusSidebar(navState.lastSidebarIndex);
+        }
+    }
+    else if (navState.zone === 'cards') {
+        // LEFT in cards: move to previous card in row
+        var idx = getCardIndex(active);
+        if (idx < 0) return;
+
+        var col = getCardCol(idx);
+
+        if (col > 0) {
+            // Move left within row
+            focusCard(idx - 1);
+        } else {
+            // At column 0: go to sidebar
+            console.log('[LEFT] Cards col 0 → Sidebar');
+            focusSidebar(navState.lastSidebarIndex);
+        }
+    }
+}
+
+// ==========================================
+// RIGHT KEY
+// ==========================================
+
+function handleRightNavigation() {
+    var active = document.activeElement;
+    console.log('[RIGHT] Zone:', navState.zone);
+
+    if (navState.zone === 'sidebar') {
+        // RIGHT from sidebar: go to header (Search)
+        console.log('[RIGHT] Sidebar → Header');
+        focusHeader(0);
+    }
+    else if (navState.zone === 'header') {
+        // RIGHT in header: move between elements (Search → Settings)
+        var els = getHeaderElements();
+        var idx = els.indexOf(active);
+
+        if (idx >= 0 && idx < els.length - 1) {
+            focusHeader(idx + 1);
+        }
+        // At last element (Settings): stop
+    }
+    else if (navState.zone === 'cards') {
+        // RIGHT in cards: move to next card in row
+        var idx = getCardIndex(active);
+        if (idx < 0) return;
+
+        var col = getCardCol(idx);
+        var row = getCardRow(idx);
+
+        // Check if next card exists in same row
+        var nextIdx = idx + 1;
+        var nextCol = col + 1;
+
+        if (nextCol < GRID_COLS && nextIdx < getCards().length) {
+            focusCard(nextIdx);
+        }
+        // At last column or last card: stop
+    }
+}
+
+// ==========================================
+// EXPORT
+// ==========================================
+
 window.TVNavigation = {
     init: initTVNavigation,
     handleDown: handleDownNavigation,

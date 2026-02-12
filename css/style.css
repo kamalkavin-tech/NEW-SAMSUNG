@@ -14,6 +14,7 @@
 @import url('componentes/cards.css');
 @import url('componentes/forms.css');
 @import url('componentes/remote.css');
+@import url('componentes/error-popups.css');
 
 /* 3. Layout (Header, Sidebar, Grid Systems) */
 @import url('layout/header.css');

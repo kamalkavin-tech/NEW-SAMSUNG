@@ -43,6 +43,15 @@ async function initPage() {
         console.log("Languages Fetched:", langResponse);
 
         if (Array.isArray(langResponse) && langResponse.length > 0) {
+            // Sort languages alphabetically by title
+            langResponse.sort(function(a, b) {
+                var nameA = (a.langtitle || '').toLowerCase();
+                var nameB = (b.langtitle || '').toLowerCase();
+                // Keep "All" or "Subscribed" at the top
+                if (nameA.includes('all') || nameA.includes('subscribed')) return -1;
+                if (nameB.includes('all') || nameB.includes('subscribed')) return 1;
+                return nameA.localeCompare(nameB);
+            });
             allLanguages = langResponse;
             renderLanguages(langResponse);
         } else {

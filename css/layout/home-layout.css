@@ -57,7 +57,7 @@ body {
     font-weight: 800;
     color: #fff;
     letter-spacing: 2px;
-    text-shadow: 0 0 10px rgba(59, 92, 255, 0.5);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 .sidebar-logo {
@@ -125,10 +125,25 @@ body {
 }
 
 .sidebar-icon-btn.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border: 2px solid #fff;
+    border-radius: 16px;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+}
+
+/* Remove default highlight from Home icon active state */
+.sidebar-icon-btn[data-route="home.html"].active {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* Keep hover/focus state for Home icon */
+.sidebar-icon-btn[data-route="home.html"]:hover,
+.sidebar-icon-btn[data-route="home.html"]:focus {
     background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 28px;
+    transform: scale(1.1);
 }
 
 .sidebar-icon-btn.active svg {
@@ -242,12 +257,17 @@ body {
     grid-row: 2 / 3;
     padding-top: 0;
     padding-left: 0;
+    padding-bottom: 40px;
     overflow-y: auto;
     overflow-x: hidden;
     height: calc(100vh - 60px);
     background: #000;
     display: flex;
     flex-direction: column;
+    scroll-padding-top: 20px;
+    scroll-padding-bottom: 20px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ==========================================
@@ -257,7 +277,8 @@ body {
 /* hero-banner styles moved to homepages.css to avoid duplicates */
 
 .content-section {
-    padding: 5px 15px 10px 15px;
+    padding: 10px 20px 15px 20px;
+    overflow: visible;
 }
 
 .section-title {

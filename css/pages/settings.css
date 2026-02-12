@@ -94,7 +94,7 @@
 .sidebar-item:focus {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 0 0 2px rgba(59, 92, 255, 0.3);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
 
 .sidebar-item.active {
@@ -372,12 +372,12 @@ input:checked + .slider:before {
 .device-icon {
     width: 72px;
     height: 72px;
-    background: linear-gradient(135deg, #3b5cff 0%, #5080ff 100%);
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
     border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: #000;
 }
 
 .device-title h2 {
@@ -400,8 +400,8 @@ input:checked + .slider:before {
 
 /* Dark Mode Row Highlight */
 .dark-mode-row {
-    background: linear-gradient(135deg, rgba(59, 92, 255, 0.1) 0%, rgba(80, 128, 255, 0.05) 100%);
-    border-color: rgba(59, 92, 255, 0.2);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .info-grid {
@@ -662,8 +662,8 @@ input:checked + .slider:before {
 }
 
 .settings-page.light-mode .dark-mode-row {
-    background: linear-gradient(135deg, rgba(59, 92, 255, 0.08) 0%, rgba(80, 128, 255, 0.04) 100%);
-    border-color: rgba(59, 92, 255, 0.15);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.15) 100%);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 /* Light Mode - About App */

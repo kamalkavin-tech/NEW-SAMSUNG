@@ -130,9 +130,9 @@
 }
 
 .filter-chip.active {
-    background: #3b5cff;
-    /* Accent Blue */
-    color: white;
+    background: #fff;
+    /* White */
+    color: #000;
     font-weight: 600;
     border: none;
 }
@@ -148,8 +148,8 @@
 }
 
 .filter-chip.active:focus {
-    background: #3b5cff;
-    box-shadow: 0 0 0 3px rgba(59, 92, 255, 0.5);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
 }
 
 .get-otp-btn {

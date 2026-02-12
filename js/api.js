@@ -91,6 +91,181 @@ const API_CONFIG = {
     DEFAULT_USER: DEFAULT_USER
 };
 
+// ==========================================
+// CACHE MANAGER - Handles localStorage caching with expiry
+// ==========================================
+const CacheManager = {
+    // Cache keys
+    KEYS: {
+        CHANNEL_LIST: 'bbnl_channels_cache',
+        CATEGORIES: 'bbnl_categories_cache',
+        LANGUAGES: 'bbnl_languages_cache',
+        LOGIN_TOKEN: 'bbnl_user',
+        FOFI_PLAYED: 'fofiPlayedThisSession',  // Uses sessionStorage
+        LAST_CHANNEL: 'bbnl_last_channel'
+    },
+
+    // Default cache expiry times (in milliseconds)
+    EXPIRY: {
+        CHANNEL_LIST: 60 * 60 * 1000,   // 1 hour
+        CATEGORIES: 60 * 60 * 1000,      // 1 hour  
+        LANGUAGES: 60 * 60 * 1000,       // 1 hour
+        LAST_CHANNEL: 7 * 24 * 60 * 60 * 1000  // 7 days
+    },
+
+    /**
+     * Set data in cache with expiry timestamp
+     * @param {string} key - Cache key
+     * @param {any} data - Data to cache
+     * @param {number} expiryMs - Expiry time in milliseconds (optional)
+     */
+    set: function(key, data, expiryMs) {
+        try {
+            var expiry = expiryMs || this.EXPIRY.CHANNEL_LIST;
+            var cacheObject = {
+                data: data,
+                timestamp: Date.now(),
+                expiry: Date.now() + expiry
+            };
+            localStorage.setItem(key, JSON.stringify(cacheObject));
+            console.log('[CacheManager] ✓ Cached:', key, '| Expires in:', Math.round(expiry / 60000), 'minutes');
+            return true;
+        } catch (e) {
+            console.error('[CacheManager] ✗ Failed to cache:', key, e);
+            return false;
+        }
+    },
+
+    /**
+     * Get data from cache (returns null if expired or not found)
+     * @param {string} key - Cache key
+     * @param {boolean} ignoreExpiry - If true, returns data even if expired
+     * @returns {any|null} Cached data or null
+     */
+    get: function(key, ignoreExpiry) {
+        try {
+            var cached = localStorage.getItem(key);
+            if (!cached) {
+                console.log('[CacheManager] Cache miss:', key);
+                return null;
+            }
+
+            var cacheObject = JSON.parse(cached);
+            
+            // Check expiry
+            if (!ignoreExpiry && cacheObject.expiry && Date.now() > cacheObject.expiry) {
+                console.log('[CacheManager] Cache expired:', key, '| Expired:', new Date(cacheObject.expiry).toLocaleTimeString());
+                return null;
+            }
+
+            var age = Math.round((Date.now() - cacheObject.timestamp) / 60000);
+            console.log('[CacheManager] ✓ Cache hit:', key, '| Age:', age, 'minutes');
+            return cacheObject.data;
+        } catch (e) {
+            console.error('[CacheManager] ✗ Failed to read cache:', key, e);
+            return null;
+        }
+    },
+
+    /**
+     * Check if cache exists and is valid (not expired)
+     * @param {string} key - Cache key
+     * @returns {boolean}
+     */
+    isValid: function(key) {
+        return this.get(key) !== null;
+    },
+
+    /**
+     * Get cache age in minutes
+     * @param {string} key - Cache key
+     * @returns {number|null} Age in minutes or null if not cached
+     */
+    getAge: function(key) {
+        try {
+            var cached = localStorage.getItem(key);
+            if (!cached) return null;
+            var cacheObject = JSON.parse(cached);
+            return Math.round((Date.now() - cacheObject.timestamp) / 60000);
+        } catch (e) {
+            return null;
+        }
+    },
+
+    /**
+     * Remove specific cache entry
+     * @param {string} key - Cache key
+     */
+    remove: function(key) {
+        try {
+            localStorage.removeItem(key);
+            console.log('[CacheManager] Removed cache:', key);
+        } catch (e) {
+            console.error('[CacheManager] Failed to remove cache:', key, e);
+        }
+    },
+
+    /**
+     * Clear all BBNL caches (except login token)
+     */
+    clearAll: function() {
+        var self = this;
+        Object.keys(this.KEYS).forEach(function(keyName) {
+            if (keyName !== 'LOGIN_TOKEN') {
+                self.remove(self.KEYS[keyName]);
+            }
+        });
+        console.log('[CacheManager] All caches cleared');
+    },
+
+    /**
+     * Get cache stats for debugging
+     */
+    getStats: function() {
+        var self = this;
+        var stats = {};
+        Object.keys(this.KEYS).forEach(function(keyName) {
+            var key = self.KEYS[keyName];
+            var cached = localStorage.getItem(key);
+            if (cached) {
+                try {
+                    var obj = JSON.parse(cached);
+                    stats[keyName] = {
+                        age: self.getAge(key) + ' minutes',
+                        expired: obj.expiry ? Date.now() > obj.expiry : false,
+                        size: Math.round(cached.length / 1024) + ' KB'
+                    };
+                } catch (e) {
+                    stats[keyName] = { error: e.message };
+                }
+            } else {
+                stats[keyName] = null;
+            }
+        });
+        console.log('[CacheManager] Stats:', stats);
+        return stats;
+    },
+
+    /**
+     * Set last played channel
+     * @param {object} channel - Channel data
+     */
+    setLastChannel: function(channel) {
+        this.set(this.KEYS.LAST_CHANNEL, channel, this.EXPIRY.LAST_CHANNEL);
+    },
+
+    /**
+     * Get last played channel
+     * @returns {object|null}
+     */
+    getLastChannel: function() {
+        return this.get(this.KEYS.LAST_CHANNEL);
+    }
+};
+
+// Make CacheManager globally available
+window.CacheManager = CacheManager;
+
 // API Endpoints
 const API_ENDPOINTS = {
     // Auth endpoints (old base URL)
@@ -358,10 +533,26 @@ const AuthAPI = {
 // ==========================================
 const ChannelsAPI = {
     getCategories: async function () {
+        // Check cache first
+        var cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES);
+        if (cachedCategories && cachedCategories.length > 0) {
+            console.log("[ChannelsAPI] 📦 Using cached categories (" + cachedCategories.length + ")");
+            
+            // Refresh in background
+            this._fetchAndCacheCategories().catch(function(e) {
+                console.warn("[ChannelsAPI] Background categories refresh failed:", e);
+            });
+            
+            return cachedCategories;
+        }
+
+        return await this._fetchAndCacheCategories();
+    },
+
+    _fetchAndCacheCategories: async function() {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
-        // Extract userid and mobile with proper fallback
         var userid = DEFAULT_USER.userid;
         var mobile = DEFAULT_USER.mobile;
 
@@ -377,43 +568,51 @@ const ChannelsAPI = {
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Categories with payload:", payload);
-        console.log("[ChannelsAPI] User data:", user);
+        console.log("[ChannelsAPI] 🌐 Fetching categories from API...");
 
-        const response = await apiCall(
+        var response = await apiCall(
             API_ENDPOINTS.CHANNEL_CATEGORIES,
             payload,
             {
-                "devmac": device.mac_address,  // FIXED: Use device MAC dynamically
+                "devmac": device.mac_address,
                 "devslno": device.devslno
             }
         );
 
         // Handle error responses
-        if (response.error) {
+        if (response && response.error) {
             console.error("[ChannelsAPI] Error getting categories:", response);
-            return [];
+            var staleCache = CacheManager.get(CacheManager.KEYS.CATEGORIES, true);
+            return staleCache || [];
         }
 
-        // Handle array-wrapped response: [{ body: ... }] or [{ categories: ... }]
+        // Handle array-wrapped response
         if (Array.isArray(response) && response.length > 0 && (response[0].body || response[0].categories)) {
             response = response[0];
         }
 
+        var categories = [];
+
         // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
             if (response.body.length > 0 && response.body[0].categories) {
-                return response.body[0].categories;
+                categories = response.body[0].categories;
+            } else {
+                categories = response.body;
             }
-            return response.body;
+        } else if (Array.isArray(response)) {
+            categories = response;
+        } else if (response && response.categories) {
+            categories = response.categories;
         }
 
-        // Fallback for direct array or other structures
-        if (Array.isArray(response)) return response;
-        if (response.categories) return response.categories;
+        // Cache the categories
+        if (categories.length > 0) {
+            CacheManager.set(CacheManager.KEYS.CATEGORIES, categories, CacheManager.EXPIRY.CATEGORIES);
+            console.log("[ChannelsAPI] 💾 Cached " + categories.length + " categories");
+        }
 
-        console.warn("[ChannelsAPI] Unexpected response format:", response);
-        return [];
+        return categories;
     },
 
     getChannelData: async function (options = {}) {
@@ -430,11 +629,49 @@ const ChannelsAPI = {
         }
 
         console.log("[ChannelsAPI] User info - userid:", userid, "mobile:", mobile);
-        console.log("[ChannelsAPI] Full user data:", user);
 
-        // NEW API FORMAT for chnl_data endpoint
-        // Body: userid, mobile, ip_address, mac_address (empty)
-        // Headers: devmac, Authorization, devslno
+        // ==========================================
+        // CACHE-FIRST STRATEGY
+        // 1. Check if cached data exists and is valid
+        // 2. If valid, return cached data immediately
+        // 3. Then fetch fresh data in background
+        // 4. Update cache after successful fetch
+        // ==========================================
+        
+        var cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST);
+        var shouldFetchFresh = !cachedChannels;
+        
+        // If cache exists but options have filters, we still need to filter cached data
+        if (cachedChannels && cachedChannels.length > 0) {
+            console.log("[ChannelsAPI] 📦 Using cached channel data (" + cachedChannels.length + " channels)");
+            
+            // Apply filters to cached data and return immediately
+            var filteredCached = this._applyFilters(cachedChannels, options);
+            
+            // Fetch fresh data in background (non-blocking)
+            this._fetchAndCacheChannels(userid, mobile, device).then(function(freshChannels) {
+                if (freshChannels && freshChannels.length > 0) {
+                    console.log("[ChannelsAPI] 🔄 Background refresh completed (" + freshChannels.length + " channels)");
+                }
+            }).catch(function(err) {
+                console.warn("[ChannelsAPI] Background refresh failed:", err);
+            });
+            
+            return filteredCached;
+        }
+
+        // No valid cache - fetch fresh data
+        console.log("[ChannelsAPI] 🌐 Fetching fresh channel data from API...");
+        var channels = await this._fetchAndCacheChannels(userid, mobile, device);
+        
+        // Apply filters and return
+        return this._applyFilters(channels, options);
+    },
+
+    /**
+     * Internal: Fetch channels from API and cache them
+     */
+    _fetchAndCacheChannels: async function(userid, mobile, device) {
         const payload = {
             userid: userid,
             mobile: mobile,
@@ -443,7 +680,6 @@ const ChannelsAPI = {
         };
 
         console.log("[ChannelsAPI] Getting Channel List with payload:", payload);
-        console.log("[ChannelsAPI] Options (for client-side filtering):", options);
 
         const response = await apiCall(
             API_ENDPOINTS.CHANNEL_LIST,
@@ -459,6 +695,12 @@ const ChannelsAPI = {
         // Handle error responses
         if (response && response.error) {
             console.error("[ChannelsAPI] Error:", response.message);
+            // Try to return stale cache if available
+            var staleCache = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+            if (staleCache) {
+                console.log("[ChannelsAPI] ⚠️ Using stale cache due to API error");
+                return staleCache;
+            }
             return [];
         }
 
@@ -468,36 +710,37 @@ const ChannelsAPI = {
             return [];
         }
 
-        // RESPONSE FORMAT FOR /chnl_data:
-        // The body array directly contains channel objects, NOT nested in body[0].channels
-        // Structure: { body: [ {channel1}, {channel2}, ... ], status: {...} }
+        // Parse channels from response
         let channels = [];
 
         if (response && response.body && Array.isArray(response.body)) {
-            // Check if it's the OLD format: body[0].channels[]
             if (response.body.length > 0 && response.body[0].channels && Array.isArray(response.body[0].channels)) {
                 console.log("[ChannelsAPI] 📦 Detected OLD format (body[0].channels[])");
                 channels = response.body[0].channels;
             }
-            // NEW format: body[] contains channels directly
             else if (response.body.length > 0 && response.body[0].chid) {
                 console.log("[ChannelsAPI] 📦 Detected NEW format (body[] with channel objects)");
                 channels = response.body;
             }
 
-            console.log(`[ChannelsAPI] ✅ Successfully loaded ${channels.length} channels from API`);
-        } else {
-            console.warn("[ChannelsAPI] ⚠️ response.body is not an array or doesn't exist");
+            console.log("[ChannelsAPI] ✅ Successfully loaded " + channels.length + " channels from API");
         }
 
-        if (channels.length === 0) {
-            console.warn("[ChannelsAPI] ❌ No channels returned");
-            console.log("[ChannelsAPI] Response keys:", response ? Object.keys(response) : "null");
-            console.log("[ChannelsAPI] Response.body type:", typeof response?.body);
-            return [];
+        // Cache the fresh data
+        if (channels.length > 0) {
+            CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
+            console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
         }
 
-        // CLIENT-SIDE FILTERING (API returns all channels, we filter them here)
+        return channels;
+    },
+
+    /**
+     * Internal: Apply filters to channel list
+     */
+    _applyFilters: function(channels, options) {
+        if (!channels || channels.length === 0) return [];
+        
         var filteredChannels = channels;
 
         // Filter by grid (category)
@@ -505,7 +748,7 @@ const ChannelsAPI = {
             filteredChannels = filteredChannels.filter(function(ch) {
                 return ch.grid === options.grid;
             });
-            console.log(`[ChannelsAPI] Filtered by grid="${options.grid}": ${filteredChannels.length} channels`);
+            console.log("[ChannelsAPI] Filtered by grid=\"" + options.grid + "\": " + filteredChannels.length + " channels");
         }
 
         // Filter by langid (language)
@@ -513,17 +756,22 @@ const ChannelsAPI = {
             filteredChannels = filteredChannels.filter(function(ch) {
                 return ch.langid === options.langid;
             });
-            console.log(`[ChannelsAPI] Filtered by langid="${options.langid}": ${filteredChannels.length} channels`);
+            console.log("[ChannelsAPI] Filtered by langid=\"" + options.langid + "\": " + filteredChannels.length + " channels");
         }
 
-        // Filter by search term
+        // Filter by search term (matches channel name AND channel number/LCN)
         if (options.search && options.search !== "") {
             var searchLower = options.search.toLowerCase();
+            var searchIsNumber = /^\d+$/.test(options.search.trim());
             filteredChannels = filteredChannels.filter(function(ch) {
                 var title = (ch.chtitle || "").toLowerCase();
+                var chNo = String(ch.channelno || ch.urno || ch.chno || ch.ch_no || "");
+                if (searchIsNumber) {
+                    return chNo.indexOf(options.search.trim()) === 0 || title.indexOf(searchLower) !== -1;
+                }
                 return title.indexOf(searchLower) !== -1;
             });
-            console.log(`[ChannelsAPI] Filtered by search="${options.search}": ${filteredChannels.length} channels`);
+            console.log("[ChannelsAPI] Filtered by search=\"" + options.search + "\": " + filteredChannels.length + " channels");
         }
 
         return filteredChannels;
@@ -553,10 +801,26 @@ const ChannelsAPI = {
     },
 
     getLanguageList: async function () {
+        // Check cache first
+        var cachedLanguages = CacheManager.get(CacheManager.KEYS.LANGUAGES);
+        if (cachedLanguages && cachedLanguages.length > 0) {
+            console.log("[ChannelsAPI] 📦 Using cached languages (" + cachedLanguages.length + ")");
+            
+            // Refresh in background
+            this._fetchAndCacheLanguages().catch(function(e) {
+                console.warn("[ChannelsAPI] Background languages refresh failed:", e);
+            });
+            
+            return cachedLanguages;
+        }
+
+        return await this._fetchAndCacheLanguages();
+    },
+
+    _fetchAndCacheLanguages: async function() {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
-        // Extract userid and mobile with proper fallback
         var userid = DEFAULT_USER.userid;
         var mobile = DEFAULT_USER.mobile;
 
@@ -572,41 +836,47 @@ const ChannelsAPI = {
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Language List with payload:", payload);
-        console.log("[ChannelsAPI] User data:", user);
+        console.log("[ChannelsAPI] 🌐 Fetching languages from API...");
 
-        const response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, {
+        var response = await apiCall(API_ENDPOINTS.CHANNEL_LANGUAGELIST, payload, {
             "devmac": device.mac_address,
             "devslno": device.devslno
         });
 
-        console.log("[ChannelsAPI] Language List Response:", response);
-
         // Handle error responses
-        if (response.error) {
+        if (response && response.error) {
             console.error("[ChannelsAPI] Error getting languages:", response);
-            return [];
+            var staleCache = CacheManager.get(CacheManager.KEYS.LANGUAGES, true);
+            return staleCache || [];
         }
 
-        // Handle array-wrapped response: [{ body: ... }] or [{ languages: ... }]
+        // Handle array-wrapped response
         if (Array.isArray(response) && response.length > 0 && (response[0].body || response[0].languages)) {
             response = response[0];
         }
 
-        // Normalize Nested Response - Extract languages from body[0].languages
+        var languages = [];
+
+        // Normalize Nested Response
         if (response && response.body && Array.isArray(response.body)) {
             if (response.body.length > 0 && response.body[0].languages) {
-                return response.body[0].languages;
+                languages = response.body[0].languages;
+            } else {
+                languages = response.body;
             }
-            return response.body;
+        } else if (Array.isArray(response)) {
+            languages = response;
+        } else if (response && response.languages) {
+            languages = response.languages;
         }
 
-        // Fallback for direct array or other structures
-        if (Array.isArray(response)) return response;
-        if (response.languages) return response.languages;
+        // Cache the languages
+        if (languages.length > 0) {
+            CacheManager.set(CacheManager.KEYS.LANGUAGES, languages, CacheManager.EXPIRY.LANGUAGES);
+            console.log("[ChannelsAPI] 💾 Cached " + languages.length + " languages");
+        }
 
-        console.warn("[ChannelsAPI] Unexpected language response format:", response);
-        return [];
+        return languages;
     },
 
     getSubscribedChannels: function (channels) {
@@ -633,6 +903,10 @@ const ChannelsAPI = {
     playChannel: function (channel) {
         const url = this.getStreamUrl(channel);
         if (url) {
+            // Save as last played channel for quick resume
+            CacheManager.setLastChannel(channel);
+            console.log("[ChannelsAPI] 💾 Saved last played channel:", channel.chtitle || channel.channel_name);
+            
             // Store the current page as referrer for back navigation
             sessionStorage.setItem('playerReferrer', window.location.href);
             
@@ -1205,6 +1479,12 @@ const BBNL_API = {
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
+
+    // Cache Methods
+    cache: CacheManager,
+    clearCache: CacheManager.clearAll.bind(CacheManager),
+    getCacheStats: CacheManager.getStats.bind(CacheManager),
+    getLastChannel: CacheManager.getLastChannel.bind(CacheManager),
 
     // Configuration
     API_CONFIG: API_CONFIG

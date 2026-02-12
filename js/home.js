@@ -5,6 +5,7 @@ BBNL IPTV - HOME PAGE SCRIPT
 var focusables = [];
 var currentFocus = 0;
 var exitPopupOpen = false; // Track if exit/logout popup is open
+var homeSearchTimeout = null; // Timer for auto-play channel by number
 
 // Check authentication - redirect to login if not logged in
 (function checkAuth() {
@@ -92,6 +93,37 @@ window.onload = function () {
             TVNavigation.init();
         }
     }, 100);
+
+    // Initialize numeric-only search input
+    var searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        // Filter out non-numeric characters on input
+        searchInput.addEventListener('input', function() {
+            var cleaned = searchInput.value.replace(/[^0-9]/g, '');
+            if (cleaned !== searchInput.value) {
+                searchInput.value = cleaned;
+            }
+
+            clearTimeout(homeSearchTimeout);
+
+            if (cleaned.length > 0) {
+                // Auto-play channel after 2 seconds of no input
+                homeSearchTimeout = setTimeout(function() {
+                    var lcn = parseInt(cleaned, 10);
+                    console.log("[HOME] Auto-playing LCN:", lcn);
+                    playChannelByLCNFromHome(lcn);
+                }, 2000);
+            }
+        });
+
+        // Block non-numeric key presses
+        searchInput.addEventListener('keypress', function(e) {
+            var char = String.fromCharCode(e.which || e.keyCode);
+            if (!/[0-9]/.test(char) && e.keyCode !== 13 && e.keyCode !== 8) {
+                e.preventDefault();
+            }
+        });
+    }
 };
 
 // Keyboard navigation
@@ -108,10 +140,76 @@ document.addEventListener('keydown', function (e) {
         return;
     }
 
+    // Check if error popup is open - handle BACK to close, ENTER to retry
+    if (homeErrorPopupOpen) {
+        e.preventDefault();
+        if (e.keyCode === 10009) {
+            hideHomeErrorPopups();
+        } else if (e.keyCode === 13) {
+            var activeBtn = document.activeElement;
+            if (activeBtn && activeBtn.classList.contains('error-popup-btn')) {
+                activeBtn.click();
+            }
+        }
+        return;
+    }
+
     // Check if exit popup is open - handle navigation within popup only
     if (exitPopupOpen) {
         e.preventDefault();
         handleExitPopupNavigation(e.keyCode);
+        return;
+    }
+
+    // Allow typing in search input - only intercept navigation keys
+    var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
+    if (isSearchFocused) {
+        if (e.keyCode === 13) { // ENTER - play channel by number
+            e.preventDefault();
+            clearTimeout(homeSearchTimeout); // Cancel auto-play timer
+            var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
+            if (query.length > 0) {
+                console.log("[HOME] Playing LCN:", query);
+                playChannelByLCNFromHome(parseInt(query, 10));
+            }
+            return;
+        }
+        if (e.keyCode === 39) { // RIGHT - go to Settings button
+            e.preventDefault();
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleRight();
+            }
+            return;
+        }
+        if (e.keyCode === 37) { // LEFT - go to sidebar
+            e.preventDefault();
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleLeft();
+            }
+            return;
+        }
+        if (e.keyCode === 38) { // UP - stay (already at top)
+            e.preventDefault();
+            return;
+        }
+        if (e.keyCode === 40) { // DOWN - leave search, go to cards
+            e.preventDefault();
+            if (typeof TVNavigation !== 'undefined') {
+                TVNavigation.handleDown();
+            }
+            return;
+        }
+        if (e.keyCode === 10009) { // BACK - clear search or navigate back
+            e.preventDefault();
+            clearTimeout(homeSearchTimeout);
+            if (document.activeElement.value.trim() !== '') {
+                document.activeElement.value = '';
+            } else {
+                handleBackNavigation();
+            }
+            return;
+        }
+        // Let all other keys (typing, backspace, etc.) work naturally
         return;
     }
 
@@ -685,10 +783,12 @@ function loadHomeChannels() {
             }
         })
         .catch(function (error) {
-            // Fail silently - don't show errors to user
             console.error("[HOME] Failed to load channels:", error);
-            console.log("[HOME] Rendering empty state");
-            renderEmptyChannelsState();
+            var container = document.getElementById('home-channels-container');
+            if (container) container.innerHTML = '';
+            if (isNetworkDisconnected()) {
+                showHomeErrorPopup('failedLoad');
+            }
         });
 }
 
@@ -834,14 +934,10 @@ function handleChannelCardClick(channel) {
  */
 function renderEmptyChannelsState() {
     var container = document.getElementById('home-channels-container');
-    if (!container) return;
-
-    container.innerHTML = `
-        <div style="padding: 40px; text-align: center; color: #888; grid-column: 1 / -1;">
-            <p style="font-size: 18px;">No channels available</p>
-            <p style="font-size: 14px; margin-top: 10px;">Please check back later</p>
-        </div>
-    `;
+    if (container) container.innerHTML = '';
+    if (isNetworkDisconnected()) {
+        showHomeErrorPopup('noChannels');
+    }
 }
 
 // ==========================================
@@ -870,10 +966,12 @@ function loadHomeLanguages() {
             }
         })
         .catch(function (error) {
-            // Fail silently - don't show errors to user
             console.error("[HOME] Failed to load languages:", error);
-            console.log("[HOME] Rendering empty state");
-            renderEmptyLanguagesState();
+            var container = document.getElementById('home-languages-container');
+            if (container) container.innerHTML = '';
+            if (isNetworkDisconnected()) {
+                showHomeErrorPopup('failedLoad');
+            }
         });
 }
 
@@ -890,6 +988,15 @@ function renderLanguagesInHomeGrid(languages) {
     }
 
     console.log("[HOME] Rendering", languages.length, "languages in home grid");
+
+    // Sort languages alphabetically (keep special entries at top)
+    languages.sort(function(a, b) {
+        var nameA = (a.langtitle || '').toLowerCase();
+        var nameB = (b.langtitle || '').toLowerCase();
+        if (nameA.includes('all') || nameA.includes('subscribed')) return -1;
+        if (nameB.includes('all') || nameB.includes('subscribed')) return 1;
+        return nameA.localeCompare(nameB);
+    });
 
     // Clear any existing content
     container.innerHTML = '';
@@ -1001,9 +1108,10 @@ function renderLanguagesInHomeGrid(languages) {
  */
 function renderEmptyLanguagesState() {
     var container = document.getElementById('home-languages-container');
-    if (!container) return;
-
-    container.innerHTML = '<div class="empty-state" style="color: rgba(255,255,255,0.5); padding: 20px;">No languages available</div>';
+    if (container) container.innerHTML = '';
+    if (isNetworkDisconnected()) {
+        showHomeErrorPopup('noChannels');
+    }
 }
 
 /**
@@ -1521,6 +1629,187 @@ function sendTRPDataOnLoad() {
 }
 
 // ==========================================
+// NETWORK CHECK HELPER
+// ==========================================
+
+/**
+ * Check if the network is disconnected
+ * Uses Tizen webapis on real TV, falls back to navigator.onLine in browser
+ * @returns {boolean} true if network is disconnected
+ */
+function isNetworkDisconnected() {
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            return webapis.network.getActiveConnectionType() === 0;
+        }
+    } catch (e) {
+        console.error("[HOME] Network check error:", e);
+    }
+    // Browser fallback
+    return !navigator.onLine;
+}
+
+// ==========================================
+// ERROR POPUP FUNCTIONALITY
+// ==========================================
+
+var homeErrorPopupOpen = false;
+
+/**
+ * Show error popup by type
+ * @param {string} type - 'failedLoad', 'loginRequired', 'noChannels'
+ */
+function showHomeErrorPopup(type) {
+    // Hide all first
+    hideHomeErrorPopups();
+
+    var popupId = '';
+    if (type === 'failedLoad') {
+        popupId = 'failedLoadPopup';
+    } else if (type === 'loginRequired') {
+        popupId = 'loginRequiredPopup';
+    } else if (type === 'noChannels') {
+        popupId = 'noChannelsPopup';
+    }
+
+    var popup = document.getElementById(popupId);
+    if (popup) {
+        popup.style.display = 'flex';
+        homeErrorPopupOpen = true;
+        // Focus retry button
+        setTimeout(function() {
+            var btn = popup.querySelector('.error-popup-btn');
+            if (btn) btn.focus();
+        }, 100);
+        console.log('[HOME] Showing error popup:', type);
+    }
+}
+
+/**
+ * Hide all error popups
+ */
+function hideHomeErrorPopups() {
+    var popups = ['failedLoadPopup', 'loginRequiredPopup', 'noChannelsPopup'];
+    popups.forEach(function(id) {
+        var popup = document.getElementById(id);
+        if (popup) popup.style.display = 'none';
+    });
+    homeErrorPopupOpen = false;
+}
+
+// Initialize error popup retry buttons
+document.addEventListener('DOMContentLoaded', function() {
+    // Failed to Load - Retry
+    var retryLoadBtn = document.getElementById('retryLoadBtn');
+    if (retryLoadBtn) {
+        retryLoadBtn.addEventListener('click', function() {
+            hideHomeErrorPopups();
+            loadHomeLanguages();
+        });
+    }
+
+    // Login Required - Retry (redirect to login)
+    var retryLoginBtn = document.getElementById('retryLoginBtn');
+    if (retryLoginBtn) {
+        retryLoginBtn.addEventListener('click', function() {
+            hideHomeErrorPopups();
+            window.location.href = 'login.html';
+        });
+    }
+
+    // No Channels - Retry
+    var retryNoChannelsBtn = document.getElementById('retryNoChannelsBtn');
+    if (retryNoChannelsBtn) {
+        retryNoChannelsBtn.addEventListener('click', function() {
+            hideHomeErrorPopups();
+            loadHomeLanguages();
+        });
+    }
+});
+
+// ==========================================
+// LCN-BASED DIRECT PLAYBACK FROM HOME
+// ==========================================
+
+/**
+ * Play a channel directly by its LCN number from the home page search
+ * @param {Number} lcn - The LCN number to play
+ */
+function playChannelByLCNFromHome(lcn) {
+    console.log("[HOME] Playing channel by LCN:", lcn);
+
+    BBNL_API.getChannelList()
+        .then(function(channels) {
+            if (!channels || !Array.isArray(channels)) {
+                alert("Channel " + lcn + " not found");
+                return;
+            }
+
+            var channel = channels.find(function(ch) {
+                var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
+                return chNo === lcn;
+            });
+
+            if (channel) {
+                console.log("[HOME] Found LCN", lcn, ":", channel.chtitle || channel.channel_name);
+                BBNL_API.playChannel(channel);
+            } else {
+                console.warn("[HOME] LCN", lcn, "not found");
+                alert("Channel " + lcn + " not found");
+            }
+        })
+        .catch(function(error) {
+            console.error("[HOME] LCN lookup failed:", error);
+            alert("Channel " + lcn + " not found");
+        });
+}
+
+// ==========================================
+// DEFAULT CHANNEL AUTO-TUNE (LCN 999)
+// ==========================================
+
+/**
+ * Auto-tune to Info Channel (LCN 999) on first app launch
+ * Only triggers once per session to avoid interrupting user navigation
+ */
+function autoTuneDefaultChannel() {
+    // Only auto-tune once per session
+    if (sessionStorage.getItem('autoTuneCompleted')) {
+        console.log("[HOME] Auto-tune already completed this session");
+        return;
+    }
+
+    console.log("[HOME] Auto-tuning to default channel (LCN 999)...");
+
+    BBNL_API.getChannelList()
+        .then(function(channels) {
+            if (!channels || !Array.isArray(channels) || channels.length === 0) {
+                console.log("[HOME] No channels available for auto-tune");
+                return;
+            }
+
+            // Find channel with LCN 999 (Info Channel)
+            var defaultChannel = channels.find(function(ch) {
+                var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
+                return chNo === 999;
+            });
+
+            if (defaultChannel) {
+                console.log("[HOME] Found Info Channel (LCN 999):", defaultChannel.chtitle || defaultChannel.channel_name);
+                sessionStorage.setItem('autoTuneCompleted', 'true');
+                BBNL_API.playChannel(defaultChannel);
+            } else {
+                console.log("[HOME] Info Channel (LCN 999) not found in channel list");
+                sessionStorage.setItem('autoTuneCompleted', 'true');
+            }
+        })
+        .catch(function(error) {
+            console.error("[HOME] Auto-tune failed:", error);
+            sessionStorage.setItem('autoTuneCompleted', 'true');
+        });
+}
+
+// ==========================================
 // PAGE LOAD - INITIALIZE ALL FEATURES
 // ==========================================
 
@@ -1541,4 +1830,10 @@ window.addEventListener('load', function () {
     // Use setTimeout to ensure they load after critical content
     setTimeout(loadHomeAds, 100);
     setTimeout(loadHomeLanguages, 150); // Load languages
+
+    // NOTE: FOFI channel (LCN 999) auto-play has been MOVED to TV Channel page
+    // It will play only ONCE when user first visits the TV Channel page
+    // This ensures Home page loads without auto-playback interruption
+    console.log("[HOME] Home page loaded - No auto-channel playback on home");
+
 });
