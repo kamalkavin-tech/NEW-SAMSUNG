@@ -127,15 +127,16 @@ body.channels-page {
     background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%) !important;
     color: #000 !important;
     font-weight: 600;
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+    box-shadow: none;
 }
 
 .filter-chip:hover,
 .filter-chip:focus {
     background: rgba(255, 255, 255, 0.08) !important;
     color: #fff !important;
-    transform: translateX(4px);
+    border: 2px solid #FFFFFF;
     outline: none !important;
+    box-shadow: none;
 }
 
 /* ========================================
@@ -197,11 +198,11 @@ body.channels-page {
 
 .channel-card:hover,
 .channel-card:focus {
-    transform: translateY(-8px) scale(1.05) !important;
-    border-color: #fff !important;
-    box-shadow: 0 0 0 3px #fff, 0 12px 36px rgba(255, 255, 255, 0.4) !important;
+    transform: translateY(-4px) scale(1.02) !important;
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none !important;
     outline: none !important;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
     z-index: 10;
 }
 
@@ -431,56 +432,131 @@ body.channels-page {
 }
 
 /* ========================================
-   LANGUAGES GRID (HOME PAGE)
+   LANGUAGES GRID (HOME PAGE) - TV SCALE DESIGN
    ======================================== */
 
 .languages-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    margin-bottom: 30px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 40px 60px;
+    padding: 30px 60px;
+    justify-items: center;
 }
 
 /* Languages section when it's the only content on home page */
 .languages-section {
     padding: 10px 20px 20px 20px;
+    margin-top: 15px;
     overflow: visible;
 }
 
 .languages-section .section-title {
-    margin-bottom: 16px;
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    padding-left: 60px;
 }
 
+/* Language grid - 5 per row TV scale design */
 .languages-section .channels-grid {
     display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 24px !important;
-    margin-bottom: 10px;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 40px 60px !important;
+    padding: 30px 60px !important;
+    justify-items: center;
     overflow: visible;
-    padding: 16px;
 }
 
-.language-pill-home {
-    background: rgba(255, 255, 255, 0.95);
-    color: #000;
-    border: none;
-    padding: 12px 28px;
-    border-radius: 50px;
-    font-size: 16px;
-    font-weight: 600;
+/* Language Item - TV Scale Design (No Circle) */
+.language-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 18px;
+    background: transparent;
+    border: 3px solid transparent;
+    border-radius: 16px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 200px;
 }
 
-.language-pill-home:hover,
-.language-pill-home:focus {
-    background: #fff;
-    color: #000;
-    transform: scale(1.08);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4), 0 4px 16px rgba(255, 255, 255, 0.3);
+.language-item:hover,
+.language-item:focus {
+    border: 3px solid #FFFFFF;
+    border-radius: 16px;
+    transform: scale(1.05);
+    background: transparent;
+    box-shadow: none;
     outline: none;
+}
+
+/* Language Logo - Full visible, no circle */
+.language-logo {
+    width: 130px;
+    height: 130px;
+    object-fit: contain;
+    background: transparent;
+}
+
+/* Language Logo Container - No circle background */
+.language-logo-container {
+    width: 130px;
+    height: 130px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    overflow: visible;
+}
+
+.language-logo-container img {
+    width: 130px;
+    height: 130px;
+    object-fit: contain;
+    background: transparent;
+}
+
+/* Language fallback text (when no logo) */
+.language-logo-fallback {
+    width: 120px;
+    height: 120px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* Language Name Label - TV Scale */
+.language-name {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+    margin-top: 10px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+/* View All button in language grid */
+.language-item.view-all .language-logo-container {
+    background: transparent;
+}
+
+.language-item.view-all .language-logo-fallback {
+    background: linear-gradient(135deg, #3b5cff 0%, #1a3ccc 100%);
+    border-radius: 16px;
+    font-size: 48px;
 }
 
 .app-card {
@@ -494,9 +570,9 @@ body.channels-page {
 
 .app-card:hover,
 .app-card:focus {
-    transform: translateY(-8px);
-    border-color: #fff;
-    box-shadow: 0 8px 24px rgba(255, 255, 255, 0.4);
+    transform: translateY(-4px);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     outline: none;
 }
 
@@ -626,7 +702,8 @@ body.channels-page {
 }
 
 .darkmode-toggle:focus .toggle-switch {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .toggle-label {
@@ -684,9 +761,9 @@ body.channels-page {
 .network-btn:hover,
 .network-btn:focus {
     background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.5);
+    border: 2px solid #FFFFFF;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    box-shadow: none;
 }
 
 .network-btn .network-icon {
@@ -760,11 +837,12 @@ body.channels-page {
 
 .network-option.active {
     background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.3);
+    border: 2px solid #FFFFFF;
 }
 
 .network-option:focus {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .network-option-icon {
@@ -831,7 +909,8 @@ body.channels-page {
 .settings-btn:focus {
     background: rgba(255, 255, 255, 0.2);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .settings-btn svg {
@@ -844,17 +923,20 @@ body.channels-page {
    ======================================== */
 .focusable:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .menu-btn:focus,
 .search-input:focus {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .channel-card:focus,
 .app-card:focus {
-    box-shadow: 0 0 0 3px #fff, 0 12px 32px rgba(255, 255, 255, 0.35) !important;
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none !important;
 }
 
 /* Light Mode Theme Variables */
@@ -1109,8 +1191,8 @@ body.light-mode .app-label {
 
 .exit-btn-no:hover,
 .exit-btn-no:focus {
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.4);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     outline: none;
 }
 
@@ -1238,8 +1320,8 @@ body.light-mode .exit-btn-yes {
 
 .applock-btn:hover,
 .applock-btn:focus {
-    transform: scale(1.03);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 24px rgba(255, 255, 255, 0.3);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     outline: none;
 }
 

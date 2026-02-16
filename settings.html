@@ -82,93 +82,66 @@
 
             <!-- Device Info Section -->
             <div class="content-panel" id="panel-device">
-                <div class="panel-header">
-                    <h1>Device Information</h1>
-                    <p>View your device details and network information</p>
+                <div class="panel-header centered">
+                    <h1>Device Info</h1>
+                    <p class="subtitle">View your device and network details</p>
                 </div>
 
-                <div class="info-sections two-cards">
-                    <!-- TV Information Card -->
-                    <div class="info-card device-card">
-                        <div class="device-card-header">
-                            <div class="device-icon">
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                                </svg>
-                            </div>
-                            <div class="device-title">
-                                <h2>TV Information</h2>
-                                <p id="device-firmware">Loading...</p>
-                            </div>
-                        </div>
+                <div class="device-info-sections">
+                    <!-- TV Information Section -->
+                    <div class="device-section">
+                        <h3 class="section-title">TV Information</h3>
+                        <div class="section-divider"></div>
                         <div class="info-grid">
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">TV Model</span>
                                 <span class="value" id="device-model-name">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">Device ID (DUID)</span>
                                 <span class="value" id="device-id">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">App Version</span>
                                 <span class="value" id="device-app-version">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">Tizen Version</span>
                                 <span class="value" id="device-tizen-version">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">Screen Resolution</span>
                                 <span class="value" id="device-resolution">Loading...</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="label">User ID</span>
-                                <span class="value" id="device-user-id">Loading...</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Network Information Card -->
-                    <div class="info-card network-card">
-                        <div class="device-card-header">
-                            <div class="device-icon">
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
-                                    <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
-                                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
-                                    <line x1="12" y1="20" x2="12.01" y2="20"></line>
-                                </svg>
-                            </div>
-                            <div class="device-title">
-                                <h2>Network Information</h2>
-                                <p id="device-connection-status">Checking...</p>
-                            </div>
-                        </div>
+                    <!-- Network Information Section -->
+                    <div class="device-section">
+                        <h3 class="section-title">Network Information</h3>
+                        <div class="section-divider"></div>
                         <div class="info-grid">
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">IP Address</span>
                                 <span class="value" id="device-ipv4">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">Gateway IP</span>
                                 <span class="value" id="device-gateway">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">DNS Server</span>
                                 <span class="value" id="device-dns">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">IPv6 Address</span>
                                 <span class="value" id="device-ipv6">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">WiFi MAC Address</span>
                                 <span class="value" id="device-wifi-mac">Loading...</span>
                             </div>
-                            <div class="info-row">
+                            <div class="info-row focusable" tabindex="0">
                                 <span class="label">Connection Type</span>
                                 <span class="value" id="device-connection-type">Loading...</span>
                             </div>

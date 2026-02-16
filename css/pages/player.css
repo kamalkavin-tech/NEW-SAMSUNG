@@ -773,20 +773,20 @@ video {
 
 .category-item:hover {
     background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.3);
     color: #fff;
 }
 
 .category-item:focus {
-    background: rgba(99, 102, 241, 0.2);
-    border-color: #6366f1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
     color: #fff;
-    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+    box-shadow: none;
 }
 
 .category-item.active {
-    background: rgba(99, 102, 241, 0.3);
-    border-color: #6366f1;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid #FFFFFF;
     color: #fff;
 }
 

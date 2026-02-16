@@ -992,7 +992,7 @@ function loadHomeLanguages() {
 }
 
 /**
- * Render languages in home page grid as cards (like channel cards)
+ * Render languages in home page grid - MINIMAL LOGO ONLY DESIGN
  * @param {Array} languages - Array of language objects
  */
 function renderLanguagesInHomeGrid(languages) {
@@ -1003,7 +1003,7 @@ function renderLanguagesInHomeGrid(languages) {
         return;
     }
 
-    console.log("[HOME] Rendering", languages.length, "languages in home grid");
+    console.log("[HOME] Rendering", languages.length, "languages in minimal grid");
 
     // Sort languages alphabetically (keep special entries at top)
     languages.sort(function (a, b) {
@@ -1017,103 +1017,84 @@ function renderLanguagesInHomeGrid(languages) {
     // Clear any existing content
     container.innerHTML = '';
 
-    // Take first 7 languages (+ View All = 8 cards = 2 rows of 4)
-    var displayLanguages = languages.slice(0, 7);
+    // Take first 9 languages (+ View All = 10 items = 2 rows of 5)
+    var displayLanguages = languages.slice(0, 9);
 
-    // Create language cards
+    // Create minimal language items (logo + name only - NO CIRCLE)
     displayLanguages.forEach(function (lang) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
         var langLogo = lang.langlogo || "";
 
-        // Create language card (similar to channel card)
-        var card = document.createElement('div');
-        card.className = 'channel-card focusable';
-        card.tabIndex = 0;
-        card.setAttribute('data-langid', langId);
-        card.setAttribute('data-langname', langName);
+        // Create language item (no circle design)
+        var item = document.createElement('div');
+        item.className = 'language-item focusable';
+        item.tabIndex = 0;
+        item.setAttribute('data-langid', langId);
+        item.setAttribute('data-langname', langName);
 
-        // Language icon container
-        var iconDiv = document.createElement('div');
-        iconDiv.className = 'channel-icon';
-        iconDiv.style.background = 'linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%)';
-        iconDiv.style.display = 'flex';
-        iconDiv.style.flexDirection = 'column';
-        iconDiv.style.alignItems = 'center';
-        iconDiv.style.justifyContent = 'center';
-        iconDiv.style.padding = '20px';
-        iconDiv.style.borderRadius = '12px';
-
-        // Display logo if available
+        // Display logo directly (no container wrapper)
         if (langLogo && !langLogo.includes('noimage')) {
             var img = document.createElement('img');
+            img.className = 'language-logo';
             img.src = langLogo;
             img.alt = langName;
-            img.style.maxWidth = '80%';
-            img.style.maxHeight = '80%';
-            img.style.objectFit = 'contain';
-
-            // Fallback to text if image fails to load
             img.onerror = function () {
-                iconDiv.innerHTML = '<span style="color: white; font-weight: bold; font-size: 24px;">' +
-                    langName.substring(0, 2).toUpperCase() + '</span>';
+                // Fallback to text if image fails
+                var fallback = document.createElement('div');
+                fallback.className = 'language-logo-fallback';
+                fallback.innerText = langName.substring(0, 2).toUpperCase();
+                item.insertBefore(fallback, item.firstChild);
+                img.remove();
             };
-
-            iconDiv.appendChild(img);
+            item.appendChild(img);
         } else {
             // Text fallback - show first 2 letters
-            var nameSpan = document.createElement('span');
-            nameSpan.style.color = 'white';
-            nameSpan.style.fontWeight = 'bold';
-            nameSpan.style.fontSize = '28px';
-            nameSpan.style.textAlign = 'center';
-            nameSpan.innerText = langName.substring(0, 2).toUpperCase();
-            iconDiv.appendChild(nameSpan);
+            var fallback = document.createElement('div');
+            fallback.className = 'language-logo-fallback';
+            fallback.innerText = langName.substring(0, 2).toUpperCase();
+            item.appendChild(fallback);
         }
 
-        card.appendChild(iconDiv);
-
-        // Language label container
-        var labelContainer = document.createElement('div');
-        labelContainer.className = 'card-info';
-        labelContainer.style.padding = '12px 16px';
-
-        // Language name
-        var titleEl = document.createElement('div');
-        titleEl.className = 'card-title-bottom';
-        titleEl.innerText = langName;
-        labelContainer.appendChild(titleEl);
-
-        card.appendChild(labelContainer);
+        // Language name label
+        var nameLabel = document.createElement('div');
+        nameLabel.className = 'language-name';
+        nameLabel.innerText = langName;
+        item.appendChild(nameLabel);
 
         // Click handler - navigate to channels with language filter
-        card.addEventListener('click', function () {
+        item.addEventListener('click', function () {
             console.log("[HOME] Language clicked:", langName, "ID:", langId);
+            // Store selected language in sessionStorage for channels page
+            sessionStorage.setItem('selectedLanguageId', langId);
+            sessionStorage.setItem('selectedLanguageName', langName);
             window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
         });
 
-        container.appendChild(card);
+        container.appendChild(item);
     });
 
-    // Add "View All" button
-    var viewAllCard = document.createElement('div');
-    viewAllCard.className = 'channel-card view-all focusable';
-    viewAllCard.tabIndex = 0;
-    viewAllCard.innerHTML = `
-        <div class="channel-icon view-all-icon" style="background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);">
-            <span class="arrow" style="font-size: 48px; color: #3b5cff;">→</span>
-        </div>
-        <div class="card-info" style="padding: 12px 16px;">
-            <div class="card-title-bottom">View All</div>
-            <div class="card-subtitle-bottom">Languages</div>
-        </div>
-    `;
-    viewAllCard.addEventListener('click', function () {
+    // Add "View All" button (no circle style)
+    var viewAllItem = document.createElement('div');
+    viewAllItem.className = 'language-item view-all focusable';
+    viewAllItem.tabIndex = 0;
+
+    var viewAllFallback = document.createElement('div');
+    viewAllFallback.className = 'language-logo-fallback';
+    viewAllFallback.innerHTML = '→';
+    viewAllItem.appendChild(viewAllFallback);
+
+    var viewAllLabel = document.createElement('div');
+    viewAllLabel.className = 'language-name';
+    viewAllLabel.innerText = 'View All';
+    viewAllItem.appendChild(viewAllLabel);
+
+    viewAllItem.addEventListener('click', function () {
         window.location.href = 'language-select.html';
     });
-    container.appendChild(viewAllCard);
+    container.appendChild(viewAllItem);
 
-    console.log("[HOME] ✓ Languages grid rendered successfully");
+    console.log("[HOME] ✓ Languages grid rendered successfully (minimal design)");
 
     // Refresh focusable elements
     focusables = document.querySelectorAll('.focusable');

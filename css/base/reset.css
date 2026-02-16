@@ -33,22 +33,22 @@ body {
 
 /* Global focusable element styles */
 .focusable {
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
 
 .focusable:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
-    transform: scale(1.02);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
 }
 
 /* Button focus styles */
 button.focusable:focus,
 .btn:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 4px 12px rgba(255, 255, 255, 0.3);
-    transform: scale(1.02);
-    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 /* Card focus styles */
@@ -57,9 +57,9 @@ button.focusable:focus,
 .app-card:focus,
 .movie-card:focus {
     outline: none;
-    border-color: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 24px rgba(255, 255, 255, 0.35);
-    transform: translateY(-4px) scale(1.02);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
+    transform: scale(1.02);
 }
 
 /* Input focus styles */
@@ -67,8 +67,8 @@ input.focusable:focus,
 select.focusable:focus,
 textarea.focusable:focus {
     outline: none;
-    border-color: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
 }
 
 /* Navigation item focus */
@@ -76,11 +76,13 @@ textarea.focusable:focus {
 .sidebar-item:focus,
 .filter-chip:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Active state for selected items */
 .focusable.active:focus {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6), 0 4px 16px rgba(255, 255, 255, 0.4);
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none;
 }

@@ -348,14 +348,14 @@ body {
 .network-option:hover,
 .network-option:focus {
     background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    border: 2px solid #FFFFFF;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+    box-shadow: none;
 }
 
 .network-option.active {
     background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(99, 102, 241, 0.5);
+    border: 2px solid #FFFFFF;
 }
 
 .network-option-icon {
@@ -460,5 +460,6 @@ body {
 
 .sidebar-icon-btn:focus,
 .header-icon-btn:focus {
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }

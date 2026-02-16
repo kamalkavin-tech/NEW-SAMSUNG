@@ -20,14 +20,16 @@ body.channels-page {
     top: 0;
     left: 0;
     right: 0;
-    background: #000000;
-    height: 50px;
-    padding: 0 15px;
+    background: #0a0a0a;
+    height: 70px;
+    padding: 15px 20px 10px;
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: auto 1fr auto;
+    gap: 20px;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 100;
+    box-sizing: border-box;
 }
 
 /* Back Button - Box Style from Image */
@@ -59,8 +61,9 @@ body.channels-page {
 
 .back-btn:hover,
 .back-btn:focus {
-    background: #333;
-    border-color: #666;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     outline: none;
 }
 
@@ -76,7 +79,7 @@ body.channels-page {
 }
 
 .page-title #titleLanguage {
-    color: #4169e1;
+    color: #ffffff;
     font-weight: 600;
 }
 
@@ -104,8 +107,9 @@ body.channels-page {
 
 .search-btn:hover,
 .search-btn:focus {
-    background: #333;
-    border-color: #666;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     outline: none;
 }
 
@@ -125,8 +129,8 @@ body.channels-page {
 
 .search-bar:focus-within {
     background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .search-bar .search-icon {
@@ -158,12 +162,12 @@ body.channels-page {
 
 .category-section {
     position: fixed;
-    top: 50px;
+    top: 70px;
     left: 0;
     right: 0;
-    background: #000000;
-    padding: 8px 15px 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: #0a0a0a;
+    padding: 12px 20px 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 99;
 }
 
@@ -202,35 +206,41 @@ body.channels-page {
 
 .category-pill:hover,
 .category-pill:focus {
-    background: #3a3a3a;
-    border-color: #888;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
     color: #fff;
-    transform: translateY(-2px);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: none;
     outline: none;
 }
 
 .category-pill.active {
-    background: #2a2a2a;
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
-    border-color: #666;
+    border: 2px solid #FFFFFF;
     box-shadow: none;
 }
 
-/* Language Pill */
+/* Language Pill - Exact same style as category buttons */
 .language-pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #4169e1;
-    color: #fff;
-    border-color: #4169e1;
+    background: #1a1a1a;
+    color: #9ca3af;
+    border: 1px solid #404040;
+    padding: 8px 18px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
 }
 
 .language-pill:hover,
 .language-pill:focus {
-    background: #5a7ce8;
-    border-color: #5a7ce8;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
+    color: #fff;
+    box-shadow: none;
+    outline: none;
 }
 
 .pill-arrow {
@@ -244,7 +254,7 @@ body.channels-page {
 /* Language Dropdown */
 .language-dropdown-menu {
     position: absolute;
-    top: 96px;
+    top: 125px;
     left: 20px;
     background: #1a1a1a;
     border-radius: 12px;
@@ -253,7 +263,7 @@ body.channels-page {
     max-height: 300px;
     overflow-y: auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 1000;
 }
 
@@ -268,13 +278,16 @@ body.channels-page {
 
 .language-option:hover,
 .language-option:focus {
-    background: rgba(99, 102, 241, 0.2);
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .language-option.active {
-    background: #6366f1;
+    background: rgba(255, 255, 255, 0.2);
     color: #fff;
+    border: 2px solid #FFFFFF;
 }
 
 /* ==========================================
@@ -282,16 +295,19 @@ body.channels-page {
    ========================================== */
 
 .subpage-section {
-    margin-top: 130px;
-    padding: 20px 40px 40px;
+    margin-top: 140px;
+    padding: 20px 20px 30px;
     background: #000000;
     overflow-y: auto;
     overflow-x: hidden;
-    height: calc(100vh - 130px);
+    height: calc(100vh - 140px);
     scroll-padding-top: 20px;
     scroll-padding-bottom: 20px;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
 }
 
 /* Section Headers */
@@ -303,16 +319,17 @@ body.channels-page {
 }
 
 /* ==========================================
-   CHANNEL GRID - 5 CARDS PER ROW
+   CHANNEL GRID - 5 CARDS PER ROW (MANDATORY)
    ========================================== */
 
 .channels-grid,
 .grid-5 {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 20px;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 14px !important;
     margin: 0;
     padding: 0;
+    width: 100% !important;
 }
 
 /* ==========================================
@@ -321,7 +338,7 @@ body.channels-page {
 
 .channel-card {
     background: linear-gradient(145deg, #1a1a2e 0%, #16162a 50%, #0f0f1a 100%);
-    border-radius: 14px;
+    border-radius: 12px;
     overflow: visible;
     cursor: pointer;
     position: relative;
@@ -329,24 +346,24 @@ body.channels-page {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px;
-    height: 180px;
+    padding: 10px;
+    height: 155px;
     border: 2px solid rgba(255, 255, 255, 0.08);
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     will-change: transform;
 }
 
 .channel-card:hover {
-    transform: scale(1.05);
-    border-color: rgba(65, 105, 225, 0.4);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    transform: scale(1.02);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    box-shadow: none;
 }
 
 .channel-card:focus {
     outline: none;
-    transform: scale(1.05);
-    border-color: #4169e1;
-    box-shadow: 0 0 20px rgba(65, 105, 225, 0.4), 0 8px 30px rgba(0, 0, 0, 0.5);
+    transform: scale(1.02);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
     z-index: 5;
 }
 
@@ -356,13 +373,13 @@ body.channels-page {
 
 .card-lcn-badge {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    top: 6px;
+    left: 6px;
     background: rgba(0, 0, 0, 0.8);
     color: #ffffff;
-    padding: 5px 12px;
-    border-radius: 8px;
-    font-size: 18px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 16px;
     font-weight: 700;
     z-index: 2;
 }
@@ -373,13 +390,13 @@ body.channels-page {
 
 .card-price-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 6px;
     background: linear-gradient(135deg, #10b981, #059669);
     color: #ffffff;
-    padding: 5px 12px;
-    border-radius: 8px;
-    font-size: 16px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 14px;
     font-weight: 700;
     z-index: 2;
 }
@@ -390,30 +407,30 @@ body.channels-page {
 
 .channel-logo-container {
     width: 100%;
-    height: 70px;
+    height: 60px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 25px;
-    margin-bottom: 5px;
+    margin-top: 20px;
+    margin-bottom: 4px;
 }
 
 .channel-logo-container img {
-    max-width: 100px;
-    max-height: 70px;
+    max-width: 85px;
+    max-height: 60px;
     object-fit: contain;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .no-logo-text {
-    width: 50px;
-    height: 50px;
+    width: 45px;
+    height: 45px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 10px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -425,10 +442,10 @@ body.channels-page {
 
 .card-channel-name {
     color: #ffffff;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 600;
     text-align: center;
-    padding: 5px 10px;
+    padding: 4px 8px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -580,33 +597,31 @@ body.channels-page {
 /* Error popup styles now in shared componentes/error-popups.css */
 
 /* ==========================================
-   RESPONSIVE ADJUSTMENTS
+   RESPONSIVE ADJUSTMENTS - MAINTAIN 5 CARDS
    ========================================== */
 
-@media (max-width: 1600px) {
+/* For 1920x1080 TV - Always 5 cards per row */
+@media (min-width: 1280px) {
     .channels-grid,
     .grid-5 {
-        grid-template-columns: repeat(5, 1fr);
-        gap: 20px;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        gap: 14px !important;
     }
     
     .channel-card {
-        height: 200px;
-    }
-    
-    .card-channel-name {
-        font-size: 14px;
+        height: 155px;
     }
 }
 
-@media (max-width: 1280px) {
+/* Only reduce to 4 cards on very small screens (not TV) */
+@media (max-width: 1279px) {
     .channels-grid,
     .grid-5 {
-        grid-template-columns: repeat(4, 1fr);
-        gap: 18px;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 12px !important;
     }
     
     .channel-card {
-        height: 190px;
+        height: 150px;
     }
 }
