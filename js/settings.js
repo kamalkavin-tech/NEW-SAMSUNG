@@ -384,15 +384,42 @@ function switchSection(section) {
 async function handleLogout() {
     var confirmLogout = confirm('Are you sure you want to logout?');
     if (confirmLogout) {
-        console.log("[Settings] User confirmed logout");
+        console.log("[Settings] User confirmed logout - clearing all data");
+
+        // Clear all localStorage
+        localStorage.clear();
+
+        // Clear all sessionStorage
+        sessionStorage.clear();
+
+        // Call API logout if available
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
-            await BBNL_API.logout();
+            try {
+                await BBNL_API.logout();
+            } catch (e) {
+                console.error("[Settings] API logout error:", e);
+            }
         } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
-            await AuthAPI.logout();
-        } else {
-            localStorage.removeItem('bbnl_user');
-            sessionStorage.clear();
-            window.location.href = 'login.html';
+            try {
+                await AuthAPI.logout();
+            } catch (e) {
+                console.error("[Settings] AuthAPI logout error:", e);
+            }
+        }
+
+        console.log("[Settings] Logout complete - redirecting to login");
+
+        // Redirect to login page (replace history to prevent back navigation)
+        window.location.replace('login.html');
+
+        // Try to exit the Tizen application completely
+        try {
+            if (typeof tizen !== 'undefined' && tizen.application) {
+                console.log("[Settings] Attempting to exit Tizen application");
+                tizen.application.getCurrentApplication().exit();
+            }
+        } catch (e) {
+            console.log("[Settings] Not on Tizen or exit failed:", e);
         }
     }
 }
@@ -643,7 +670,7 @@ function safeCall(fn, fallback) {
     }
 }
 
-function setElementText(id, text) {  
+function setElementText(id, text) {
     var el = document.getElementById(id);
     if (el) el.innerText = text;
 }

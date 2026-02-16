@@ -384,7 +384,7 @@
 }
 
 /* ========================================
-   OTP POPUP STYLES
+   OTP POPUP STYLES - IMPROVED FOR TV
    ======================================== */
 
 .otp-popup-overlay {
@@ -393,7 +393,8 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.90);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -402,24 +403,37 @@
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes slideUp {
-    from { 
+    from {
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
-    to { 
+
+    to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
 }
 
 @keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
 }
 
 .otp-popup-container {
@@ -430,11 +444,13 @@
     min-width: 450px;
     max-width: 550px;
     text-align: center;
-    box-shadow: 
+    box-shadow:
         0 25px 80px rgba(0, 0, 0, 0.6),
         0 0 60px rgba(59, 108, 255, 0.15),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
     animation: slideUp 0.4s ease;
+    position: relative;
+    z-index: 10001;
 }
 
 .otp-popup-icon {
@@ -511,15 +527,16 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     box-shadow: 0 8px 25px rgba(46, 204, 113, 0.3);
+    outline: none;
 }
 
 .otp-popup-btn:hover,
 .otp-popup-btn:focus {
     transform: translateY(-3px);
     background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-    box-shadow: 
+    box-shadow:
         0 12px 35px rgba(46, 204, 113, 0.4),
-        0 0 0 3px rgba(46, 204, 113, 0.3);
+        0 0 0 4px rgba(46, 204, 113, 0.3);
     outline: none;
 }
 
@@ -550,7 +567,248 @@
 .error-popup .error-btn:hover,
 .error-popup .error-btn:focus {
     background: linear-gradient(135deg, #ee5a5a 0%, #dc4a4a 100%);
-    box-shadow: 
+    box-shadow:
         0 12px 35px rgba(255, 68, 68, 0.4),
-        0 0 0 3px rgba(255, 68, 68, 0.3);
+        0 0 0 4px rgba(255, 68, 68, 0.3);
+}
+
+/* ========================================
+   MODERN LOGIN PAGE DESIGN
+   ======================================== */
+
+.login-page {
+    background: linear-gradient(135deg, #000000 0%, #0a0a0f 50%, #000000 100%);
+    width: 100%;
+    height: 100%;
+    min-height: 1080px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-card-modern {
+    width: 700px;
+    background: linear-gradient(145deg, rgba(20, 25, 45, 0.95) 0%, rgba(10, 15, 30, 0.98) 100%);
+    border-radius: 24px;
+    padding: 60px 70px;
+    box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.6),
+        0 0 1px rgba(255, 255, 255, 0.1) inset;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+}
+
+.login-title-modern {
+    font-size: 48px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 12px;
+    text-align: center;
+    letter-spacing: -0.5px;
+}
+
+.login-subtitle-modern {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 50px;
+    text-align: center;
+    font-weight: 400;
+}
+
+/* Steps Indicator - Modern */
+.steps-indicator-modern {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 50px;
+}
+
+.step-modern {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.step-modern.active {
+    color: #4169ff;
+}
+
+.step-modern.inactive {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.step-dot-filled {
+    font-size: 14px;
+    color: #4169ff;
+}
+
+.step-dot-empty {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.step-text-modern {
+    font-size: 16px;
+}
+
+.step-line-modern {
+    color: rgba(255, 255, 255, 0.2);
+    letter-spacing: 2px;
+    font-size: 14px;
+}
+
+/* Input Label - Modern */
+.input-label-modern {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 12px;
+    letter-spacing: 0.3px;
+}
+
+/* Phone Input - Modern */
+.phone-input-modern {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 0;
+    margin-bottom: 30px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.phone-input-modern:focus-within {
+    border-color: rgba(65, 105, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(65, 105, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.country-code-modern {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 18px 20px;
+    cursor: pointer;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.country-code-modern:hover,
+.country-code-modern:focus {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-arrow {
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.input-divider-modern {
+    width: 1px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.phone-input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 18px 20px;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+    outline: none;
+}
+
+.phone-input-field::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 15px;
+}
+
+/* Get OTP Button - Modern */
+.get-otp-btn-modern {
+    width: 100%;
+    padding: 18px 40px;
+    background: linear-gradient(135deg, #4169ff 0%, #3454d1 100%);
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 40px;
+    box-shadow: 0 8px 25px rgba(65, 105, 255, 0.3);
+    letter-spacing: 0.5px;
+}
+
+.get-otp-btn-modern:hover,
+.get-otp-btn-modern:focus {
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, #3454d1 0%, #2845b8 100%);
+    box-shadow:
+        0 12px 35px rgba(65, 105, 255, 0.4),
+        0 0 0 3px rgba(65, 105, 255, 0.2);
+    outline: none;
+}
+
+.get-otp-btn-modern:active {
+    transform: translateY(0);
+}
+
+/* Device Info Grid - Modern */
+.device-info-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.device-info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.device-info-item {
+    background: transparent;
+    border: none;
+    padding: 8px 0;
+}
+
+.device-info-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.device-info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+}
+
+/* Full-width device info item for IPv6 */
+.device-info-item.full-width {
+    grid-column: 1 / -1;
+}
+
+/* IPv6 value - smaller font for long addresses */
+.ipv6-value {
+    font-size: 12px;
+    word-break: break-all;
+    line-height: 1.4;
 }

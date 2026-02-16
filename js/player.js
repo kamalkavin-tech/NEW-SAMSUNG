@@ -58,11 +58,11 @@ function fixLocalhostUrl(url) {
     if (url.includes('livestream.bbnl.in') || url.includes('livestream2.bbnl.in')) {
         wasOldServer = true;
         console.log("⚠️ OLD STREAM SERVER DETECTED - Switching to Samsung HTTP/1.1 server");
-        
+
         // Replace old servers with new Samsung-compatible HTTP/1.1 server
         url = url.replace(/livestream2\.bbnl\.in/g, 'livestream3.bbnl.in');
         url = url.replace(/livestream\.bbnl\.in/g, 'livestream3.bbnl.in');
-        
+
         console.log("Original Server URL:", originalUrl);
         console.log("New Samsung HTTP/1.1 URL:", url);
     }
@@ -102,7 +102,7 @@ function showPlayerErrorPopup(title, message) {
         if (msgEl) msgEl.textContent = message || 'Please Check your network and try again';
         popup.style.display = 'flex';
         playerErrorPopupOpen = true;
-        setTimeout(function() {
+        setTimeout(function () {
             var btn = document.getElementById('playerRetryBtn');
             if (btn) btn.focus();
         }, 100);
@@ -148,14 +148,14 @@ function showRenewalQRCode() {
     document.body.appendChild(overlay);
 
     // Auto-hide after 15 seconds
-    setTimeout(function() {
+    setTimeout(function () {
         hideRenewalQRCode();
     }, 15000);
 
     // Handle key events to close
     overlay.tabIndex = 0;
     overlay.focus();
-    overlay.addEventListener('keydown', function(e) {
+    overlay.addEventListener('keydown', function (e) {
         // BACK, OK/Enter, or any navigation key closes the popup
         if (e.keyCode === 10009 || e.keyCode === 13 || e.keyCode === 27 || e.keyCode === 8) {
             hideRenewalQRCode();
@@ -253,6 +253,11 @@ window.onload = function () {
     // Fetch Channel Context for Zapping (and Lookup)
     loadChannelList(channelNameParam);
 
+    // Initialize sidebar with categories and channels
+    setTimeout(function () {
+        initializeSidebar();
+    }, 1000); // Wait for channels to load
+
     // Events
     document.addEventListener("keydown", handleKeydown);
 
@@ -264,7 +269,7 @@ window.onload = function () {
     // Player error popup retry button
     var playerRetryBtn = document.getElementById('playerRetryBtn');
     if (playerRetryBtn) {
-        playerRetryBtn.addEventListener('click', function() {
+        playerRetryBtn.addEventListener('click', function () {
             hidePlayerErrorPopup();
             window.location.href = 'channels.html';
         });
@@ -292,7 +297,7 @@ async function loadChannelList(lookupName = null) {
 
         if (Array.isArray(response)) {
             // Sort channels by LCN (channelno) for proper prev/next navigation
-            allChannels = response.sort(function(a, b) {
+            allChannels = response.sort(function (a, b) {
                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                 return aNo - bNo;
@@ -350,7 +355,7 @@ function setupPlayer(channel) {
         if (logo && logo.trim() !== "" && !logo.includes('chnlnoimage')) {
             console.log("Setting channel logo:", logo);
             uiLogo.src = logo;
-            uiLogo.onerror = function() {
+            uiLogo.onerror = function () {
                 console.warn("Logo failed to load:", logo);
                 this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
             };
@@ -365,7 +370,7 @@ function setupPlayer(channel) {
     if (uiExpiry) {
         // Remove all previous expiry classes
         uiExpiry.classList.remove('expiry-pink', 'expiry-yellow', 'expiry-red', 'expiry-expired', 'expiry-active');
-        
+
         if (channel.expirydate && channel.expirydate.trim() !== "") {
             const expiryDate = new Date(channel.expirydate);
             const today = new Date();
@@ -447,11 +452,14 @@ function setupPlayer(channel) {
 
     // Status (Subscription status and price)
     const uiStatus = document.getElementById("ui-status");
-    if (uiStatus) {
-        const isSubscribed = channel.subscribed === "yes" || channel.subscribed === "1" ||
-                            channel.subscribed === true || channel.subscribed === 1;
-        const price = channel.chprice || "0.00";
+    const uiSubscription = document.getElementById("ui-subscription");
+    
+    const isSubscribed = channel.subscribed === "yes" || channel.subscribed === "1" ||
+        channel.subscribed === true || channel.subscribed === 1;
+    const price = channel.chprice || channel.chPrice || channel.price || "0.00";
 
+    // Update ui-status if exists
+    if (uiStatus) {
         if (isSubscribed) {
             if (parseFloat(price) > 0) {
                 uiStatus.innerText = "Pay($" + price + "/mo)";
@@ -466,6 +474,25 @@ function setupPlayer(channel) {
         }
     }
 
+    // Update ui-subscription (info bar on right side)
+    if (uiSubscription) {
+        if (isSubscribed) {
+            uiSubscription.innerText = "Subscribed : Yes";
+            uiSubscription.style.color = "#10b981"; // Green
+        } else {
+            uiSubscription.innerText = "Subscribed : No";
+            uiSubscription.style.color = "#ef4444"; // Red
+        }
+    }
+
+    // Update Device ID display
+    const uiDeviceId = document.getElementById("ui-device-id");
+    if (uiDeviceId) {
+        const device = DeviceInfo.getDeviceInfo();
+        const deviceId = device.devslno || device.mac_address || "Unknown";
+        uiDeviceId.innerText = "Device ID: " + deviceId;
+    }
+
     // User Info (from session)
     const uiUser = document.getElementById("ui-user");
     if (uiUser) {
@@ -475,6 +502,23 @@ function setupPlayer(channel) {
             uiUser.innerText = userId;
         } else {
             uiUser.innerText = "guest";
+        }
+    }
+
+    // User Info in info bar (new element)
+    const uiUserInfo = document.getElementById("ui-user-info");
+    if (uiUserInfo) {
+        const userData = AuthAPI.getUserData();
+        if (userData) {
+            const mobile = userData.mobile || "";
+            const username = userData.userid || userData.userId || userData.username || "User";
+            if (mobile) {
+                uiUserInfo.innerText = "User: " + mobile;
+            } else {
+                uiUserInfo.innerText = "User: " + username;
+            }
+        } else {
+            uiUserInfo.innerText = "User: Guest";
         }
     }
 
@@ -500,7 +544,7 @@ function setupPlayer(channel) {
 
     const streamUrl = channel.streamlink || channel.channel_url;
     const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
-    
+
     console.log("=== 🔍 STREAM URL DEBUG ===");
     console.log("Channel:", chName);
     console.log("Raw stream URL:", streamUrl);
@@ -521,13 +565,13 @@ function setupPlayer(channel) {
     if (!streamUrl) {
         const errorMsg = "No Stream URL found for channel: " + chName;
         console.warn(errorMsg);
-        showPlayerErrorPopup('No Stream Available', 'Stream not available for ' + chName + '. Please check subscription.');
+        showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
         return;
     }
 
     // For DVB/FTA channels, use the URL as-is
     var fixedStreamUrl = streamUrl;
-    
+
     if (!isDVBChannel) {
         // ⚠️ FIX LOCALHOST URLs - Replace 127.0.0.1 with server IP (only for IPTV streams)
         fixedStreamUrl = fixLocalhostUrl(streamUrl);
@@ -727,6 +771,9 @@ function changeChannel(step) {
     var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
     console.log("Zapping to channel LCN:", nextLCN, "index:", nextIndex, "name:", nextCh.chtitle || nextCh.channel_name);
     setupPlayer(nextCh);
+
+    // Show info bar for 5 seconds when channel is changed
+    showOverlay();
 }
 
 function closePlayer() {
@@ -737,10 +784,720 @@ function closePlayer() {
     }
 }
 
+// ==========================================
+// PLAYER SIDEBAR - ANDROID TV 3-LEVEL DESIGN
+// ==========================================
+
+// Auto-hide timer configuration
+const OVERLAY_HIDE_DELAY = 5000; // 5 seconds
+const SIDEBAR_HIDE_DELAY = 5000; // 5 seconds (only for channel level)
+
+// Timers
+var overlayTimeout = null;
+var sidebarInactivityTimer = null;
+
+// Sidebar state - 3 Level Navigation
+var sidebarState = {
+    isOpen: false,
+    currentLevel: 'language', // 'language', 'categories', 'channels'
+    languageIndex: 0,
+    categoryIndex: 0,
+    channelIndex: 0,
+    languages: [
+        { name: 'All Languages', code: 'all' }
+        // Languages will be loaded dynamically from API
+    ],
+    categories: [
+        'All Categories'
+        // Categories will be loaded dynamically from API
+    ],
+    channels: [],
+    allChannelsCache: [] // Cache all channels for filtering
+};
+
+// Initialize sidebar with categories and channels
+async function initializeSidebar() {
+    var sidebar = document.getElementById('playerSidebar');
+    if (!sidebar) return;
+
+    // Load languages from API first
+    await loadSidebarLanguages();
+
+    // Load categories from API
+    await loadSidebarCategoriesFromAPI();
+
+    // Load available channels
+    loadSidebarChannels();
+
+    // Setup language arrows
+    setupLanguageArrows();
+
+    console.log("[Sidebar] Initialized with", sidebarState.languages.length, "languages,", sidebarState.categories.length, "categories");
+}
+
+/**
+ * Load languages from API
+ */
+async function loadSidebarLanguages() {
+    try {
+        var languages = await BBNL_API.getLanguageList();
+        if (languages && languages.length > 0) {
+            // Build language list with "All Languages" as first option
+            sidebarState.languages = [{ name: 'All Languages', code: 'all' }];
+            languages.forEach(function(lang) {
+                sidebarState.languages.push({
+                    name: lang.language_name || lang.langname || lang.name || 'Unknown',
+                    code: lang.langid || lang.language_id || lang.code || 'unknown'
+                });
+            });
+            console.log("[Sidebar] Loaded", sidebarState.languages.length, "languages from API");
+        }
+    } catch (e) {
+        console.error("[Sidebar] Failed to load languages from API:", e);
+        // Keep default "All Languages" only
+    }
+    updateLanguageDisplay();
+}
+
+/**
+ * Load categories from API
+ */
+async function loadSidebarCategoriesFromAPI() {
+    try {
+        var categories = await BBNL_API.getCategories();
+        if (categories && categories.length > 0) {
+            // Build category list with "All Categories" as first option
+            sidebarState.categories = ['All Categories'];
+            categories.forEach(function(cat) {
+                var catName = cat.categoryname || cat.category_name || cat.name || cat.grid || cat;
+                if (typeof catName === 'string' && catName.trim() !== '') {
+                    sidebarState.categories.push(catName);
+                }
+            });
+            console.log("[Sidebar] Loaded", sidebarState.categories.length, "categories from API");
+        }
+    } catch (e) {
+        console.error("[Sidebar] Failed to load categories from API:", e);
+        // Keep default "All Categories" only
+    }
+    loadSidebarCategories();
+}
+
+/**
+ * Setup language arrow buttons
+ */
+function setupLanguageArrows() {
+    var leftArrow = document.getElementById('languageArrowLeft');
+    var rightArrow = document.getElementById('languageArrowRight');
+
+    if (leftArrow) {
+        leftArrow.addEventListener('click', function () {
+            changeLanguage(-1);
+        });
+    }
+
+    if (rightArrow) {
+        rightArrow.addEventListener('click', function () {
+            changeLanguage(1);
+        });
+    }
+}
+
+/**
+ * Change language (LEFT/RIGHT navigation)
+ */
+function changeLanguage(direction) {
+    var newIndex = sidebarState.languageIndex + direction;
+
+    // Wrap around
+    if (newIndex < 0) {
+        newIndex = sidebarState.languages.length - 1;
+    } else if (newIndex >= sidebarState.languages.length) {
+        newIndex = 0;
+    }
+
+    sidebarState.languageIndex = newIndex;
+
+    // Reset category and channel indices
+    sidebarState.categoryIndex = 0;
+    sidebarState.channelIndex = 0;
+
+    // Update language display
+    updateLanguageDisplay();
+
+    // Reload categories and channels for new language
+    loadSidebarCategories();
+    filterChannelsByLanguageAndCategory();
+
+    console.log("[Sidebar] Language changed to:", sidebarState.languages[newIndex].name);
+}
+
+/**
+ * Update language display
+ */
+function updateLanguageDisplay() {
+    var languageNameEl = document.getElementById('currentLanguageName');
+    if (languageNameEl) {
+        var currentLang = sidebarState.languages[sidebarState.languageIndex];
+        languageNameEl.textContent = currentLang.name;
+    }
+}
+
+/**
+ * Load categories for sidebar
+ */
+function loadSidebarCategories() {
+    var container = document.getElementById('categoriesContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    sidebarState.categories.forEach(function (cat, index) {
+        var btn = document.createElement('button');
+        btn.className = 'category-item focusable';
+        btn.tabIndex = 0;
+        btn.dataset.categoryIndex = index;
+
+        var span = document.createElement('span');
+        span.className = 'category-name';
+        span.textContent = cat;
+        btn.appendChild(span);
+
+        if (index === sidebarState.categoryIndex) {
+            btn.classList.add('active');
+        }
+
+        btn.addEventListener('click', function () {
+            changeCategoryTo(index);
+        });
+
+        container.appendChild(btn);
+    });
+
+    console.log("[Sidebar] Loaded", sidebarState.categories.length, "categories");
+}
+
+/**
+ * Change category to specific index
+ */
+function changeCategoryTo(index) {
+    if (index < 0 || index >= sidebarState.categories.length) return;
+
+    sidebarState.categoryIndex = index;
+    sidebarState.channelIndex = 0; // Reset channel index
+
+    // Update category UI
+    var items = document.querySelectorAll('.category-item');
+    items.forEach(function (item, i) {
+        if (i === index) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+
+    // Reload channels for new category
+    filterChannelsByLanguageAndCategory();
+
+    console.log("[Sidebar] Category changed to:", sidebarState.categories[index]);
+}
+
+/**
+ * Load channels for sidebar (uses existing allChannels from player)
+ */
+function loadSidebarChannels() {
+    if (!allChannels || allChannels.length === 0) {
+        // Channels not loaded yet, retry later
+        setTimeout(loadSidebarChannels, 1000);
+        return;
+    }
+
+    // Cache all channels
+    sidebarState.allChannelsCache = allChannels;
+
+    // Filter and display channels
+    filterChannelsByLanguageAndCategory();
+}
+
+/**
+ * Filter channels by selected language and category
+ */
+function filterChannelsByLanguageAndCategory() {
+    var currentLang = sidebarState.languages[sidebarState.languageIndex];
+    var currentCategory = sidebarState.categories[sidebarState.categoryIndex];
+
+    var filteredChannels = sidebarState.allChannelsCache;
+
+    // Filter by language (if not "All Languages")
+    if (currentLang.code !== 'all') {
+        filteredChannels = filteredChannels.filter(function (ch) {
+            var chLang = (ch.language || ch.lang || '').toLowerCase();
+            return chLang.includes(currentLang.code) || chLang.includes(currentLang.name.toLowerCase());
+        });
+    }
+
+    // Filter by category (if not "Entertainment" which shows all)
+    if (currentCategory !== 'Entertainment') {
+        filteredChannels = filteredChannels.filter(function (ch) {
+            var chCat = (ch.category || ch.chCategory || '').toLowerCase();
+            return chCat.includes(currentCategory.toLowerCase());
+        });
+    }
+
+    sidebarState.channels = filteredChannels;
+
+    // Update channel list in HTML
+    renderChannelsList();
+
+    console.log("[Sidebar] Filtered channels:", filteredChannels.length, "for", currentLang.name, "+", currentCategory);
+}
+
+/**
+ * Render channels list in HTML
+ */
+function renderChannelsList() {
+    var container = document.getElementById('channelsList');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    sidebarState.channels.forEach(function (ch, index) {
+        var btn = document.createElement('button');
+        btn.className = 'channel-item focusable';
+        btn.tabIndex = 0;
+        btn.dataset.channelIndex = index;
+
+        // Left side: Name and Price (no logo - matching reference design)
+        var leftDiv = document.createElement('div');
+        leftDiv.className = 'channel-item-left';
+
+        var nameDiv = document.createElement('div');
+        nameDiv.className = 'channel-item-name';
+        nameDiv.textContent = ch.chtitle || ch.channel_name || 'Unknown';
+
+        var priceDiv = document.createElement('div');
+        priceDiv.className = 'channel-item-price';
+        var price = ch.chprice || ch.chPrice || ch.price || '0';
+        priceDiv.textContent = '₹ ' + price;
+
+        leftDiv.appendChild(nameDiv);
+        leftDiv.appendChild(priceDiv);
+
+        // Right side: LCN
+        var rightDiv = document.createElement('div');
+        rightDiv.className = 'channel-item-right';
+
+        var lcnDiv = document.createElement('div');
+        lcnDiv.className = 'channel-item-lcn';
+        lcnDiv.textContent = ch.channelno || ch.urno || ch.chno || '--';
+
+        rightDiv.appendChild(lcnDiv);
+
+        btn.appendChild(leftDiv);
+        btn.appendChild(rightDiv);
+
+        if (index === sidebarState.channelIndex) {
+            btn.classList.add('active');
+        }
+
+        btn.addEventListener('click', function () {
+            playChannelFromSidebar(ch);
+        });
+
+        container.appendChild(btn);
+    });
+
+    console.log("[Sidebar] Rendered", sidebarState.channels.length, "channels");
+}
+
+/**
+ * Toggle sidebar visibility
+ */
+function toggleSidebar() {
+    var sidebar = document.getElementById('playerSidebar');
+    if (!sidebar) return;
+
+    if (sidebarState.isOpen) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+}
+
+/**
+ * Open sidebar and set initial focus - simplified 2-level navigation
+ */
+function openSidebar() {
+    var sidebar = document.getElementById('playerSidebar');
+    if (!sidebar) return;
+
+    sidebarState.isOpen = true;
+    sidebar.classList.add('open');
+    sidebar.classList.remove('close');
+
+    // Start at language level
+    sidebarState.currentLevel = 'language';
+    sidebarState.languageIndex = 0;
+    sidebarState.categoryIndex = 0;
+    sidebarState.channelIndex = 0;
+
+    // Update language display
+    updateLanguageDisplay();
+
+    // Load channels for current language (no categories shown)
+    filterChannelsByLanguageAndCategory();
+
+    // NO auto-hide timer at language level
+    // Timer only starts when user is in channel level
+
+    console.log("[Sidebar] Opened at language level");
+}
+
+/**
+ * Close sidebar with animation
+ */
+function closeSidebar() {
+    var sidebar = document.getElementById('playerSidebar');
+    if (!sidebar) return;
+
+    sidebar.classList.add('close');
+    setTimeout(function () {
+        sidebar.classList.remove('open', 'close');
+        sidebarState.isOpen = false;
+    }, 300);
+
+    // Clear sidebar inactivity timer
+    clearSidebarInactivityTimer();
+
+    console.log("[Sidebar] Closed - auto-hide timer cleared");
+}
+
+/**
+ * Reset sidebar inactivity timer
+ * Called on every key press while sidebar is open
+ * ONLY activates at channel level (not language or category)
+ */
+function resetSidebarInactivityTimer() {
+    // Clear existing timer
+    clearSidebarInactivityTimer();
+
+    // Only start timer if sidebar is open AND at channel level
+    if (!sidebarState.isOpen || sidebarState.currentLevel !== 'channels') {
+        return;
+    }
+
+    // Start new timer (only for channel level)
+    sidebarInactivityTimer = setTimeout(function () {
+        console.log("[Sidebar] Inactivity timeout at channel level - auto-closing");
+        closeSidebar();
+    }, SIDEBAR_HIDE_DELAY);
+
+    console.log("[Sidebar] Inactivity timer reset (5 seconds) - channel level only");
+}
+
+/**
+ * Clear sidebar inactivity timer
+ */
+function clearSidebarInactivityTimer() {
+    if (sidebarInactivityTimer) {
+        clearTimeout(sidebarInactivityTimer);
+        sidebarInactivityTimer = null;
+    }
+}
+
+/**
+ * Focus on a specific category item
+ */
+function focusCategoryItem(index) {
+    if (index < 0 || index >= sidebarState.categories.length) return;
+
+    sidebarState.categoryIndex = index;
+
+    var items = document.querySelectorAll('.category-item');
+    items.forEach(function (item, i) {
+        if (i === index) {
+            item.classList.add('active');
+
+            // Ensure item is fully visible
+            setTimeout(function () {
+                item.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',  // Center in view for better visibility
+                    inline: 'nearest'
+                });
+            }, 50);
+        } else {
+            item.classList.remove('active');
+        }
+    });
+
+    console.log("[Sidebar] Category focused:", sidebarState.categories[index]);
+}
+
+/**
+ * Focus on a specific channel item
+ */
+function focusChannelItem(index) {
+    if (index < 0 || index >= sidebarState.channels.length) return;
+
+    sidebarState.channelIndex = index;
+
+    var items = document.querySelectorAll('.channel-item');
+    items.forEach(function (item, i) {
+        if (i === index) {
+            item.classList.add('active');
+
+            // Ensure item is fully visible
+            setTimeout(function () {
+                item.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',  // Center in view for better visibility
+                    inline: 'nearest'
+                });
+            }, 50);
+        } else {
+            item.classList.remove('active');
+        }
+    });
+
+    console.log("[Sidebar] Channel focused:", index);
+}
+
+/**
+ * Handle sidebar keydown navigation - 3 LEVEL ANDROID TV DESIGN
+ * Returns true if keydown was handled by sidebar
+ */
+function handleSidebarKeydown(e) {
+    if (!sidebarState.isOpen) return false;
+
+    var code = e.keyCode;
+    var handled = false;
+
+    // Reset inactivity timer on EVERY key press (only activates at channel level)
+    resetSidebarInactivityTimer();
+
+    // ==========================================
+    // LEVEL 1: LANGUAGE SELECTOR
+    // ==========================================
+    if (sidebarState.currentLevel === 'language') {
+        switch (code) {
+            case 37: // LEFT
+                changeLanguage(-1);
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] LEFT - previous language");
+                break;
+
+            case 39: // RIGHT
+                changeLanguage(1);
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] RIGHT - next language");
+                break;
+
+            case 38: // UP
+                // Stay in language level
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] UP in language - staying");
+                break;
+
+            case 40: // DOWN
+                // Move directly to channels (skip categories)
+                sidebarState.currentLevel = 'channels';
+                sidebarState.channelIndex = 0;
+                focusChannelItem(0);
+                // Start auto-hide timer  
+                resetSidebarInactivityTimer();
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] DOWN - moved to channels");
+                break;
+
+            case 10009: // RETURN
+                closeSidebar();
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] RETURN - closed sidebar");
+                break;
+        }
+    }
+    // ==========================================
+    // LEVEL 2: CATEGORIES
+    // ==========================================
+    else if (sidebarState.currentLevel === 'categories') {
+        switch (code) {
+            case 37: // LEFT
+            case 39: // RIGHT
+                // Stay in categories
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] LEFT/RIGHT in categories - staying");
+                break;
+
+            case 38: // UP
+                if (sidebarState.categoryIndex > 0) {
+                    // Move to previous category
+                    sidebarState.categoryIndex--;
+                    changeCategoryTo(sidebarState.categoryIndex);
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] UP - previous category");
+                } else {
+                    // At first category, move back to language (Level 1)
+                    sidebarState.currentLevel = 'language';
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] UP at top - moved to language");
+                }
+                break;
+
+            case 40: // DOWN
+                if (sidebarState.categoryIndex < sidebarState.categories.length - 1) {
+                    // Move to next category
+                    sidebarState.categoryIndex++;
+                    changeCategoryTo(sidebarState.categoryIndex);
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] DOWN - next category");
+                } else {
+                    // At last category, move to channels (Level 3)
+                    sidebarState.currentLevel = 'channels';
+                    sidebarState.channelIndex = 0;
+                    focusChannelItem(0);
+                    // Start auto-hide timer (only at channel level)
+                    resetSidebarInactivityTimer();
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] DOWN at bottom - moved to channels");
+                }
+                break;
+
+            case 10009: // RETURN
+                closeSidebar();
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] RETURN - closed sidebar");
+                break;
+        }
+    }
+    // ==========================================
+    // LEVEL 3: CHANNELS
+    // ==========================================
+    else if (sidebarState.currentLevel === 'channels') {
+        switch (code) {
+            case 37: // LEFT
+                // Close sidebar (Android TV behavior)
+                closeSidebar();
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] LEFT in channels - closed sidebar");
+                break;
+
+            case 39: // RIGHT
+                // Stay in channels
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] RIGHT in channels - staying");
+                break;
+
+            case 38: // UP
+                if (sidebarState.channelIndex > 0) {
+                    // Move to previous channel
+                    sidebarState.channelIndex--;
+                    focusChannelItem(sidebarState.channelIndex);
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] UP - previous channel");
+                } else {
+                    // At first channel, move back to language level
+                    sidebarState.currentLevel = 'language';
+                    // Clear auto-hide timer
+                    clearSidebarInactivityTimer();
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] UP at top - moved to language");
+                }
+                break;
+
+            case 40: // DOWN
+                if (sidebarState.channelIndex < sidebarState.channels.length - 1) {
+                    // Move to next channel
+                    sidebarState.channelIndex++;
+                    focusChannelItem(sidebarState.channelIndex);
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] DOWN - next channel");
+                } else {
+                    // At last channel, stay here
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] DOWN at bottom - staying");
+                }
+                break;
+
+            case 13: // ENTER
+                // Play selected channel
+                if (sidebarState.channels.length > sidebarState.channelIndex) {
+                    var channel = sidebarState.channels[sidebarState.channelIndex];
+                    playChannelFromSidebar(channel);
+                    e.preventDefault();
+                    handled = true;
+                    console.log("[Sidebar] ENTER - playing channel");
+                }
+                break;
+
+            case 10009: // RETURN
+                closeSidebar();
+                e.preventDefault();
+                handled = true;
+                console.log("[Sidebar] RETURN - closed sidebar");
+                break;
+        }
+    }
+
+    return handled;
+}
+
+/**
+ * Play a channel directly from sidebar
+ */
+function playChannelFromSidebar(channel) {
+    if (!channel) return;
+
+    console.log("[Sidebar] Playing channel:", channel.chtitle || channel.channel_name);
+    closeSidebar();
+    setupPlayer(channel);
+}
+
+/**
+ * Check if sidebar is currently focused
+ */
+function isSidebarFocused() {
+    return sidebarState.isOpen && document.activeElement.classList.contains('focusable') &&
+        (document.activeElement.classList.contains('category-item') ||
+            document.activeElement.classList.contains('channel-item'));
+}
+
 function handleKeydown(e) {
     const code = e.keyCode;
     console.log("Player Key:", code);
 
+    // Handle sidebar navigation first if sidebar is open
+    if (sidebarState.isOpen && handleSidebarKeydown(e)) {
+        showOverlay();
+        return;
+    }
+
+    // Toggle sidebar with Menu key (code 10253) or 'M' key
+    if (code === 10253 || code === 77) { // Menu or 'M'
+        e.preventDefault();
+        toggleSidebar();
+        showOverlay();
+        return;
+    }
+
+    // Rest of the player keydown handler
     // Handle error popup navigation
     if (playerErrorPopupOpen) {
         e.preventDefault();
@@ -748,6 +1505,7 @@ function handleKeydown(e) {
             // BACK - go back to channels/home
             hidePlayerErrorPopup();
             window.location.href = 'channels.html';
+
         } else if (code === 13) {
             // ENTER - retry
             var btn = document.getElementById('playerRetryBtn');
@@ -758,11 +1516,31 @@ function handleKeydown(e) {
 
     if (code === 10009 || code === 27) { // Back / ESC
         e.preventDefault();
+
+        // If sidebar is open, close it first (Android TV behavior)
+        if (sidebarState.isOpen) {
+            closeSidebar();
+            console.log('[Player] RETURN pressed - closing sidebar');
+            return;
+        }
+
+        // If sidebar is closed, exit player
         closePlayer();
         // Always go back to channels page
         console.log('[Player] Navigating back to channels page');
         window.location.href = 'channels.html';
         return;
+    }
+
+    // RIGHT Arrow - Open Sidebar (when closed)
+    if (code === 39) { // RIGHT
+        e.preventDefault();
+        if (!sidebarState.isOpen) {
+            openSidebar();
+            console.log('[Player] RIGHT pressed - opening sidebar');
+            return;
+        }
+        // If sidebar is already open, let it handle the key
     }
 
     // Number Keys (0-9) for direct channel navigation
@@ -786,13 +1564,18 @@ function handleKeydown(e) {
         e.preventDefault();
     }
 
-    // Enter key - handle overlay interaction
+    // Enter key - handle OK button to show/reset info bar
     if (code === 13) {
         var activeEl = document.activeElement;
         if (activeEl && activeEl.classList.contains('focusable')) {
             activeEl.click();
         }
-        showOverlay();
+        // Call OK button handler instead of showOverlay for better info bar management
+        if (typeof handleOKButton === 'function') {
+            handleOKButton();
+        } else {
+            showOverlay();
+        }
         return;
     }
 
@@ -820,6 +1603,25 @@ function handleKeydown(e) {
             case 417: AVPlayer.jumpForward(10000); break;
             case 412: AVPlayer.jumpBackward(10000); break;
         }
+    }
+
+    // OK Button - Toggle Info Bar
+    if (code === 13) { // ENTER/OK
+        e.preventDefault();
+        var overlay = document.querySelector('.player-overlay');
+        if (overlay) {
+            var isVisible = overlay.classList.contains('visible');
+            if (isVisible) {
+                // If visible, reset the timer
+                showOverlay();
+                console.log('[Player] OK pressed - Info bar timer reset');
+            } else {
+                // If hidden, show it
+                showOverlay();
+                console.log('[Player] OK pressed - Info bar shown');
+            }
+        }
+        return;
     }
 
     // Volume Control (works on all pages)
@@ -895,14 +1697,14 @@ function showVolumeIndicator(volume, muted) {
         indicator.style.cssText = 'position:fixed;top:50px;right:50px;background:rgba(0,0,0,0.8);color:#fff;padding:15px 25px;border-radius:10px;font-size:18px;z-index:9999;display:flex;align-items:center;gap:15px;';
         document.body.appendChild(indicator);
     }
-    
+
     var icon = muted ? '🔇' : (volume > 50 ? '🔊' : (volume > 0 ? '🔉' : '🔈'));
     indicator.innerHTML = '<span style="font-size:24px;">' + icon + '</span><span>' + (muted ? 'Muted' : volume + '%') + '</span>';
     indicator.style.display = 'flex';
-    
+
     // Hide after 2 seconds
     clearTimeout(indicator.hideTimeout);
-    indicator.hideTimeout = setTimeout(function() {
+    indicator.hideTimeout = setTimeout(function () {
         indicator.style.display = 'none';
     }, 2000);
 }
@@ -1002,7 +1804,7 @@ function showBufferingIndicator() {
         container.appendChild(bufferingDiv);
 
         // SAFETY TIMEOUT: Auto-hide after 8 seconds max (for ultra-fast mode)
-        setTimeout(function() {
+        setTimeout(function () {
             if (!hasHiddenLoadingIndicator) {
                 console.log("⏱️ Safety timeout: Force hiding loading indicator after 8 seconds");
                 hideBufferingIndicator();
@@ -1020,10 +1822,10 @@ function hideBufferingIndicator() {
 }
 
 // Make progress bar clickable for seeking (VOD only)
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     var progressContainer = document.querySelector('.progress-container');
     if (progressContainer) {
-        progressContainer.addEventListener('click', function(e) {
+        progressContainer.addEventListener('click', function (e) {
             if (!isLiveStream && streamDuration > 0) {
                 var rect = this.getBoundingClientRect();
                 var clickX = e.clientX - rect.left;
@@ -1033,9 +1835,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Seek to the clicked position
                 if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
                     try {
-                        webapis.avplay.seekTo(seekTime, function() {
+                        webapis.avplay.seekTo(seekTime, function () {
                             console.log('Seeked to:', seekTime);
-                        }, function(err) {
+                        }, function (err) {
                             console.error('Seek error:', err);
                         });
                     } catch (e) {
@@ -1077,7 +1879,7 @@ function handleNumberInput(digit) {
     }
 
     // Set timeout to navigate after delay
-    channelInputTimeout = setTimeout(function() {
+    channelInputTimeout = setTimeout(function () {
         navigateToChannelNumber(channelNumberBuffer);
         channelNumberBuffer = "";
         hideChannelNumberInput();
@@ -1143,7 +1945,7 @@ function navigateToChannelNumber(number) {
     var targetNumber = parseInt(number, 10);
 
     // Find channel by channelno, urno, chno, or ch_no
-    var channel = allChannels.find(function(ch) {
+    var channel = allChannels.find(function (ch) {
         var chNum = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || ch.id, 10);
         return chNum === targetNumber;
     });
@@ -1189,7 +1991,7 @@ function showChannelNotFound(number) {
     notFoundDisplay.style.display = 'block';
 
     // Auto-hide after 2 seconds
-    setTimeout(function() {
+    setTimeout(function () {
         notFoundDisplay.style.display = 'none';
     }, 2000);
 }
@@ -1197,42 +1999,88 @@ function showChannelNotFound(number) {
 // ==========================================
 // OVERLAY AUTO-HIDE/SHOW FUNCTIONALITY
 // ==========================================
-var overlayTimeout;
-var OVERLAY_HIDE_DELAY = 5000; // Hide after 5 seconds of inactivity
+// Note: overlayTimeout and OVERLAY_HIDE_DELAY are declared at top with sidebar timers
 
+/**
+ * Show info bar overlay and set auto-hide timer
+ * Resets timer on each call (for OK button or channel change)
+ */
 function showOverlay() {
+    // Don't show info bar if sidebar is open
+    if (sidebarState.isOpen) {
+        return;
+    }
+
     var overlay = document.querySelector('.player-overlay');
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
 
-        // Clear existing timeout
+        // Clear existing timeout BEFORE setting new one
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
         }
 
-        // Set new timeout to hide overlay
-        overlayTimeout = setTimeout(function() {
+        // Set new timeout to auto-hide overlay after 5 seconds
+        overlayTimeout = setTimeout(function () {
             hideOverlay();
         }, OVERLAY_HIDE_DELAY);
+
+        console.log('[InfoBar] Shown, auto-hide timer reset');
     }
 }
 
+/**
+ * Hide info bar overlay
+ */
 function hideOverlay() {
     var overlay = document.querySelector('.player-overlay');
     if (overlay) {
         overlay.classList.remove('visible');
         overlay.classList.add('hidden');
+
+        // Clear timeout when hiding
+        if (overlayTimeout) {
+            clearTimeout(overlayTimeout);
+            overlayTimeout = null;
+        }
+
+        console.log('[InfoBar] Hidden');
     }
 }
 
-// Show overlay on any user interaction
-document.addEventListener('keydown', showOverlay);
+/**
+ * Callback for OK button - show info bar again if hidden, or reset timer if visible
+ */
+var handleOKButton = function () {
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay && overlay.classList.contains('hidden')) {
+        console.log('[InfoBar] OK pressed - showing info bar');
+        showOverlay();
+    } else if (overlay && overlay.classList.contains('visible')) {
+        // If already visible, reset the timer
+        if (overlayTimeout) {
+            clearTimeout(overlayTimeout);
+        }
+        overlayTimeout = setTimeout(function () {
+            hideOverlay();
+        }, OVERLAY_HIDE_DELAY);
+        console.log('[InfoBar] OK pressed - timer reset');
+    }
+};
+
+// Show overlay on any user interaction (but not when sidebar is open)
+document.addEventListener('keydown', function (e) {
+    // Don't show overlay if sidebar is open
+    if (!sidebarState.isOpen) {
+        showOverlay();
+    }
+});
 document.addEventListener('mousemove', showOverlay);
 document.addEventListener('click', showOverlay);
 
 // Show overlay initially for 5 seconds when page loads
-setTimeout(function() {
+setTimeout(function () {
     showOverlay();
 }, 100);
 

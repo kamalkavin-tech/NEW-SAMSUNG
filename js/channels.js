@@ -70,8 +70,8 @@ window.onload = function () {
 function addZoneTrackingListeners() {
     // Top controls (back button, search input)
     var topControls = document.querySelectorAll('.back-btn, .search-input');
-    topControls.forEach(function(el) {
-        el.addEventListener('focus', function() {
+    topControls.forEach(function (el) {
+        el.addEventListener('focus', function () {
             currentZone = 'topControls';
             lastTopControlElement = el; // Remember which top control was focused
             console.log('[Channels Navigation] Zone: Top Controls');
@@ -80,15 +80,15 @@ function addZoneTrackingListeners() {
 
     // Category pills
     var pills = document.querySelectorAll('.category-pill');
-    pills.forEach(function(pill) {
-        pill.addEventListener('focus', function() {
+    pills.forEach(function (pill) {
+        pill.addEventListener('focus', function () {
             currentZone = 'tabs';
             console.log('[Channels Navigation] Zone: Tabs');
         });
     });
 
     // Channel cards - use event delegation since cards load dynamically
-    document.addEventListener('focus', function(e) {
+    document.addEventListener('focus', function (e) {
         if (e.target.classList.contains('channel-card')) {
             currentZone = 'cards';
             console.log('[Channels Navigation] Zone: Cards');
@@ -116,7 +116,7 @@ async function initPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const urlLCN = urlParams.get('lcn');
     const urlLang = urlParams.get('lang');
-    
+
     if (urlLCN && /^\d+$/.test(urlLCN)) {
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
@@ -130,19 +130,22 @@ async function initPage() {
     // Check if returning from language selection page OR from player
     const selectedLangId = sessionStorage.getItem('selectedLanguageId');
     const selectedLangName = sessionStorage.getItem('selectedLanguageName');
-    
+
     // Check if Fofi channel has already been played this login session
     const fofiPlayedThisSession = sessionStorage.getItem('fofiPlayedThisSession');
 
     // Determine if user has any language filter active (either from URL or session)
     const hasLanguageFilter = selectedLangName || urlLang;
 
+    // Update header title and language pill based on selected language
+    updateHeaderWithLanguage(selectedLangName || urlLang);
+
     if (selectedLangName) {
         const languagePill = document.getElementById('languagePill');
         if (languagePill) {
             const textSpan = languagePill.querySelector('span');
             if (textSpan) {
-                textSpan.textContent = selectedLangName;
+                textSpan.textContent = 'Language - ' + selectedLangName;
             }
         }
 
@@ -211,7 +214,7 @@ function renderCategories(categories) {
         }
 
         // Add focus listener for zone tracking
-        pill.addEventListener('focus', function() {
+        pill.addEventListener('focus', function () {
             currentZone = 'tabs';
         });
 
@@ -262,6 +265,38 @@ function handleCategoryFilter(category, gridId) {
 }
 
 // ==========================================
+// HEADER LANGUAGE DISPLAY
+// ==========================================
+
+/**
+ * Update the header title and language pill based on selected language
+ */
+function updateHeaderWithLanguage(languageName) {
+    // Update page title
+    const titleLanguage = document.getElementById('titleLanguage');
+    if (titleLanguage) {
+        if (languageName && languageName !== 'All' && languageName !== 'All Languages') {
+            titleLanguage.textContent = ' - ' + languageName;
+        } else {
+            titleLanguage.textContent = '';
+        }
+    }
+
+    // Update language pill
+    const languagePill = document.getElementById('languagePill');
+    if (languagePill) {
+        const textSpan = languagePill.querySelector('span');
+        if (textSpan) {
+            if (languageName && languageName !== 'All' && languageName !== 'All Languages') {
+                textSpan.textContent = 'Language - ' + languageName;
+            } else {
+                textSpan.textContent = 'Language';
+            }
+        }
+    }
+}
+
+// ==========================================
 // LANGUAGE DROPDOWN FUNCTIONALITY
 // ==========================================
 
@@ -284,7 +319,7 @@ function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         // Filter out non-numeric characters on input
-        searchInput.addEventListener('input', function() {
+        searchInput.addEventListener('input', function () {
             // Strip any non-digit characters
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned !== searchInput.value) {
@@ -295,7 +330,7 @@ function initSearchFunctionality() {
 
             if (cleaned.length > 0) {
                 // Auto-play the channel after 2 seconds of no input
-                searchTimeout = setTimeout(function() {
+                searchTimeout = setTimeout(function () {
                     var lcn = parseInt(cleaned, 10);
                     console.log("[Channels] Auto-playing LCN:", lcn);
                     playChannelByLCN(lcn);
@@ -304,7 +339,7 @@ function initSearchFunctionality() {
         });
 
         // Block non-numeric key presses (extra safety for TV keyboard)
-        searchInput.addEventListener('keypress', function(e) {
+        searchInput.addEventListener('keypress', function (e) {
             var char = String.fromCharCode(e.which || e.keyCode);
             if (!/[0-9]/.test(char) && e.keyCode !== 13 && e.keyCode !== 8) {
                 e.preventDefault();
@@ -448,8 +483,8 @@ function createChannelCard(ch) {
     const chLogo = ch.chlogo || ch.logo_url || "";
     const streamLink = ch.streamlink || ch.channel_url || "";
     const chNo = ch.channelno || ch.urno || ch.chno || ch.ch_no || "";
-
-    let isLive = true;
+    const chPrice = ch.chprice || ch.price || "";
+    const isSubscribed = ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1;
 
     const card = document.createElement("div");
     card.className = "channel-card focusable";
@@ -461,43 +496,50 @@ function createChannelCard(ch) {
     // Store full channel data for player navigation
     card.dataset.channelData = JSON.stringify(ch);
 
-    const iconDiv = document.createElement("div");
-    iconDiv.className = "channel-icon";
+    // LCN Badge - Top Left
+    const lcnBadge = document.createElement("div");
+    lcnBadge.className = "card-lcn-badge";
+    lcnBadge.textContent = chNo || "--";
+    card.appendChild(lcnBadge);
 
-    if (isLive) {
-        const badge = document.createElement("div");
-        badge.className = "live-badge";
-        badge.innerHTML = '<div class="live-dot"></div> LIVE';
-        iconDiv.appendChild(badge);
+    // Price Badge - Top Right
+    const priceBadge = document.createElement("div");
+    priceBadge.className = "card-price-badge";
+    if (chPrice && parseFloat(chPrice) > 0) {
+        priceBadge.textContent = "₹" + chPrice;
+        priceBadge.classList.add("paid");
+    } else {
+        priceBadge.textContent = "Free";
+        priceBadge.classList.add("free");
     }
+    card.appendChild(priceBadge);
+
+    // Logo Container
+    const logoDiv = document.createElement("div");
+    logoDiv.className = "channel-logo-container";
 
     if (chLogo && !chLogo.includes("chnlnoimage")) {
         const img = document.createElement("img");
         img.src = chLogo;
         img.alt = chName;
-        iconDiv.appendChild(img);
+        img.onerror = function() {
+            this.style.display = 'none';
+            this.parentElement.innerHTML = '<div class="no-logo-text">' + chName.charAt(0).toUpperCase() + '</div>';
+        };
+        logoDiv.appendChild(img);
     } else {
         const fallback = document.createElement("div");
-        fallback.className = "no-image-placeholder";
-        fallback.innerHTML = '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><div style="margin-top: 8px; color: #333;">No Image</div>';
-        iconDiv.appendChild(fallback);
+        fallback.className = "no-logo-text";
+        fallback.textContent = chName.charAt(0).toUpperCase();
+        logoDiv.appendChild(fallback);
     }
-    card.appendChild(iconDiv);
+    card.appendChild(logoDiv);
 
-    const cardInfo = document.createElement("div");
-    cardInfo.className = "card-info";
-
-    const title = document.createElement("div");
-    title.className = "card-title-bottom";
-    title.innerText = chNo ? chNo + " - " + chName : chName;
-    cardInfo.appendChild(title);
-
-    const sub = document.createElement("div");
-    sub.className = "card-subtitle-bottom";
-    sub.innerText = chNo ? "LCN " + chNo : "Live Channel";
-    cardInfo.appendChild(sub);
-
-    card.appendChild(cardInfo);
+    // Channel Name - Bottom
+    const nameDiv = document.createElement("div");
+    nameDiv.className = "card-channel-name";
+    nameDiv.textContent = chName;
+    card.appendChild(nameDiv);
 
     card.addEventListener("click", () => handleEnter(card));
 
@@ -893,7 +935,7 @@ function playChannelByLCN(lcn) {
 
     if (allChannels.length === 0) {
         console.warn("[Channels] No channels loaded, fetching...");
-        BBNL_API.getChannelList().then(function(channels) {
+        BBNL_API.getChannelList().then(function (channels) {
             if (channels && Array.isArray(channels)) {
                 allChannels = channels;
                 findAndPlayLCN(lcn);
@@ -906,7 +948,7 @@ function playChannelByLCN(lcn) {
 }
 
 function findAndPlayLCN(lcn) {
-    var channel = allChannels.find(function(ch) {
+    var channel = allChannels.find(function (ch) {
         var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
         return chNo === lcn;
     });

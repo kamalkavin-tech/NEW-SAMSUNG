@@ -44,7 +44,8 @@ video {
     left: 0;
     width: 1920px;
     height: 1080px;
-    object-fit: fill; /* Fill entire screen */
+    object-fit: fill;
+    /* Fill entire screen */
     background: #000;
     z-index: 1;
     margin: 0;
@@ -77,203 +78,142 @@ video {
     opacity: 0;
 }
 
-/* INFO BAR CONTAINER */
-.info-bar-container {
-    padding: 0 60px 40px 60px;
-    width: 100%;
-    box-sizing: border-box;
+
+/* NEW INFO BAR DESIGN - Bottom Horizontal Layout */
+.info-bar-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 50%, transparent 100%);
+    padding: 30px 60px 40px 60px;
     display: flex;
-    flex-direction: column;
-    gap: 15px;
+    justify-content: space-between;
+    align-items: center;
+    gap: 40px;
 }
 
-/* INFO CARD (Glass Effect) */
-.info-card {
-    background: rgba(20, 20, 20, 0.85);
-    /* Dark semi-transparent */
-    backdrop-filter: blur(15px);
-    border-radius: 20px;
-    padding: 25px 35px;
+/* LEFT SECTION: Channel Logo + Info */
+.info-left {
     display: flex;
     align-items: center;
-    gap: 30px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 25px;
 }
 
-/* LEFT: CHANNEL INFO */
-.channel-info-section {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    min-width: 280px;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    padding-right: 20px;
-}
-
-.channel-logo-circle {
-    width: 70px;
-    height: 70px;
+.channel-logo-box {
+    width: 120px;
+    height: 80px;
     background: white;
-    border-radius: 50%;
+    border-radius: 8px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
+    padding: 10px;
+    flex-shrink: 0;
 }
 
-.channel-logo-circle img {
+.channel-logo-box img {
     width: 100%;
     height: 100%;
     object-fit: contain;
 }
 
-.channel-text {
+.channel-details {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 8px;
 }
 
-.channel-number {
+.channel-number-name {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.channel-lcn {
+    color: white;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.channel-name {
     color: white;
     font-size: 24px;
-    font-weight: 700;
-}
-
-.channel-name-ui {
-    color: white;
-    font-size: 16px;
     font-weight: 600;
-    opacity: 0.9;
+    line-height: 1;
 }
 
-.channel-expiry {
-    color: #9a9a9a;
-    font-size: 12px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    display: inline-block;
-    transition: all 0.3s ease;
-}
-
-/* Subscription expiry color indicators */
-.channel-expiry.expiry-pink {
-    color: #ffffff;
-    background-color: #ec4899;
-    animation: pulse-pink 2s infinite;
-}
-
-.channel-expiry.expiry-yellow {
-    color: #000000;
-    background-color: #fbbf24;
-    animation: pulse-yellow 2s infinite;
-}
-
-.channel-expiry.expiry-red {
-    color: #ffffff;
-    background-color: #ef4444;
-    animation: pulse-red 1.5s infinite;
-}
-
-.channel-expiry.expiry-expired {
-    color: #ffffff;
-    background-color: #6b7280;
-}
-
-.channel-expiry.expiry-active {
-    color: #10b981;
-    background-color: transparent;
-}
-
-@keyframes pulse-pink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-@keyframes pulse-yellow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-}
-
-@keyframes pulse-red {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.9; transform: scale(1.02); }
-}
-
-/* QR Code popup for renewal */
-.renewal-qr-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.85);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
-.renewal-qr-container {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    border: 2px solid #ef4444;
-    border-radius: 20px;
-    padding: 40px;
-    text-align: center;
-    box-shadow: 0 20px 60px rgba(239, 68, 68, 0.3);
-}
-
-.renewal-qr-title {
-    color: #ef4444;
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 10px;
-}
-
-.renewal-qr-subtitle {
-    color: #94a3b8;
-    font-size: 16px;
-    margin-bottom: 25px;
-}
-
-.renewal-qr-code {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    display: inline-block;
-}
-
-.renewal-qr-code img {
-    width: 200px;
-    height: 200px;
-}
-
-.renewal-qr-hint {
-    color: #64748b;
-    font-size: 14px;
-}
-
-.renewal-qr-close {
-    margin-top: 20px;
-    color: #94a3b8;
-    font-size: 12px;
-}
-
-/* CENTER: PROGRAM INFO */
-.program-info-section {
-    flex: 1;
+.channel-meta {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 
-.program-title {
-    color: white;
-    font-size: 22px;
+.expiry-info {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.price-info {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+/* RIGHT SECTION: Device Info + Time */
+.info-right {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.device-subscription {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+}
+
+.device-id {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.subscription-status {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.user-info {
+    color: #4ade80;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.time-date {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+}
+
+.current-time {
+    color: #ffffff;
+    font-size: 20px;
     font-weight: 600;
 }
+
+.current-date {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+}
+
 
 .program-time {
     color: #b0b0b0;
@@ -313,9 +253,12 @@ video {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
     }
+
     50% {
         opacity: 0.7;
     }
@@ -400,6 +343,7 @@ video {
         transform: translateX(100%);
         opacity: 0;
     }
+
     to {
         transform: translateX(0);
         opacity: 1;
@@ -411,8 +355,485 @@ video {
         transform: translateX(0);
         opacity: 1;
     }
+
     to {
         transform: translateX(100%);
         opacity: 0;
     }
+}
+
+/* ==========================================
+   PLAYER SIDEBAR - ANDROID TV 3-LEVEL DESIGN
+   ========================================== */
+
+.player-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 450px;
+    height: 1080px;
+    background: rgba(25, 30, 45, 0.98);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-out;
+}
+
+.player-sidebar.open {
+    transform: translateX(0);
+}
+
+.player-sidebar.close {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in;
+}
+
+/* ==========================================
+   TOP HEADER - "Categories" text
+   ========================================== */
+
+.sidebar-top-header {
+    background: rgba(20, 25, 35, 0.95);
+    padding: 15px 20px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.sidebar-header-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.5px;
+}
+
+/* ==========================================
+   LANGUAGE SELECTOR
+   ========================================== */
+
+.sidebar-language-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 25px;
+    background: rgba(30, 35, 50, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.language-arrow {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    color: #00bcd4;
+}
+
+.language-arrow:hover,
+.language-arrow:focus {
+    color: #00e5ff;
+    transform: scale(1.1);
+}
+
+.language-display {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 15px;
+}
+
+.language-icon {
+    font-size: 28px;
+}
+
+.language-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #00bcd4;
+    text-align: center;
+}
+
+/* ==========================================
+   LEVEL 2: CATEGORIES LIST
+   ========================================== */
+
+.sidebar-categories-section {
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 10, 15, 0.5);
+}
+
+.section-title {
+    padding: 18px 20px 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.categories-container {
+    padding: 0 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.categories-container::-webkit-scrollbar {
+    width: 5px;
+}
+
+.categories-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.categories-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.category-item {
+    width: 100%;
+    padding: 14px 18px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 18px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.category-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+}
+
+.category-item:focus,
+.category-item.active {
+    background: rgba(0, 188, 212, 0.25);
+    border-color: rgba(0, 188, 212, 0.5);
+    color: #ffffff;
+    box-shadow: 0 0 15px rgba(0, 188, 212, 0.3);
+    transform: translateX(4px);
+}
+
+.category-name {
+    display: block;
+}
+
+/* ==========================================
+   CHANNELS LIST - Matching Reference Design
+   ========================================== */
+
+.sidebar-channels-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: rgba(20, 25, 35, 0.95);
+}
+
+.channels-list {
+    flex: 1;
+    padding: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.channels-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.channels-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.channels-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.channels-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.channel-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 25px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0;
+    cursor: pointer;
+    outline: none;
+    transition: background 0.15s ease;
+}
+
+.channel-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.channel-item:focus,
+.channel-item.active {
+    background: #00bcd4;
+    border-color: #00bcd4;
+}
+
+.channel-item-left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Channel Logo in sidebar */
+.channel-item-logo {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin-right: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.channel-item-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.channel-item-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channel-item-price {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.channel-item-right {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-left: 20px;
+}
+
+.channel-item-lcn {
+    font-size: 24px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    min-width: 70px;
+    text-align: right;
+}
+
+/* Focus states for TV remote */
+.channel-item:focus .channel-item-name,
+.channel-item.active .channel-item-name {
+    color: #ffffff;
+}
+
+.channel-item:focus .channel-item-price,
+.channel-item.active .channel-item-price {
+    color: #ffffff;
+}
+
+.channel-item:focus .channel-item-lcn,
+.channel-item.active .channel-item-lcn {
+    color: #ffffff;
+}
+
+/* Legacy compatibility - keep old classes for backward compatibility */
+.sidebar-section {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.sidebar-section:last-child {
+    border-bottom: none;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.sidebar-section .section-title {
+    margin: 0 0 15px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+}
+
+.categories-section {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.categories-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.category-item {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #9ca3af;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.category-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.category-item:focus {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: #6366f1;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+
+.category-item.active {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: #6366f1;
+    color: #fff;
+}
+
+.channels-section {
+    flex: 1;
+}
+
+.channels-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+}
+
+.channels-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.channels-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.channels-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.channels-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.channel-item {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #d1d5db;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.channel-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.channel-item:focus {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6;
+    color: #fff;
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
+}
+
+.channel-item.active {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: #3b82f6;
+    color: #fff;
+}
+
+.channel-item-number {
+    min-width: 30px;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.channel-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channel-item-logo {
+    width: 24px;
+    height: 24px;
+    border-radius: 2px;
+    object-fit: cover;
+    opacity: 0.8;
 }

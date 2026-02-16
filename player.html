@@ -16,75 +16,102 @@
         <!-- Samsung AVPlay requires object element for native playback -->
         <!-- CRITICAL: Use explicit 1920x1080 pixels for full screen on Samsung TV -->
         <object id="av-player" type="application/avplayer"
-                style="width:1920px; height:1080px; position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; border:none;">
+            style="width:1920px; height:1080px; position:absolute; top:0; left:0; z-index:0; margin:0; padding:0; border:none;">
         </object>
         <!-- HTML5 video fallback for browser/emulator testing -->
-        <video id="video-player" style="width:1920px; height:1080px; position:absolute; top:0; left:0; display:none; margin:0; padding:0;"></video>
+        <video id="video-player"
+            style="width:1920px; height:1080px; position:absolute; top:0; left:0; display:none; margin:0; padding:0;"></video>
 
         <!-- Stream Ad Panel (right side overlay) -->
         <div class="stream-ad-panel" id="streamAdPanel" style="display: none;">
             <img id="streamAdImage" src="" alt="Ad">
         </div>
 
-        <div class="player-overlay visible">
-            <!-- New Bottom Info Bar -->
-            <div class="info-bar-container">
+        <!-- Player Sidebar - Matching Reference Design -->
+        <div class="player-sidebar" id="playerSidebar">
 
-                <!-- Main Info Card -->
-                <div class="info-card">
-
-                    <!-- Left: Channel -->
-                    <div class="channel-info-section">
-                        <div class="channel-logo-circle">
-                            <img src="" alt="Logo" id="ui-channel-logo">
-                        </div>
-                        <div class="channel-text">
-                            <div class="channel-number" id="ui-channel-number">000</div>
-                            <div class="channel-name-ui" id="ui-channel-name">Loading...</div>
-                            <div class="channel-expiry" id="ui-expiry">--</div>
-                        </div>
-                    </div>
-
-                    <!-- Center: Program -->
-                    <div class="program-info-section">
-                        <div class="program-title" id="ui-program-title">Live Stream</div>
-                        <div class="program-time" id="ui-program-time">--</div>
-
-                        <!-- Progress -->
-                        <div class="progress-container">
-                            <div class="progress-bar-bg">
-                                <div class="progress-bar-fill" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="program-next" id="ui-next">--</div>
-                    </div>
-
-                    <!-- Right: Controls -->
-                    <div class="controls-section">
-                        <button class="icon-btn focusable"><span class="icon">文</span></button>
-                        <button class="icon-btn focusable"><span class="icon">⋮</span></button>
-                    </div>
-                </div>
-
-                <!-- Footer Status Bar -->
-                <div class="status-footer">
-                    <div class="footer-item"><strong>EPG:</strong> <span id="ui-epg">--</span></div>
-                    <div class="footer-item"><strong>Status:</strong> <span id="ui-status">--</span></div>
-                    <div class="spacer"></div>
-                    <div class="footer-item"><strong>User:</strong> <span id="ui-user">--</span></div>
-                    <div class="footer-item"><strong>TV ID:</strong> <span id="ui-tvid">--</span></div>
-                    <div class="footer-item" id="ui-date">--</div>
-                    <div class="footer-item" id="ui-time">--</div>
-                </div>
-
+            <!-- Top Header -->
+            <div class="sidebar-top-header">
+                <div class="sidebar-header-title">Categories</div>
             </div>
 
-            <!-- Keep Back Button functionality but maybe hidden or styled differently if needed, 
-                 or we rely on remote back. Let's keep a hidden invisible trigger or just rely on the js handler.
-                 Actually, adding a discreet back button at top left is safer for mouse users. -->
-            <button id="back-btn" class="back-btn focusable"
-                style="position:absolute; top:40px; left:40px; opacity: 0; pointer-events:none;">Back</button>
+            <!-- Language Selector with Double Arrows -->
+            <div class="sidebar-language-header" id="sidebarLanguageHeader">
+                <button class="language-arrow language-arrow-left focusable" id="languageArrowLeft">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                        <polyline points="11 18 5 12 11 6"></polyline>
+                    </svg>
+                </button>
+                <div class="language-display" id="languageDisplay">
+                    <div class="language-name" id="currentLanguageName">English</div>
+                </div>
+                <button class="language-arrow language-arrow-right focusable" id="languageArrowRight">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                        <polyline points="13 18 19 12 13 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Hidden categories container for internal use -->
+            <div class="sidebar-categories-section" id="sidebarCategoriesSection" style="display:none;">
+                <div class="categories-container" id="categoriesContainer"></div>
+            </div>
+
+            <!-- Channels List - Direct below language -->
+            <div class="sidebar-channels-section" id="sidebarChannelsSection">
+                <div class="channels-list" id="channelsList">
+                    <!-- Channels will be loaded dynamically -->
+                    <!-- Example structure:
+                    <button class="channel-item focusable" data-channel-index="0">
+                        <div class="channel-item-left">
+                            <div class="channel-item-name">Star Sports HD 1</div>
+                            <div class="channel-item-price">₹19.00</div>
+                        </div>
+                        <div class="channel-item-right">
+                            <div class="channel-item-lcn">610</div>
+                        </div>
+                    </button>
+                    -->
+                </div>
+            </div>
+
+        </div>
+
+        <div class="player-overlay visible">
+            <!-- Bottom Info Bar (New Design) -->
+            <div class="info-bar-bottom">
+                <!-- Left Section: Channel Logo + Info -->
+                <div class="info-left">
+                    <div class="channel-logo-box">
+                        <img src="" alt="Channel Logo" id="ui-channel-logo">
+                    </div>
+                    <div class="channel-details">
+                        <div class="channel-number-name">
+                            <span class="channel-lcn" id="ui-channel-number">008</span>
+                            <span class="channel-name" id="ui-channel-name">Colors Super TV</span>
+                        </div>
+                        <div class="channel-meta">
+                            <span class="expiry-info" id="ui-expiry">Expires in 4 days</span>
+                            <span class="price-info" id="ui-price">Channels Price $ : 19.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Section: Device Info + Time -->
+                <div class="info-right">
+                    <div class="device-subscription">
+                        <div class="device-id" id="ui-device-id">Devices ID: SN_A987-B534-C322</div>
+                        <div class="subscription-status" id="ui-subscription">Subscribed : N/A</div>
+                        <div class="user-info" id="ui-user-info">User: Loading...</div>
+                    </div>
+                    <div class="time-date">
+                        <div class="current-time" id="ui-time">8:39 PM</div>
+                        <div class="current-date" id="ui-date">Dec 04, 2025</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -94,36 +121,38 @@
             <div class="error-popup-image">
                 <svg width="320" height="200" viewBox="0 0 320 200">
                     <!-- Monitor -->
-                    <rect x="80" y="15" width="160" height="105" rx="10" fill="#ffffff" stroke="#e0e0e0" stroke-width="2"/>
-                    <rect x="80" y="15" width="160" height="25" rx="10" fill="#2d6a4f"/>
-                    <rect x="80" y="30" width="160" height="10" fill="#2d6a4f"/>
-                    <text x="160" y="33" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">FAILED TO LOAD CHANNELS</text>
-                    <rect x="95" y="50" width="130" height="55" rx="4" fill="#e8e8e8"/>
+                    <rect x="80" y="15" width="160" height="105" rx="10" fill="#ffffff" stroke="#e0e0e0"
+                        stroke-width="2" />
+                    <rect x="80" y="15" width="160" height="25" rx="10" fill="#2d6a4f" />
+                    <rect x="80" y="30" width="160" height="10" fill="#2d6a4f" />
+                    <text x="160" y="33" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">FAILED TO
+                        LOAD CHANNELS</text>
+                    <rect x="95" y="50" width="130" height="55" rx="4" fill="#e8e8e8" />
                     <text x="160" y="72" text-anchor="middle" fill="#888" font-size="10">No channels</text>
                     <text x="160" y="86" text-anchor="middle" fill="#888" font-size="10">available</text>
-                    <circle cx="210" cy="45" r="12" fill="#f5a623"/>
+                    <circle cx="210" cy="45" r="12" fill="#f5a623" />
                     <text x="210" y="50" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">!</text>
-                    <rect x="145" y="120" width="30" height="8" fill="#ccc" rx="2"/>
-                    <rect x="130" y="128" width="60" height="5" fill="#ddd" rx="2"/>
+                    <rect x="145" y="120" width="30" height="8" fill="#ccc" rx="2" />
+                    <rect x="130" y="128" width="60" height="5" fill="#ddd" rx="2" />
                     <!-- Dog (left) -->
-                    <ellipse cx="65" cy="155" rx="28" ry="22" fill="#c8913e"/>
-                    <circle cx="65" cy="130" r="18" fill="#c8913e"/>
-                    <ellipse cx="52" cy="120" rx="7" ry="10" fill="#c8913e"/>
-                    <ellipse cx="78" cy="120" rx="7" ry="10" fill="#c8913e"/>
-                    <circle cx="58" cy="128" r="3" fill="#333"/>
-                    <circle cx="72" cy="128" r="3" fill="#333"/>
-                    <ellipse cx="65" cy="135" rx="4" ry="3" fill="#333"/>
-                    <path d="M58,140 Q65,146 72,140" stroke="#333" stroke-width="1.5" fill="none"/>
+                    <ellipse cx="65" cy="155" rx="28" ry="22" fill="#c8913e" />
+                    <circle cx="65" cy="130" r="18" fill="#c8913e" />
+                    <ellipse cx="52" cy="120" rx="7" ry="10" fill="#c8913e" />
+                    <ellipse cx="78" cy="120" rx="7" ry="10" fill="#c8913e" />
+                    <circle cx="58" cy="128" r="3" fill="#333" />
+                    <circle cx="72" cy="128" r="3" fill="#333" />
+                    <ellipse cx="65" cy="135" rx="4" ry="3" fill="#333" />
+                    <path d="M58,140 Q65,146 72,140" stroke="#333" stroke-width="1.5" fill="none" />
                     <!-- Cat (right) -->
-                    <ellipse cx="255" cy="155" rx="25" ry="22" fill="#d48a3e"/>
-                    <circle cx="255" cy="130" r="16" fill="#d48a3e"/>
-                    <polygon points="240,120 244,108 250,120" fill="#d48a3e"/>
-                    <polygon points="260,120 266,108 270,120" fill="#d48a3e"/>
-                    <circle cx="248" cy="128" r="3" fill="#333"/>
-                    <circle cx="262" cy="128" r="3" fill="#333"/>
-                    <ellipse cx="255" cy="134" rx="3" ry="2" fill="#ff9999"/>
-                    <line x1="240" y1="150" x2="225" y2="135" stroke="#666" stroke-width="2"/>
-                    <circle cx="225" cy="135" r="4" fill="#666"/>
+                    <ellipse cx="255" cy="155" rx="25" ry="22" fill="#d48a3e" />
+                    <circle cx="255" cy="130" r="16" fill="#d48a3e" />
+                    <polygon points="240,120 244,108 250,120" fill="#d48a3e" />
+                    <polygon points="260,120 266,108 270,120" fill="#d48a3e" />
+                    <circle cx="248" cy="128" r="3" fill="#333" />
+                    <circle cx="262" cy="128" r="3" fill="#333" />
+                    <ellipse cx="255" cy="134" rx="3" ry="2" fill="#ff9999" />
+                    <line x1="240" y1="150" x2="225" y2="135" stroke="#666" stroke-width="2" />
+                    <circle cx="225" cy="135" r="4" fill="#666" />
                 </svg>
             </div>
             <h2 class="error-popup-title" id="playerErrorTitle">Playback Error</h2>

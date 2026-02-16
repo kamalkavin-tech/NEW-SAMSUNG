@@ -15,7 +15,7 @@ var homeSearchTimeout = null; // Timer for auto-play channel by number
         window.location.replace("login.html");
         return;
     }
-    
+
     // Clear browser history to prevent back navigation to login pages
     if (window.history && window.history.replaceState) {
         window.history.replaceState(null, '', window.location.href);
@@ -54,7 +54,7 @@ window.onload = function () {
 
     // Remove all active classes first, then set only for current page
     // Also add explicit click handlers for navigation
-    sidebarBtns.forEach(function(btn) {
+    sidebarBtns.forEach(function (btn) {
         btn.classList.remove('active');
         var route = btn.getAttribute('data-route');
         if (route === currentPage) {
@@ -63,7 +63,7 @@ window.onload = function () {
         }
 
         // Add explicit click handler for sidebar navigation
-        btn.addEventListener('click', function(e) {
+        btn.addEventListener('click', function (e) {
             e.stopPropagation();
             var targetRoute = btn.getAttribute('data-route');
             if (targetRoute) {
@@ -88,7 +88,7 @@ window.onload = function () {
 
     // Initialize TV Navigation System
     // This will set initial focus on Home icon in sidebar
-    setTimeout(function() {
+    setTimeout(function () {
         if (typeof TVNavigation !== 'undefined') {
             TVNavigation.init();
         }
@@ -98,7 +98,7 @@ window.onload = function () {
     var searchInput = document.getElementById('searchInput');
     if (searchInput) {
         // Filter out non-numeric characters on input
-        searchInput.addEventListener('input', function() {
+        searchInput.addEventListener('input', function () {
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned !== searchInput.value) {
                 searchInput.value = cleaned;
@@ -108,7 +108,7 @@ window.onload = function () {
 
             if (cleaned.length > 0) {
                 // Auto-play channel after 2 seconds of no input
-                homeSearchTimeout = setTimeout(function() {
+                homeSearchTimeout = setTimeout(function () {
                     var lcn = parseInt(cleaned, 10);
                     console.log("[HOME] Auto-playing LCN:", lcn);
                     playChannelByLCNFromHome(lcn);
@@ -117,12 +117,31 @@ window.onload = function () {
         });
 
         // Block non-numeric key presses
-        searchInput.addEventListener('keypress', function(e) {
+        searchInput.addEventListener('keypress', function (e) {
             var char = String.fromCharCode(e.which || e.keyCode);
             if (!/[0-9]/.test(char) && e.keyCode !== 13 && e.keyCode !== 8) {
                 e.preventDefault();
             }
         });
+    }
+
+    // Auto-play FoFi channel after 3 seconds - ONLY on FIRST app launch ever
+    // Using localStorage so it persists across page navigations and reloads
+    var fofiPlayed = localStorage.getItem('fofi_autoplay_done');
+    var appSession = sessionStorage.getItem('app_session_started');
+    
+    if (!fofiPlayed && !appSession) {
+        // First time ever launching app - set flags IMMEDIATELY
+        localStorage.setItem('fofi_autoplay_done', 'true');
+        sessionStorage.setItem('app_session_started', 'true');
+        console.log("[HOME] Setting FoFi auto-play timer (3 seconds) - First app launch...");
+        setTimeout(function () {
+            console.log("[HOME] Auto-playing FoFi channel from API...");
+            playFoFiChannel();
+        }, 3000);
+    } else {
+        console.log("[HOME] Skipping FoFi auto-play - Already played before");
+        sessionStorage.setItem('app_session_started', 'true');
     }
 };
 
@@ -303,13 +322,13 @@ function showVolumeIndicator(volume, muted) {
         indicator.style.cssText = 'position:fixed;top:50px;right:50px;background:rgba(0,0,0,0.8);color:#fff;padding:15px 25px;border-radius:10px;font-size:18px;z-index:9999;display:flex;align-items:center;gap:15px;';
         document.body.appendChild(indicator);
     }
-    
+
     var icon = muted ? '\ud83d\udd07' : (volume > 50 ? '\ud83d\udd0a' : (volume > 0 ? '\ud83d\udd09' : '\ud83d\udd08'));
     indicator.innerHTML = '<span style=\"font-size:24px;\">' + icon + '</span><span>' + (muted ? 'Muted' : volume + '%') + '</span>';
     indicator.style.display = 'flex';
-    
+
     clearTimeout(indicator.hideTimeout);
-    indicator.hideTimeout = setTimeout(function() {
+    indicator.hideTimeout = setTimeout(function () {
         indicator.style.display = 'none';
     }, 2000);
 }
@@ -321,7 +340,7 @@ function handleExitPopupNavigation(keyCode) {
     var noBtn = document.getElementById('exitNoBtn');
     var yesBtn = document.getElementById('exitYesBtn');
     var active = document.activeElement;
-    
+
     switch (keyCode) {
         case 37: // LEFT
         case 39: // RIGHT
@@ -364,7 +383,7 @@ function handleExitPopupNavigation(keyCode) {
 // Smart back navigation handler
 function handleBackNavigation() {
     var active = document.activeElement;
-    
+
     // Check if we're in the exit modal
     var exitModal = document.getElementById('exitModal');
     if (exitModal && exitModal.classList.contains('show')) {
@@ -372,13 +391,13 @@ function handleBackNavigation() {
         hideExitConfirmation();
         return;
     }
-    
+
     // Check if we're in sidebar
     var sidebarIcons = document.querySelectorAll('.sidebar-icon');
     var inSidebar = false;
     var atHomeIcon = false;
-    
-    sidebarIcons.forEach(function(icon, index) {
+
+    sidebarIcons.forEach(function (icon, index) {
         if (icon === active || icon.contains(active)) {
             inSidebar = true;
             if (index === 0) {
@@ -386,7 +405,7 @@ function handleBackNavigation() {
             }
         }
     });
-    
+
     if (inSidebar) {
         if (atHomeIcon) {
             // At home icon in sidebar - show exit confirmation
@@ -474,7 +493,7 @@ function moveFocusVertical(direction) {
     }
 
     // Sort by vertical distance first, then by horizontal alignment
-    candidates.sort(function(a, b) {
+    candidates.sort(function (a, b) {
         // Prioritize elements on the same row (closest vertically)
         var rowDiff = Math.abs(a.distance - b.distance);
         if (rowDiff < 50) {
@@ -850,7 +869,7 @@ function renderChannelsInHomeGrid(channels) {
             // Fallback to text if image fails to load
             img.onerror = function () {
                 iconDiv.innerHTML = '<span class="channel-name" style="color: white; font-weight: bold; font-size: 16px;">' +
-                                    channelName.substring(0, 10) + '</span>';
+                    channelName.substring(0, 10) + '</span>';
             };
 
             iconDiv.appendChild(img);
@@ -990,7 +1009,7 @@ function renderLanguagesInHomeGrid(languages) {
     console.log("[HOME] Rendering", languages.length, "languages in home grid");
 
     // Sort languages alphabetically (keep special entries at top)
-    languages.sort(function(a, b) {
+    languages.sort(function (a, b) {
         var nameA = (a.langtitle || '').toLowerCase();
         var nameB = (b.langtitle || '').toLowerCase();
         if (nameA.includes('all') || nameA.includes('subscribed')) return -1;
@@ -1040,7 +1059,7 @@ function renderLanguagesInHomeGrid(languages) {
             // Fallback to text if image fails to load
             img.onerror = function () {
                 iconDiv.innerHTML = '<span style="color: white; font-weight: bold; font-size: 24px;">' +
-                                    langName.substring(0, 2).toUpperCase() + '</span>';
+                    langName.substring(0, 2).toUpperCase() + '</span>';
             };
 
             iconDiv.appendChild(img);
@@ -1166,7 +1185,7 @@ function renderAppsInHomeGrid(apps) {
             // Fallback to text if image fails to load
             img.onerror = function () {
                 iconDiv.innerHTML = '<span class="app-name" style="color: white; font-weight: bold; font-size: 16px;">' +
-                                    appName + '</span>';
+                    appName + '</span>';
             };
 
             iconDiv.appendChild(img);
@@ -1276,7 +1295,7 @@ function initNetworkStatus() {
     setInterval(updateNetworkStatus, 5000);
 
     // Close popup when clicking outside
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         var popup = document.getElementById('networkPopup');
         var btn = document.getElementById('networkBtn');
         if (popup && btn && !popup.contains(e.target) && !btn.contains(e.target)) {
@@ -1382,7 +1401,7 @@ function updateNetworkStatus() {
                 var ssid = "";
                 try {
                     ssid = webapis.network.getWiFiSsid() || "";
-                } catch(e) {
+                } catch (e) {
                     console.log("[HOME] Could not get WiFi SSID:", e);
                 }
 
@@ -1495,7 +1514,7 @@ function cancelExit() {
 }
 
 // Initialize exit popup buttons
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     var exitYesBtn = document.getElementById('exitYesBtn');
     var exitNoBtn = document.getElementById('exitNoBtn');
 
@@ -1533,7 +1552,7 @@ function checkAppLockStatus() {
     }
 
     AppLockAPI.checkAppLock()
-        .then(function(response) {
+        .then(function (response) {
             console.log("[HOME] App lock response:", response);
 
             // Check if app is locked based on API response
@@ -1559,7 +1578,7 @@ function checkAppLockStatus() {
                 hideAppLockScreen();
             }
         })
-        .catch(function(error) {
+        .catch(function (error) {
             console.error("[HOME] App lock check failed:", error);
             // On error, allow app to work (fail-open)
             console.log("[HOME] Allowing access on error (fail-open)");
@@ -1619,10 +1638,10 @@ function sendTRPDataOnLoad() {
     }
 
     TRPDataAPI.sendTRPData("home_page_view")
-        .then(function(response) {
+        .then(function (response) {
             console.log("[HOME] TRP data sent successfully:", response);
         })
-        .catch(function(error) {
+        .catch(function (error) {
             // Fail silently - analytics should never block the user
             console.error("[HOME] TRP data send failed:", error);
         });
@@ -1677,7 +1696,7 @@ function showHomeErrorPopup(type) {
         popup.style.display = 'flex';
         homeErrorPopupOpen = true;
         // Focus retry button
-        setTimeout(function() {
+        setTimeout(function () {
             var btn = popup.querySelector('.error-popup-btn');
             if (btn) btn.focus();
         }, 100);
@@ -1690,7 +1709,7 @@ function showHomeErrorPopup(type) {
  */
 function hideHomeErrorPopups() {
     var popups = ['failedLoadPopup', 'loginRequiredPopup', 'noChannelsPopup'];
-    popups.forEach(function(id) {
+    popups.forEach(function (id) {
         var popup = document.getElementById(id);
         if (popup) popup.style.display = 'none';
     });
@@ -1698,11 +1717,11 @@ function hideHomeErrorPopups() {
 }
 
 // Initialize error popup retry buttons
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Failed to Load - Retry
     var retryLoadBtn = document.getElementById('retryLoadBtn');
     if (retryLoadBtn) {
-        retryLoadBtn.addEventListener('click', function() {
+        retryLoadBtn.addEventListener('click', function () {
             hideHomeErrorPopups();
             loadHomeLanguages();
         });
@@ -1711,7 +1730,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Login Required - Retry (redirect to login)
     var retryLoginBtn = document.getElementById('retryLoginBtn');
     if (retryLoginBtn) {
-        retryLoginBtn.addEventListener('click', function() {
+        retryLoginBtn.addEventListener('click', function () {
             hideHomeErrorPopups();
             window.location.href = 'login.html';
         });
@@ -1720,7 +1739,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // No Channels - Retry
     var retryNoChannelsBtn = document.getElementById('retryNoChannelsBtn');
     if (retryNoChannelsBtn) {
-        retryNoChannelsBtn.addEventListener('click', function() {
+        retryNoChannelsBtn.addEventListener('click', function () {
             hideHomeErrorPopups();
             loadHomeLanguages();
         });
@@ -1739,13 +1758,13 @@ function playChannelByLCNFromHome(lcn) {
     console.log("[HOME] Playing channel by LCN:", lcn);
 
     BBNL_API.getChannelList()
-        .then(function(channels) {
+        .then(function (channels) {
             if (!channels || !Array.isArray(channels)) {
                 alert("Channel " + lcn + " not found");
                 return;
             }
 
-            var channel = channels.find(function(ch) {
+            var channel = channels.find(function (ch) {
                 var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
                 return chNo === lcn;
             });
@@ -1758,7 +1777,7 @@ function playChannelByLCNFromHome(lcn) {
                 alert("Channel " + lcn + " not found");
             }
         })
-        .catch(function(error) {
+        .catch(function (error) {
             console.error("[HOME] LCN lookup failed:", error);
             alert("Channel " + lcn + " not found");
         });
@@ -1782,14 +1801,14 @@ function autoTuneDefaultChannel() {
     console.log("[HOME] Auto-tuning to default channel (LCN 999)...");
 
     BBNL_API.getChannelList()
-        .then(function(channels) {
+        .then(function (channels) {
             if (!channels || !Array.isArray(channels) || channels.length === 0) {
                 console.log("[HOME] No channels available for auto-tune");
                 return;
             }
 
             // Find channel with LCN 999 (Info Channel)
-            var defaultChannel = channels.find(function(ch) {
+            var defaultChannel = channels.find(function (ch) {
                 var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
                 return chNo === 999;
             });
@@ -1803,9 +1822,62 @@ function autoTuneDefaultChannel() {
                 sessionStorage.setItem('autoTuneCompleted', 'true');
             }
         })
-        .catch(function(error) {
+        .catch(function (error) {
             console.error("[HOME] Auto-tune failed:", error);
             sessionStorage.setItem('autoTuneCompleted', 'true');
+        });
+}
+
+/**
+ * Play FoFi Channel - Auto-play after 3 seconds on first app launch
+ * Fetches FoFi channel from API instead of using static LCN
+ */
+function playFoFiChannel() {
+    console.log("[HOME] Fetching FoFi channel from API...");
+
+    // Flag is now set BEFORE setTimeout fires (in window.onload)
+    // This prevents race conditions when returning from player
+
+    BBNL_API.getChannelList()
+        .then(function (channels) {
+            if (!channels || !Array.isArray(channels) || channels.length === 0) {
+                console.log("[HOME] No channels available for FoFi auto-play");
+                return;
+            }
+
+            // Find FoFi channel - look for channel with "fofi" in name or specific identifier
+            var fofiChannel = channels.find(function (ch) {
+                var title = (ch.chtitle || ch.channel_name || "").toLowerCase();
+                var grid = (ch.grid || "").toLowerCase();
+                // Match channels with "fofi" or "fo-fi" in name or grid
+                return title.indexOf('fofi') !== -1 || 
+                       title.indexOf('fo-fi') !== -1 ||
+                       grid.indexOf('fofi') !== -1;
+            });
+
+            // If no FoFi channel found by name, try to find a default/info channel
+            if (!fofiChannel) {
+                fofiChannel = channels.find(function (ch) {
+                    var title = (ch.chtitle || ch.channel_name || "").toLowerCase();
+                    return title.indexOf('info') !== -1 || title.indexOf('default') !== -1;
+                });
+            }
+
+            // Fallback to first channel if no FoFi channel found
+            if (!fofiChannel && channels.length > 0) {
+                fofiChannel = channels[0];
+                console.log("[HOME] No FoFi channel found, using first channel:", fofiChannel.chtitle || fofiChannel.channel_name);
+            }
+
+            if (fofiChannel) {
+                console.log("[HOME] Playing FoFi channel:", fofiChannel.chtitle || fofiChannel.channel_name);
+                BBNL_API.playChannel(fofiChannel);
+            } else {
+                console.log("[HOME] No channel available for FoFi auto-play");
+            }
+        })
+        .catch(function (error) {
+            console.error("[HOME] FoFi auto-play failed:", error);
         });
 }
 
@@ -1831,9 +1903,8 @@ window.addEventListener('load', function () {
     setTimeout(loadHomeAds, 100);
     setTimeout(loadHomeLanguages, 150); // Load languages
 
-    // NOTE: FOFI channel (LCN 999) auto-play has been MOVED to TV Channel page
-    // It will play only ONCE when user first visits the TV Channel page
-    // This ensures Home page loads without auto-playback interruption
-    console.log("[HOME] Home page loaded - No auto-channel playback on home");
+    // NOTE: FOFI channel (LCN 999) auto-plays after 3 seconds on home page
+    // This is handled in window.onload with setTimeout
+    console.log("[HOME] Home page loaded - FoFi auto-play timer started");
 
 });

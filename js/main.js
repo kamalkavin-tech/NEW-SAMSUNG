@@ -4,13 +4,14 @@
 
 var focusables = [];
 var currentFocus = 0;
+var otpRequestInProgress = false; // Flag to prevent duplicate OTP requests
 
 // Check authentication on page load - redirect logged in users away from auth pages
 (function checkAuthRedirect() {
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
     var authPages = ['index.html', 'login.html', 'verify.html', ''];
     var isAuthPage = authPages.indexOf(currentPage) !== -1;
-    
+
     // If user is logged in and on an auth page, redirect to home
     if (isAuthPage) {
         var userData = localStorage.getItem("bbnl_user");
@@ -42,6 +43,8 @@ window.onload = function () {
     showDeviceId();
     showNetworkIP();
     showMacAddress();
+    showIPv6();
+    showPublicIP();
 
     // 4a. Listen for network changes to auto-update IP
     startNetworkChangeListener();
@@ -94,6 +97,9 @@ window.onload = function () {
 
     // 8. Add Number-Only Validation for Phone and OTP inputs
     setupNumberOnlyInputs();
+
+    // 9. Initialize phone input (clear any residual values)
+    initializePhoneInput();
 };
 
 /* DEVICE ID */
@@ -104,12 +110,12 @@ function showDeviceId() {
     try {
         if (typeof webapis !== 'undefined' && webapis.productinfo) {
             var duid = webapis.productinfo.getDuid();
-            deviceIdText.innerText = "Device ID: " + duid;
+            deviceIdText.innerText = duid;
         } else {
-            deviceIdText.innerText = "Device ID: Emulator / Web";
+            deviceIdText.innerText = "Emulator / Web";
         }
     } catch (e) {
-        deviceIdText.innerText = "Device ID: Not available";
+        deviceIdText.innerText = "Not available";
     }
 }
 
@@ -124,25 +130,25 @@ function showNetworkIP() {
             console.log("Network Type:", networkType);
 
             if (networkType === 0) {
-                ipText.innerText = "IP: Disconnected";
+                ipText.innerText = "Disconnected";
                 return;
             }
 
             var ip = webapis.network.getIp(networkType);
             if (ip) {
-                ipText.innerText = "IP: " + ip;
+                ipText.innerText = ip;
                 console.log("Device IP:", ip);
             } else {
-                ipText.innerText = "IP: Not valid";
+                ipText.innerText = "Not valid";
             }
         } else {
             // Fallback for Emulator/Browser
-            ipText.innerText = "IP: Web/Emulator";
+            ipText.innerText = "Web/Emulator";
         }
     } catch (e) {
         console.error("IP Fetch Error:", e);
         // Show actual error info for debugging on TV
-        ipText.innerText = "IP: " + e.name;
+        ipText.innerText = e.name;
     }
 }
 
@@ -155,18 +161,98 @@ function showMacAddress() {
         if (typeof webapis !== 'undefined' && webapis.network) {
             var mac = webapis.network.getMac();
             if (mac) {
-                macText.innerText = "MAC: " + mac;
+                macText.innerText = mac;
                 console.log("Device MAC:", mac);
             } else {
-                macText.innerText = "MAC: Not Available";
+                macText.innerText = "Not Available";
             }
         } else {
-            macText.innerText = "MAC: Web/Emulator";
+            macText.innerText = "Web/Emulator";
         }
     } catch (e) {
         console.error("MAC Fetch Error:", e);
-        macText.innerText = "MAC: " + e.name;
+        macText.innerText = e.name;
     }
+}
+
+function showIPv6() {
+    var ipv6Text = document.getElementById("ipv6Text");
+    if (!ipv6Text) return;
+
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            var networkType = webapis.network.getActiveConnectionType();
+
+            if (networkType === 0) {
+                ipv6Text.innerText = "Disconnected";
+                return;
+            }
+
+            // Try to get IPv6 address
+            var ipv6 = webapis.network.getIpv6(networkType);
+            if (ipv6 && ipv6.length > 0) {
+                ipv6Text.innerText = ipv6;
+                console.log("Device IPv6:", ipv6);
+            } else {
+                ipv6Text.innerText = "Not Available";
+            }
+        } else {
+            ipv6Text.innerText = "Web/Emulator";
+        }
+    } catch (e) {
+        console.error("IPv6 Fetch Error:", e);
+        ipv6Text.innerText = "Not Supported";
+    }
+}
+
+/**
+ * Fetch and display Public IP Address
+ */
+function showPublicIP() {
+    var publicIpText = document.getElementById("publicIpText");
+    if (!publicIpText) return;
+
+    publicIpText.innerText = "Fetching...";
+
+    // Try multiple public IP services
+    var ipServices = [
+        'https://api.ipify.org?format=json',
+        'https://api64.ipify.org?format=json',
+        'https://ipapi.co/json/',
+        'https://api.my-ip.io/ip.json'
+    ];
+
+    function tryNextService(index) {
+        if (index >= ipServices.length) {
+            publicIpText.innerText = "Not Available";
+            console.log("[PublicIP] All services failed");
+            return;
+        }
+
+        var service = ipServices[index];
+        console.log("[PublicIP] Trying service:", service);
+
+        fetch(service, { timeout: 5000 })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function (data) {
+                var publicIp = data.ip || data.IPv4 || data.IP || null;
+                if (publicIp) {
+                    publicIpText.innerText = publicIp;
+                    console.log("[PublicIP] Success:", publicIp);
+                } else {
+                    throw new Error('No IP in response');
+                }
+            })
+            .catch(function (error) {
+                console.error("[PublicIP] Service failed:", service, error);
+                tryNextService(index + 1);
+            });
+    }
+
+    tryNextService(0);
 }
 
 /* NETWORK CHANGE LISTENER */
@@ -183,7 +269,9 @@ function startNetworkChangeListener() {
                 setTimeout(function () {
                     showNetworkIP();
                     showMacAddress();
-                    console.log("[Network] IP and MAC refreshed after network change");
+                    showIPv6();
+                    showPublicIP();
+                    console.log("[Network] IP, MAC, IPv6, and Public IP refreshed after network change");
                 }, 2000);
             });
             console.log("[Network] Network change listener registered");
@@ -261,6 +349,26 @@ function hideErrorModal() {
 
         // Refresh focusables
         focusables = document.querySelectorAll(".focusable");
+    }
+}
+
+/* INITIALIZE PHONE INPUT - FIX MAXLENGTH BUG */
+function initializePhoneInput() {
+    var phoneInput = document.getElementById("phoneInput");
+    if (phoneInput) {
+        // Explicitly clear the value
+        phoneInput.value = "";
+
+        // Clear any localStorage remnants
+        localStorage.removeItem("temp_phone");
+
+        // Debug log
+        console.log("[PhoneInput] Initialized - Length:", phoneInput.value.length);
+        console.log("[PhoneInput] Value:", phoneInput.value);
+
+        // Force re-render by triggering input event
+        var event = new Event('input', { bubbles: true });
+        phoneInput.dispatchEvent(event);
     }
 }
 
@@ -412,7 +520,7 @@ document.addEventListener("keydown", function (e) {
         } else if (active.id === 'phoneInput') {
             // Phone Input: Handle remote number keys manually
             var digit = -1;
-            
+
             // Standard number keys (0-9)
             if (e.keyCode >= 48 && e.keyCode <= 57) digit = e.keyCode - 48;
             // Numpad keys
@@ -420,7 +528,7 @@ document.addEventListener("keydown", function (e) {
             // Samsung TV Remote number keys (varies by remote model)
             // BN59-01180A and similar remotes use these codes
             if (e.key >= '0' && e.key <= '9') digit = parseInt(e.key);
-            
+
             if (digit !== -1) {
                 e.preventDefault();
                 console.log("Remote number key pressed:", digit);
@@ -433,12 +541,12 @@ document.addEventListener("keydown", function (e) {
                 }
                 return;
             }
-            
+
             // Backspace - clear last digit
             if (e.keyCode === 8) {
                 return; // Let default handle it
             }
-            
+
             // Enter - submit
             if (e.keyCode === 13) {
                 e.preventDefault();
@@ -571,11 +679,17 @@ function handleOK() {
     // ERROR MODAL: Try Again Button
     if (active.id === "errorTryAgainBtn") {
         hideErrorModal();
+
+        // Properly clear and reinitialize phone input
+        initializePhoneInput();
+
+        // Set focus
         var phoneInput = document.getElementById("phoneInput");
         if (phoneInput) {
-            phoneInput.value = "";
             phoneInput.focus();
         }
+
+        console.log("[ErrorModal] Try Again - Phone input cleared and reinitialized");
         return;
     }
 
@@ -588,12 +702,21 @@ function handleOK() {
 
     // LOGIN PAGE: Get OTP Button
     if (active.id === "getOtpBtn") {
+        // Prevent duplicate OTP requests
+        if (otpRequestInProgress) {
+            console.log("[Login] OTP request already in progress, ignoring duplicate");
+            return;
+        }
+
         var phoneInput = document.getElementById("phoneInput");
         var val = phoneInput ? phoneInput.value : "";
         console.log("Get OTP clicked - Phone number:", val);
 
         if (val.length === 10) {
             console.log("[Login] Requesting OTP for mobile:", val);
+
+            // Set flag to prevent duplicate requests
+            otpRequestInProgress = true;
 
             // Show loading state
             var btn = document.getElementById("getOtpBtn");
@@ -607,7 +730,8 @@ function handleOK() {
                 .then(function (response) {
                     console.log("[Login] OTP Response:", response);
 
-                    // Restore button
+                    // Reset flag and restore button
+                    otpRequestInProgress = false;
                     btn.innerText = originalText;
                     btn.disabled = false;
 
@@ -641,6 +765,8 @@ function handleOK() {
                 })
                 .catch(function (error) {
                     console.error("[Login] ❌ OTP request error:", error);
+                    // Reset flag and restore button
+                    otpRequestInProgress = false;
                     btn.innerText = originalText;
                     btn.disabled = false;
                     alert("Network error. Please check your connection.");
@@ -657,14 +783,14 @@ function handleOK() {
     // VERIFY PAGE: Verify Button (if exists)
     if (active.id === "verifyBtn") {
         var fullOTP = "";
-        for (var i = 1; i <= 4; i++) {  // Changed from 6 to 4
+        for (var i = 1; i <= 4; i++) {
             var val = document.getElementById('otp' + i).value;
             if (val) fullOTP += val;
         }
 
         console.log("Verify button clicked - OTP:", fullOTP);
 
-        if (fullOTP.length === 4) {  // Changed from 6 to 4
+        if (fullOTP.length === 4) {
             console.log("[Verify] Verifying OTP:", fullOTP);
 
             // Get user info from URL
@@ -704,18 +830,28 @@ function handleOK() {
                     } else {
                         console.error("[Verify] ❌ OTP verification failed:", response);
                         var errorMsg = response.status ? response.status.err_msg : "Invalid OTP";
-                        alert("Error: " + errorMsg);
+
+                        // Clear all OTP inputs
+                        clearOTPInputs();
+
+                        // Show error popup with proper focus management
+                        showErrorPopup(errorMsg);
                     }
                 })
                 .catch(function (error) {
                     console.error("[Verify] ❌ OTP verification error:", error);
                     btn.innerText = originalText;
                     btn.disabled = false;
-                    alert("Network error. Please check your connection.");
+
+                    // Clear all OTP inputs
+                    clearOTPInputs();
+
+                    // Show error popup
+                    showErrorPopup("Network error. Please check your connection.");
                 });
         } else {
             console.log("Incomplete OTP");
-            alert("Please enter full 4-digit OTP");  // Changed from 6 to 4
+            showErrorPopup("Please enter full 4-digit OTP");
         }
         return;
     }
@@ -773,6 +909,7 @@ var otpCode = ["", "", "", ""];  // Changed from 6 to 4
 var currentOtpIndex = 0;
 var countdownTimer = 59;
 var timerInterval = null;
+var resendInProgress = false; // Flag to prevent duplicate resend requests
 
 // Initialize OTP page if we're on verify.html
 window.addEventListener('load', function () {
@@ -789,7 +926,7 @@ window.addEventListener('load', function () {
 function initOTPPage() {
     // Start countdown timer
     startCountdown();
-    
+
     // Initialize popup handlers
     initPopupHandlers();
 
@@ -870,7 +1007,14 @@ function startCountdown() {
 }
 
 function resendOTP() {
+    // Prevent duplicate resend requests
+    if (resendInProgress) {
+        console.log("[Resend OTP] Request already in progress, ignoring duplicate");
+        return;
+    }
+
     console.log("Resending OTP...");
+    resendInProgress = true;
 
     // Get User Context from URL or Storage
     const urlParams = new URLSearchParams(window.location.search);
@@ -879,7 +1023,10 @@ function resendOTP() {
     const email = urlParams.get('email') || "sureshs@bbnl.co.in"; // Add email parameter
 
     const resendLink = document.getElementById('resendLink');
-    if (resendLink) resendLink.innerText = "Sending...";
+    if (resendLink) {
+        resendLink.innerText = "Sending...";
+        resendLink.classList.add('disabled');
+    }
 
     // Get device info for the API call
     const device = DeviceInfo.getDeviceInfo();
@@ -900,6 +1047,7 @@ function resendOTP() {
     // Call API with all required parameters
     AuthAPI.resendOTP(userid, mobile, email, deviceData).then(response => {
         console.log("Resend Response:", response);
+        resendInProgress = false; // Reset flag
         if (resendLink) resendLink.innerText = "Resend OTP";
 
         // Check if response is successful
@@ -926,9 +1074,30 @@ function resendOTP() {
 
     }).catch(e => {
         console.error("Resend Failed", e);
+        resendInProgress = false; // Reset flag
         if (resendLink) resendLink.innerText = "Resend OTP";
         showErrorPopup("Failed to resend OTP: " + e.message);
     });
+}
+
+// Clear all OTP inputs and reset focus to first input
+function clearOTPInputs() {
+    console.log("[OTP] Clearing all OTP inputs");
+    for (var i = 1; i <= 4; i++) {
+        var input = document.getElementById('otp' + i);
+        if (input) {
+            input.value = '';
+        }
+    }
+
+    // Reset focus to first OTP input
+    var firstInput = document.getElementById('otp1');
+    if (firstInput) {
+        setTimeout(function () {
+            firstInput.focus();
+            console.log("[OTP] Focus reset to first input");
+        }, 100);
+    }
 }
 
 // Show OTP Success Popup
@@ -936,20 +1105,31 @@ function showOtpPopup(mobile, email) {
     var popup = document.getElementById('otpPopup');
     var message = document.getElementById('otpPopupMessage');
     var closeBtn = document.getElementById('otpPopupCloseBtn');
-    
+    var authCard = document.querySelector('.auth-card');
+
     if (popup && message) {
         message.textContent = 'A new OTP has been sent to your registered mobile number.';
         popup.style.display = 'flex';
-        
+
+        // Disable background interaction
+        if (authCard) {
+            authCard.style.pointerEvents = 'none';
+            authCard.style.opacity = '0.5';
+        }
+
+        // Lock focus on popup - disable all other focusables
+        disableBackgroundFocusables();
+
         // Focus on close button for TV remote navigation
         if (closeBtn) {
-            setTimeout(function() {
+            setTimeout(function () {
                 closeBtn.focus();
-            }, 100);
+                console.log("[Popup] Focus locked on OTP popup OK button");
+            }, 150);
         }
-        
+
         // Auto close after 5 seconds
-        setTimeout(function() {
+        setTimeout(function () {
             hideOtpPopup();
         }, 5000);
     }
@@ -958,81 +1138,191 @@ function showOtpPopup(mobile, email) {
 // Hide OTP Popup
 function hideOtpPopup() {
     var popup = document.getElementById('otpPopup');
+    var authCard = document.querySelector('.auth-card');
+
     if (popup) {
         popup.style.display = 'none';
+
+        // Re-enable background interaction
+        if (authCard) {
+            authCard.style.pointerEvents = 'auto';
+            authCard.style.opacity = '1';
+        }
+
+        // Re-enable background focusables
+        enableBackgroundFocusables();
+
         // Return focus to first OTP input
         var firstInput = document.getElementById('otp1');
-        if (firstInput) firstInput.focus();
-    }
-}
-
-// Show Error Popup
-function showErrorPopup(errorMessage) {
-    var popup = document.getElementById('errorPopup');
-    var message = document.getElementById('errorPopupMessage');
-    var closeBtn = document.getElementById('errorPopupCloseBtn');
-    
-    if (popup && message) {
-        message.textContent = errorMessage || 'Failed to send OTP. Please try again.';
-        popup.style.display = 'flex';
-        
-        // Focus on close button for TV remote navigation
-        if (closeBtn) {
-            setTimeout(function() {
-                closeBtn.focus();
+        if (firstInput) {
+            setTimeout(function () {
+                firstInput.focus();
+                console.log("[Popup] Focus restored to first OTP input");
             }, 100);
         }
     }
 }
 
-// Hide Error Popup
+// Show Error Popup with proper focus management
+function showErrorPopup(errorMessage) {
+    var popup = document.getElementById('errorPopup');
+    var message = document.getElementById('errorPopupMessage');
+    var closeBtn = document.getElementById('errorPopupCloseBtn');
+    var authCard = document.querySelector('.auth-card');
+
+    if (popup && message) {
+        message.textContent = errorMessage || 'Failed to send OTP. Please try again.';
+        popup.style.display = 'flex';
+
+        // Disable background interaction
+        if (authCard) {
+            authCard.style.pointerEvents = 'none';
+            authCard.style.opacity = '0.5';
+        }
+
+        // Lock focus on popup - disable all other focusables
+        disableBackgroundFocusables();
+
+        // Focus on close button for TV remote navigation
+        if (closeBtn) {
+            setTimeout(function () {
+                closeBtn.focus();
+                console.log("[Popup] Focus locked on error popup OK button");
+            }, 150);
+        }
+    }
+}
+
+// Hide Error Popup with proper focus restoration
 function hideErrorPopup() {
     var popup = document.getElementById('errorPopup');
+    var authCard = document.querySelector('.auth-card');
+
     if (popup) {
         popup.style.display = 'none';
-        // Return focus to resend link
-        var resendLink = document.getElementById('resendLink');
-        if (resendLink) resendLink.focus();
+
+        // Re-enable background interaction
+        if (authCard) {
+            authCard.style.pointerEvents = 'auto';
+            authCard.style.opacity = '1';
+        }
+
+        // Re-enable background focusables
+        enableBackgroundFocusables();
+
+        // Clear OTP inputs and return focus to first input
+        clearOTPInputs();
     }
+}
+
+// Disable all background focusables when popup is open
+function disableBackgroundFocusables() {
+    var otpInputs = document.querySelectorAll('.otp-input');
+    var verifyBtn = document.getElementById('verifyBtn');
+    var resendLink = document.getElementById('resendLink');
+
+    otpInputs.forEach(function (input) {
+        input.setAttribute('data-was-focusable', 'true');
+        input.tabIndex = -1;
+        input.disabled = true;
+    });
+
+    if (verifyBtn) {
+        verifyBtn.setAttribute('data-was-focusable', 'true');
+        verifyBtn.tabIndex = -1;
+        verifyBtn.disabled = true;
+    }
+
+    if (resendLink) {
+        resendLink.setAttribute('data-was-focusable', 'true');
+        resendLink.tabIndex = -1;
+    }
+
+    console.log("[Focus] Background focusables disabled");
+}
+
+// Re-enable all background focusables when popup closes
+function enableBackgroundFocusables() {
+    var otpInputs = document.querySelectorAll('.otp-input');
+    var verifyBtn = document.getElementById('verifyBtn');
+    var resendLink = document.getElementById('resendLink');
+
+    otpInputs.forEach(function (input) {
+        if (input.getAttribute('data-was-focusable')) {
+            input.tabIndex = 0;
+            input.disabled = false;
+            input.removeAttribute('data-was-focusable');
+        }
+    });
+
+    if (verifyBtn && verifyBtn.getAttribute('data-was-focusable')) {
+        verifyBtn.tabIndex = 0;
+        verifyBtn.disabled = false;
+        verifyBtn.removeAttribute('data-was-focusable');
+    }
+
+    if (resendLink && resendLink.getAttribute('data-was-focusable')) {
+        resendLink.tabIndex = 0;
+        resendLink.removeAttribute('data-was-focusable');
+    }
+
+    console.log("[Focus] Background focusables re-enabled");
 }
 
 // Initialize popup close handlers
 function initPopupHandlers() {
     var otpCloseBtn = document.getElementById('otpPopupCloseBtn');
     var errorCloseBtn = document.getElementById('errorPopupCloseBtn');
-    
+
     if (otpCloseBtn) {
-        otpCloseBtn.addEventListener('click', hideOtpPopup);
-        otpCloseBtn.addEventListener('keydown', function(e) {
-            if (e.keyCode === 13) { // Enter key
+        otpCloseBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            hideOtpPopup();
+        });
+        otpCloseBtn.addEventListener('keydown', function (e) {
+            if (e.keyCode === 13 || e.keyCode === 10009) { // Enter or Back key
+                e.preventDefault();
                 hideOtpPopup();
             }
         });
     }
-    
+
     if (errorCloseBtn) {
-        errorCloseBtn.addEventListener('click', hideErrorPopup);
-        errorCloseBtn.addEventListener('keydown', function(e) {
-            if (e.keyCode === 13) { // Enter key
+        errorCloseBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            hideErrorPopup();
+        });
+        errorCloseBtn.addEventListener('keydown', function (e) {
+            if (e.keyCode === 13 || e.keyCode === 10009) { // Enter or Back key
+                e.preventDefault();
                 hideErrorPopup();
             }
         });
     }
-    
-    // Close popup on overlay click
+
+    // Close popup on overlay click (but not on container click)
     var otpPopup = document.getElementById('otpPopup');
     var errorPopup = document.getElementById('errorPopup');
-    
+
     if (otpPopup) {
-        otpPopup.addEventListener('click', function(e) {
-            if (e.target === otpPopup) hideOtpPopup();
+        otpPopup.addEventListener('click', function (e) {
+            if (e.target === otpPopup) {
+                e.preventDefault();
+                hideOtpPopup();
+            }
         });
     }
-    
+
     if (errorPopup) {
-        errorPopup.addEventListener('click', function(e) {
-            if (e.target === errorPopup) hideErrorPopup();
+        errorPopup.addEventListener('click', function (e) {
+            if (e.target === errorPopup) {
+                e.preventDefault();
+                hideErrorPopup();
+            }
         });
     }
+
+    console.log("[Popup] Handlers initialized");
 }
+
 

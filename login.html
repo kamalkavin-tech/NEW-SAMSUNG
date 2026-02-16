@@ -9,47 +9,71 @@
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body>
+<body class="login-page">
     <div class="login-container">
-        <div class="login-card">
-            <h1 class="login-title">Welcome Back</h1>
-            <p class="login-subtitle">Sign in to continue to your profile</p>
+        <div class="login-card-modern">
+            <h1 class="login-title-modern">Welcome </h1>
+            <p class="login-subtitle-modern">Sign in to continue to your profile</p>
 
             <!-- Steps Indicator -->
-            <div class="steps-indicator">
-                <div class="step active">
-                    <span class="step-dot">●</span>
-                    <span class="step-text">Phone</span>
+            <div class="steps-indicator-modern">
+                <div class="step-modern active">
+                    <span class="step-dot-filled">●</span>
+                    <span class="step-text-modern">Phone</span>
                 </div>
-                <div class="step-line">······</div>
-                <div class="step inactive">
-                    <span class="step-dot">○</span>
-                    <span class="step-text">Verify</span>
+                <div class="step-line-modern">······</div>
+                <div class="step-modern inactive">
+                    <span class="step-dot-empty">○</span>
+                    <span class="step-text-modern">Verify</span>
                 </div>
             </div>
 
             <!-- Phone Number Label -->
-            <label class="input-label">Phone Number</label>
+            <label class="input-label-modern">Phone Number</label>
 
             <!-- Phone Input Container -->
-            <div class="phone-input-container">
-                <div class="country-code focusable" tabindex="0">
+            <div class="phone-input-modern">
+                <div class="country-code-modern focusable" tabindex="0">
                     <span class="code-text">+91</span>
                     <span class="dropdown-arrow">▼</span>
                 </div>
-                <div class="input-divider"></div>
-                <input type="tel" id="phoneInput" class="phone-input focusable" placeholder="Enter 10 Digit Number"
-                    maxlength="10" inputmode="numeric" pattern="[0-9]*" tabindex="0">
+                <div class="input-divider-modern"></div>
+                <input type="tel" id="phoneInput" class="phone-input-field focusable"
+                    placeholder="Enter 10 Digit Number" maxlength="10" inputmode="numeric" pattern="[0-9]*"
+                    tabindex="0">
             </div>
 
             <!-- Get OTP Button -->
-            <button id="getOtpBtn" class="get-otp-btn focusable" tabindex="0">Get OTP</button>
+            <button id="getOtpBtn" class="get-otp-btn-modern focusable" tabindex="0">Get OTP</button>
 
-            <!-- Device Info -->
-            <div class="device-info">
-                <p id="deviceIdText">Device ID: Loading...</p>
-                <p id="ipAddressText">IP: Loading...</p>
-                <p id="macAddressText">MAC: Loading...</p>
+            <!-- Device Info Grid -->
+            <div class="device-info-grid">
+                <div class="device-info-row">
+                    <div class="device-info-item">
+                        <div class="device-info-label">DEVICE ID</div>
+                        <div class="device-info-value" id="deviceIdText">Loading...</div>
+                    </div>
+                    <div class="device-info-item">
+                        <div class="device-info-label">LOCAL IP</div>
+                        <div class="device-info-value" id="ipAddressText">Loading...</div>
+                    </div>
+                </div>
+                <div class="device-info-row">
+                    <div class="device-info-item">
+                        <div class="device-info-label">MAC ADDRESS</div>
+                        <div class="device-info-value" id="macAddressText">Loading...</div>
+                    </div>
+                    <div class="device-info-item">
+                        <div class="device-info-label">PUBLIC IP</div>
+                        <div class="device-info-value" id="publicIpText">Loading...</div>
+                    </div>
+                </div>
+                <div class="device-info-row">
+                    <div class="device-info-item full-width">
+                        <div class="device-info-label">IPv6 ADDRESS</div>
+                        <div class="device-info-value ipv6-value" id="ipv6Text">Loading...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -59,13 +83,14 @@
         <div class="error-modal">
             <div class="error-icon">
                 <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="40" cy="40" r="35" stroke="#FF4444" stroke-width="3" fill="rgba(255, 68, 68, 0.1)"/>
-                    <path d="M40 25V45" stroke="#FF4444" stroke-width="4" stroke-linecap="round"/>
-                    <circle cx="40" cy="55" r="3" fill="#FF4444"/>
+                    <circle cx="40" cy="40" r="35" stroke="#FF4444" stroke-width="3" fill="rgba(255, 68, 68, 0.1)" />
+                    <path d="M40 25V45" stroke="#FF4444" stroke-width="4" stroke-linecap="round" />
+                    <circle cx="40" cy="55" r="3" fill="#FF4444" />
                 </svg>
             </div>
             <h2 class="error-title">Invalid mobile number</h2>
-            <p class="error-message">The mobile number you entered is incorrect. Please check and try again with a valid 10-digit mobile number.</p>
+            <p class="error-message">The mobile number you entered is incorrect. Please check and try again with a valid
+                10-digit mobile number.</p>
             <button class="error-try-again-btn focusable" id="errorTryAgainBtn" tabindex="0">Try Again</button>
             <a href="#" class="error-support-link" id="errorSupportLink">Contact Support</a>
         </div>

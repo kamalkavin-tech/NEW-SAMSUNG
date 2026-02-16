@@ -119,7 +119,7 @@ const CacheManager = {
      * @param {any} data - Data to cache
      * @param {number} expiryMs - Expiry time in milliseconds (optional)
      */
-    set: function(key, data, expiryMs) {
+    set: function (key, data, expiryMs) {
         try {
             var expiry = expiryMs || this.EXPIRY.CHANNEL_LIST;
             var cacheObject = {
@@ -142,7 +142,7 @@ const CacheManager = {
      * @param {boolean} ignoreExpiry - If true, returns data even if expired
      * @returns {any|null} Cached data or null
      */
-    get: function(key, ignoreExpiry) {
+    get: function (key, ignoreExpiry) {
         try {
             var cached = localStorage.getItem(key);
             if (!cached) {
@@ -151,7 +151,7 @@ const CacheManager = {
             }
 
             var cacheObject = JSON.parse(cached);
-            
+
             // Check expiry
             if (!ignoreExpiry && cacheObject.expiry && Date.now() > cacheObject.expiry) {
                 console.log('[CacheManager] Cache expired:', key, '| Expired:', new Date(cacheObject.expiry).toLocaleTimeString());
@@ -172,7 +172,7 @@ const CacheManager = {
      * @param {string} key - Cache key
      * @returns {boolean}
      */
-    isValid: function(key) {
+    isValid: function (key) {
         return this.get(key) !== null;
     },
 
@@ -181,7 +181,7 @@ const CacheManager = {
      * @param {string} key - Cache key
      * @returns {number|null} Age in minutes or null if not cached
      */
-    getAge: function(key) {
+    getAge: function (key) {
         try {
             var cached = localStorage.getItem(key);
             if (!cached) return null;
@@ -196,7 +196,7 @@ const CacheManager = {
      * Remove specific cache entry
      * @param {string} key - Cache key
      */
-    remove: function(key) {
+    remove: function (key) {
         try {
             localStorage.removeItem(key);
             console.log('[CacheManager] Removed cache:', key);
@@ -208,9 +208,9 @@ const CacheManager = {
     /**
      * Clear all BBNL caches (except login token)
      */
-    clearAll: function() {
+    clearAll: function () {
         var self = this;
-        Object.keys(this.KEYS).forEach(function(keyName) {
+        Object.keys(this.KEYS).forEach(function (keyName) {
             if (keyName !== 'LOGIN_TOKEN') {
                 self.remove(self.KEYS[keyName]);
             }
@@ -221,10 +221,10 @@ const CacheManager = {
     /**
      * Get cache stats for debugging
      */
-    getStats: function() {
+    getStats: function () {
         var self = this;
         var stats = {};
-        Object.keys(this.KEYS).forEach(function(keyName) {
+        Object.keys(this.KEYS).forEach(function (keyName) {
             var key = self.KEYS[keyName];
             var cached = localStorage.getItem(key);
             if (cached) {
@@ -250,7 +250,7 @@ const CacheManager = {
      * Set last played channel
      * @param {object} channel - Channel data
      */
-    setLastChannel: function(channel) {
+    setLastChannel: function (channel) {
         this.set(this.KEYS.LAST_CHANNEL, channel, this.EXPIRY.LAST_CHANNEL);
     },
 
@@ -258,7 +258,7 @@ const CacheManager = {
      * Get last played channel
      * @returns {object|null}
      */
-    getLastChannel: function() {
+    getLastChannel: function () {
         return this.get(this.KEYS.LAST_CHANNEL);
     }
 };
@@ -380,6 +380,39 @@ const DeviceInfo = {
 
     getDeviceInfo: function () {
         return DEVICE_INFO;
+    },
+
+    /**
+     * Get IPv6 address from Samsung Tizen WebAPI
+     * @returns {string} IPv6 address or empty string
+     */
+    getIPv6: function () {
+        try {
+            if (typeof webapis !== 'undefined' && webapis.network) {
+                var networkType = webapis.network.getActiveConnectionType();
+
+                if (networkType === 0) {
+                    console.log("[DeviceInfo] Network disconnected - no IPv6");
+                    return "";
+                }
+
+                // Try to get IPv6 address
+                var ipv6 = webapis.network.getIpv6(networkType);
+                if (ipv6 && ipv6.length > 0) {
+                    console.log("[DeviceInfo] IPv6 detected:", ipv6);
+                    return ipv6;
+                } else {
+                    console.log("[DeviceInfo] IPv6 not available");
+                    return "";
+                }
+            } else {
+                console.log("[DeviceInfo] WebAPIs not available - no IPv6");
+                return "";
+            }
+        } catch (e) {
+            console.error("[DeviceInfo] IPv6 fetch error:", e);
+            return "";
+        }
     }
 };
 
@@ -389,6 +422,7 @@ const DeviceInfo = {
 const AuthAPI = {
     requestOTP: async function (userid, mobile) {
         const device = DeviceInfo.getDeviceInfo();
+        const ipv6 = DeviceInfo.getIPv6();
         const payload = {
             userid: userid,
             mobile: mobile,
@@ -396,6 +430,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            ipv6: ipv6,
             getuserdet: ""
         };
         console.log("[AuthAPI] Requesting OTP Payload:", payload);
@@ -404,13 +439,15 @@ const AuthAPI = {
 
     addMacAddress: async function (userid, mobile) {
         const device = DeviceInfo.getDeviceInfo();
+        const ipv6 = DeviceInfo.getIPv6();
         const payload = {
             userid: userid,
             mobile: mobile,
             mac_address: device.mac_address,
             device_name: device.device_name,
             ip_address: device.ip_address,
-            device_type: device.device_type
+            device_type: device.device_type,
+            ipv6: ipv6
         };
         console.log("[AuthAPI] Adding MAC Address Payload:", payload);
         return await apiCall(API_ENDPOINTS.ADD_MACADDRESS, payload);
@@ -418,6 +455,7 @@ const AuthAPI = {
 
     verifyOTP: async function (userid, mobile, otpcode) {
         const device = DeviceInfo.getDeviceInfo();
+        const ipv6 = DeviceInfo.getIPv6();
 
         const payload = {
             userid: userid,
@@ -427,6 +465,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            ipv6: ipv6,
             getuserdet: ""
         };
 
@@ -441,6 +480,7 @@ const AuthAPI = {
 
     resendOTP: async function (userid, mobile, email, deviceData = {}) {
         const device = DeviceInfo.getDeviceInfo();
+        const ipv6 = DeviceInfo.getIPv6();
 
         const payload = {
             userid: userid || DEFAULT_USER.userid,
@@ -449,7 +489,8 @@ const AuthAPI = {
             mac_address: deviceData.mac_address || device.mac_address,
             device_name: deviceData.device_name || device.device_name,
             ip_address: deviceData.ip_address || device.ip_address,
-            device_type: deviceData.device_type || device.device_type
+            device_type: deviceData.device_type || device.device_type,
+            ipv6: deviceData.ipv6 || ipv6
         };
 
         console.log("[AuthAPI] Resending OTP Payload:", payload);
@@ -497,13 +538,15 @@ const AuthAPI = {
             if (user.mobile) mobile = user.mobile;
         }
 
+        var ipv6 = DeviceInfo.getIPv6();
         var payload = {
             userid: userid,
             mobile: mobile,
             mac_address: device.mac_address,
             device_name: device.device_name,
             ip_address: device.ip_address,
-            device_type: device.device_type
+            device_type: device.device_type,
+            ipv6: ipv6
         };
 
         console.log("[AuthAPI] Logout Payload:", payload);
@@ -537,19 +580,19 @@ const ChannelsAPI = {
         var cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES);
         if (cachedCategories && cachedCategories.length > 0) {
             console.log("[ChannelsAPI] 📦 Using cached categories (" + cachedCategories.length + ")");
-            
+
             // Refresh in background
-            this._fetchAndCacheCategories().catch(function(e) {
+            this._fetchAndCacheCategories().catch(function (e) {
                 console.warn("[ChannelsAPI] Background categories refresh failed:", e);
             });
-            
+
             return cachedCategories;
         }
 
         return await this._fetchAndCacheCategories();
     },
 
-    _fetchAndCacheCategories: async function() {
+    _fetchAndCacheCategories: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -637,33 +680,33 @@ const ChannelsAPI = {
         // 3. Then fetch fresh data in background
         // 4. Update cache after successful fetch
         // ==========================================
-        
+
         var cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST);
         var shouldFetchFresh = !cachedChannels;
-        
+
         // If cache exists but options have filters, we still need to filter cached data
         if (cachedChannels && cachedChannels.length > 0) {
             console.log("[ChannelsAPI] 📦 Using cached channel data (" + cachedChannels.length + " channels)");
-            
+
             // Apply filters to cached data and return immediately
             var filteredCached = this._applyFilters(cachedChannels, options);
-            
+
             // Fetch fresh data in background (non-blocking)
-            this._fetchAndCacheChannels(userid, mobile, device).then(function(freshChannels) {
+            this._fetchAndCacheChannels(userid, mobile, device).then(function (freshChannels) {
                 if (freshChannels && freshChannels.length > 0) {
                     console.log("[ChannelsAPI] 🔄 Background refresh completed (" + freshChannels.length + " channels)");
                 }
-            }).catch(function(err) {
+            }).catch(function (err) {
                 console.warn("[ChannelsAPI] Background refresh failed:", err);
             });
-            
+
             return filteredCached;
         }
 
         // No valid cache - fetch fresh data
         console.log("[ChannelsAPI] 🌐 Fetching fresh channel data from API...");
         var channels = await this._fetchAndCacheChannels(userid, mobile, device);
-        
+
         // Apply filters and return
         return this._applyFilters(channels, options);
     },
@@ -671,7 +714,7 @@ const ChannelsAPI = {
     /**
      * Internal: Fetch channels from API and cache them
      */
-    _fetchAndCacheChannels: async function(userid, mobile, device) {
+    _fetchAndCacheChannels: async function (userid, mobile, device) {
         const payload = {
             userid: userid,
             mobile: mobile,
@@ -738,14 +781,14 @@ const ChannelsAPI = {
     /**
      * Internal: Apply filters to channel list
      */
-    _applyFilters: function(channels, options) {
+    _applyFilters: function (channels, options) {
         if (!channels || channels.length === 0) return [];
-        
+
         var filteredChannels = channels;
 
         // Filter by grid (category)
         if (options.grid && options.grid !== "") {
-            filteredChannels = filteredChannels.filter(function(ch) {
+            filteredChannels = filteredChannels.filter(function (ch) {
                 return ch.grid === options.grid;
             });
             console.log("[ChannelsAPI] Filtered by grid=\"" + options.grid + "\": " + filteredChannels.length + " channels");
@@ -753,7 +796,7 @@ const ChannelsAPI = {
 
         // Filter by langid (language)
         if (options.langid && options.langid !== "") {
-            filteredChannels = filteredChannels.filter(function(ch) {
+            filteredChannels = filteredChannels.filter(function (ch) {
                 return ch.langid === options.langid;
             });
             console.log("[ChannelsAPI] Filtered by langid=\"" + options.langid + "\": " + filteredChannels.length + " channels");
@@ -763,7 +806,7 @@ const ChannelsAPI = {
         if (options.search && options.search !== "") {
             var searchLower = options.search.toLowerCase();
             var searchIsNumber = /^\d+$/.test(options.search.trim());
-            filteredChannels = filteredChannels.filter(function(ch) {
+            filteredChannels = filteredChannels.filter(function (ch) {
                 var title = (ch.chtitle || "").toLowerCase();
                 var chNo = String(ch.channelno || ch.urno || ch.chno || ch.ch_no || "");
                 if (searchIsNumber) {
@@ -805,19 +848,19 @@ const ChannelsAPI = {
         var cachedLanguages = CacheManager.get(CacheManager.KEYS.LANGUAGES);
         if (cachedLanguages && cachedLanguages.length > 0) {
             console.log("[ChannelsAPI] 📦 Using cached languages (" + cachedLanguages.length + ")");
-            
+
             // Refresh in background
-            this._fetchAndCacheLanguages().catch(function(e) {
+            this._fetchAndCacheLanguages().catch(function (e) {
                 console.warn("[ChannelsAPI] Background languages refresh failed:", e);
             });
-            
+
             return cachedLanguages;
         }
 
         return await this._fetchAndCacheLanguages();
     },
 
-    _fetchAndCacheLanguages: async function() {
+    _fetchAndCacheLanguages: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -882,12 +925,12 @@ const ChannelsAPI = {
     getSubscribedChannels: function (channels) {
         if (!Array.isArray(channels)) return [];
         // Check for multiple possible "subscribed" values from API
-        return channels.filter(function(ch) {
+        return channels.filter(function (ch) {
             return ch.subscribed === "yes" ||
-                   ch.subscribed === "1" ||
-                   ch.subscribed === "true" ||
-                   ch.subscribed === true ||
-                   ch.subscribed === 1;
+                ch.subscribed === "1" ||
+                ch.subscribed === "true" ||
+                ch.subscribed === true ||
+                ch.subscribed === 1;
         });
     },
 
@@ -906,10 +949,10 @@ const ChannelsAPI = {
             // Save as last played channel for quick resume
             CacheManager.setLastChannel(channel);
             console.log("[ChannelsAPI] 💾 Saved last played channel:", channel.chtitle || channel.channel_name);
-            
+
             // Store the current page as referrer for back navigation
             sessionStorage.setItem('playerReferrer', window.location.href);
-            
+
             const data = encodeURIComponent(JSON.stringify(channel));
             window.location.href = `player.html?data=${data}`;
         } else {
@@ -1055,7 +1098,7 @@ const AdsAPI = {
                     console.log("[AdsAPI] ✅ Successfully loaded " + adCount + " ad(s)");
 
                     // Log ad URLs for debugging (helpful on Samsung TV)
-                    data.body.forEach(function(ad, index) {
+                    data.body.forEach(function (ad, index) {
                         if (ad.adpath) {
                             console.log("[AdsAPI]   Ad " + (index + 1) + ": " + ad.adpath);
                         }
@@ -1240,7 +1283,7 @@ const FeedbackAPI = {
      * @param {Number} feedbackData.rating - Rating (1-5)
      * @returns {Promise<Object>} API response
      */
-    submitFeedback: async function(feedbackData) {
+    submitFeedback: async function (feedbackData) {
         const device = DeviceInfo.getDeviceInfo();
 
         // Backend expects this EXACT format (confirmed from API documentation):
@@ -1273,7 +1316,7 @@ const AppVersionAPI = {
      *
      * @returns {Promise<Object>} API response with app version
      */
-    getAppVersion: async function() {
+    getAppVersion: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -1306,7 +1349,7 @@ const OTTAppsAPI = {
      *
      * @returns {Promise<Object>} API response with apps array
      */
-    getAllowedApps: async function() {
+    getAllowedApps: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -1336,7 +1379,7 @@ const AppLockAPI = {
      *
      * @returns {Promise<Object>} API response with lock status and app info
      */
-    checkAppLock: async function() {
+    checkAppLock: async function () {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -1371,7 +1414,7 @@ const TRPDataAPI = {
      * @param {String} comment - Comment/tracking data (e.g. email)
      * @returns {Promise<Object>} API response
      */
-    sendTRPData: async function(comment) {
+    sendTRPData: async function (comment) {
         const user = AuthAPI.getUserData();
 
         const payload = {
@@ -1402,7 +1445,7 @@ const RaiseTicketAPI = {
      * @param {String} comment - Ticket description/comment
      * @returns {Promise<Object>} API response
      */
-    raiseTicket: async function(comment) {
+    raiseTicket: async function (comment) {
         const user = AuthAPI.getUserData();
 
         const payload = {
@@ -1518,31 +1561,31 @@ const RemoteKeys = {
     ALL_KEYS: [
         // Navigation keys (auto-registered but included for completeness)
         "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return",
-        
+
         // Number keys (0-9)
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-        
+
         // Media control keys
         "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
         "MediaFastForward", "MediaRewind", "MediaRecord",
         "MediaTrackPrevious", "MediaTrackNext",
-        
+
         // Channel control keys
         "ChannelUp", "ChannelDown", "ChannelList", "PreviousChannel",
-        
+
         // Volume keys
         "VolumeUp", "VolumeDown", "VolumeMute",
-        
+
         // Color buttons (Samsung remotes)
         "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue",
-        
+
         // Function keys
         "Menu", "Tools", "Info", "Source", "Exit",
         "Caption", "E-Manual", "3D", "Extra",
         "PictureSize", "Soccer", "Teletext", "MTS",
         "Search", "Guide", "Minus"
     ],
-    
+
     // Key codes mapping for reference
     KEY_CODES: {
         // Navigation
@@ -1552,54 +1595,54 @@ const RemoteKeys = {
         ArrowDown: 40,
         Enter: 13,
         Back: 10009,
-        
+
         // Numbers
         Num0: 48, Num1: 49, Num2: 50, Num3: 51, Num4: 52,
         Num5: 53, Num6: 54, Num7: 55, Num8: 56, Num9: 57,
         Minus: 189,
-        
+
         // Volume & Channel
         VolumeUp: 447, VolumeDown: 448, VolumeMute: 449,
         ChannelUp: 427, ChannelDown: 428, ChannelList: 10073,
         PreviousChannel: 10190,
-        
+
         // Media
         MediaPlayPause: 10252, MediaRewind: 412, MediaFastForward: 417,
         MediaPlay: 415, MediaPause: 19, MediaStop: 413, MediaRecord: 416,
         MediaTrackPrevious: 10232, MediaTrackNext: 10233,
-        
+
         // Color buttons
         ColorF0Red: 403, ColorF1Green: 404, ColorF2Yellow: 405, ColorF3Blue: 406,
-        
+
         // Function keys
         Menu: 18, Tools: 10135, Info: 457, Source: 10072, Exit: 10182,
         Caption: 10221, EManual: 10146, ThreeD: 10199, Extra: 10253,
         PictureSize: 10140, Soccer: 10228, Teletext: 10200, MTS: 10195,
         Search: 10225, Guide: 458
     },
-    
+
     /**
      * Register all remote keys for comprehensive remote support
      * Call this once on page load
      */
-    registerAllKeys: function() {
+    registerAllKeys: function () {
         try {
             if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
                 // Get supported keys on this device
                 var supportedKeys = tizen.tvinputdevice.getSupportedKeys();
-                var supportedKeyNames = supportedKeys.map(function(k) { return k.name; });
-                
+                var supportedKeyNames = supportedKeys.map(function (k) { return k.name; });
+
                 // Filter to only register keys that are supported on this device
-                var keysToRegister = this.ALL_KEYS.filter(function(key) {
+                var keysToRegister = this.ALL_KEYS.filter(function (key) {
                     return supportedKeyNames.indexOf(key) !== -1;
                 });
-                
+
                 // Register in batch for performance
                 if (keysToRegister.length > 0) {
                     tizen.tvinputdevice.registerKeyBatch(keysToRegister);
                     console.log("[RemoteKeys] Registered " + keysToRegister.length + " keys successfully");
                 }
-                
+
                 return true;
             }
         } catch (e) {
@@ -1607,12 +1650,12 @@ const RemoteKeys = {
         }
         return false;
     },
-    
+
     /**
      * Register specific keys (for pages that need only certain keys)
      * @param {Array} keys - Array of key names to register
      */
-    registerKeys: function(keys) {
+    registerKeys: function (keys) {
         try {
             if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
                 tizen.tvinputdevice.registerKeyBatch(keys);
@@ -1624,13 +1667,13 @@ const RemoteKeys = {
         }
         return false;
     },
-    
+
     /**
      * Get key code by key name
      * @param {String} keyName - The key name
      * @returns {Number} The key code or -1 if not found
      */
-    getKeyCode: function(keyName) {
+    getKeyCode: function (keyName) {
         try {
             if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
                 var key = tizen.tvinputdevice.getKey(keyName);
@@ -1641,14 +1684,14 @@ const RemoteKeys = {
         }
         return this.KEY_CODES[keyName] || -1;
     },
-    
+
     /**
      * Check if a keyCode matches a specific key
      * @param {Number} keyCode - The keyCode from the event
      * @param {String} keyName - The key name to check against
      * @returns {Boolean}
      */
-    isKey: function(keyCode, keyName) {
+    isKey: function (keyCode, keyName) {
         return keyCode === this.getKeyCode(keyName) || keyCode === this.KEY_CODES[keyName];
     }
 };
