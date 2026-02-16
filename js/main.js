@@ -39,9 +39,8 @@ window.onload = function () {
         console.log("Initial focus set to:", focusables[0].id || focusables[0].className);
     }
 
-    // 3. Show Device ID, IP & MAC (if on login page)
+    // 3. Show Device ID, Gateway IP, MAC & IPv6 (if on login page)
     showDeviceId();
-    showNetworkIP();
     showMacAddress();
     showIPv6();
     showPublicIP();
@@ -184,24 +183,27 @@ function showIPv6() {
             var networkType = webapis.network.getActiveConnectionType();
 
             if (networkType === 0) {
-                ipv6Text.innerText = "Disconnected";
+                ipv6Text.innerText = "N/A";
                 return;
             }
 
-            // Try to get IPv6 address
+            // Try to get IPv6 address from Tizen Network API
             var ipv6 = webapis.network.getIpv6(networkType);
             if (ipv6 && ipv6.length > 0) {
                 ipv6Text.innerText = ipv6;
                 console.log("Device IPv6:", ipv6);
             } else {
-                ipv6Text.innerText = "Not Available";
+                // IPv6 not available - show N/A
+                ipv6Text.innerText = "N/A";
+                console.log("IPv6 not available from Tizen API");
             }
         } else {
-            ipv6Text.innerText = "Web/Emulator";
+            // Fallback for non-Tizen devices
+            ipv6Text.innerText = "N/A";
         }
     } catch (e) {
         console.error("IPv6 Fetch Error:", e);
-        ipv6Text.innerText = "Not Supported";
+        ipv6Text.innerText = "N/A";
     }
 }
 
@@ -224,7 +226,7 @@ function showPublicIP() {
 
     function tryNextService(index) {
         if (index >= ipServices.length) {
-            publicIpText.innerText = "Not Available";
+            publicIpText.innerText = "N/A";
             console.log("[PublicIP] All services failed");
             return;
         }
@@ -267,11 +269,10 @@ function startNetworkChangeListener() {
 
                 // Small delay to let the new connection fully establish
                 setTimeout(function () {
-                    showNetworkIP();
                     showMacAddress();
                     showIPv6();
                     showPublicIP();
-                    console.log("[Network] IP, MAC, IPv6, and Public IP refreshed after network change");
+                    console.log("[Network] MAC, IPv6, and Public IP refreshed after network change");
                 }, 2000);
             });
             console.log("[Network] Network change listener registered");

@@ -499,6 +499,7 @@ function loadDeviceInfoPanel() {
     loadUserId();
     loadModelInfo(isTizen);
     loadDeviceId(deviceInfo, isTizen);
+    loadAppVersion();
     loadNetworkInfo(deviceInfo, isTizen);
     loadScreenResolution();
     loadTizenVersion(isTizen);
@@ -569,19 +570,54 @@ function loadDeviceId(deviceInfo, isTizen) {
     }
 }
 
+function loadAppVersion() {
+    var appVersionEl = document.getElementById('device-app-version');
+    if (!appVersionEl) return;
+
+    try {
+        // Try to get version from config.xml or tizen API
+        if (typeof tizen !== 'undefined' && tizen.application) {
+            tizen.application.getAppInfo(null, function(appInfo) {
+                appVersionEl.innerText = appInfo.version || '1.0.0';
+            }, function() {
+                appVersionEl.innerText = '1.0.0';
+            });
+        } else {
+            // Fallback: Try to read from a global constant or default
+            appVersionEl.innerText = window.APP_VERSION || '1.0.0';
+        }
+    } catch (e) {
+        console.error("[Settings] App version error:", e);
+        appVersionEl.innerText = '1.0.0';
+    }
+}
+
 function loadNetworkInfo(deviceInfo, isTizen) {
     try {
         if (isTizen && webapis.network) {
             var networkType = webapis.network.getActiveConnectionType();
 
             setElementText('device-connection-type', getConnectionTypeName(networkType));
+            
+            // Update connection status in card header
+            var connectionStatus = document.getElementById('device-connection-status');
+            if (connectionStatus) {
+                connectionStatus.innerText = networkType > 0 ? 'Connected' : 'Disconnected';
+            }
 
             if (networkType > 0) {
                 setElementText('device-ipv4', safeCall(function () {
                     return webapis.network.getIp(networkType);
                 }, 'N/A'));
+                
+                // Load IPv6 Address
+                setElementText('device-ipv6', safeCall(function () {
+                    var ipv6 = webapis.network.getIpv6(networkType);
+                    return (ipv6 && ipv6.length > 0) ? ipv6 : 'N/A';
+                }, 'N/A'));
             } else {
                 setElementText('device-ipv4', 'Disconnected');
+                setElementText('device-ipv6', 'N/A');
             }
 
             setElementText('device-gateway', safeCall(function () {
@@ -592,14 +628,6 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 return webapis.network.getDns(networkType);
             }, 'N/A'));
 
-            var wiredMac = safeCall(function () {
-                return webapis.network.getMac(3);
-            }, null);
-            if (!wiredMac && deviceInfo) {
-                wiredMac = deviceInfo.mac_address;
-            }
-            setElementText('device-wired-mac', formatMacAddress(wiredMac) || 'N/A');
-
             setElementText('device-wifi-mac', formatMacAddress(safeCall(function () {
                 return webapis.network.getMac(1);
             }, null)) || 'N/A');
@@ -607,19 +635,29 @@ function loadNetworkInfo(deviceInfo, isTizen) {
         } else {
             setElementText('device-connection-type', 'Browser/Emulator');
             setElementText('device-ipv4', 'N/A');
+            setElementText('device-ipv6', 'N/A');
             setElementText('device-gateway', 'N/A');
             setElementText('device-dns', 'N/A');
-            setElementText('device-wired-mac', deviceInfo ? formatMacAddress(deviceInfo.mac_address) || 'N/A' : 'N/A');
             setElementText('device-wifi-mac', 'N/A');
+            
+            var connectionStatus = document.getElementById('device-connection-status');
+            if (connectionStatus) {
+                connectionStatus.innerText = 'Emulator Mode';
+            }
         }
     } catch (e) {
         console.error("[Settings] Network info error:", e);
         setElementText('device-connection-type', 'Error');
         setElementText('device-ipv4', 'N/A');
+        setElementText('device-ipv6', 'N/A');
         setElementText('device-gateway', 'N/A');
         setElementText('device-dns', 'N/A');
-        setElementText('device-wired-mac', 'N/A');
         setElementText('device-wifi-mac', 'N/A');
+        
+        var connectionStatus = document.getElementById('device-connection-status');
+        if (connectionStatus) {
+            connectionStatus.innerText = 'Error';
+        }
     }
 }
 
