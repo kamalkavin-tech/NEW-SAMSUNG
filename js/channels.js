@@ -168,14 +168,9 @@ async function initPage() {
 
     refreshFocusables();
 
-    // Auto-play Fofi channel (LCN 999) on FIRST visit to channels page after login
-    // This only happens once per login session
-    if (!fofiPlayedThisSession && !hasLanguageFilter) {
-        console.log('[Channels] First login visit - Auto-playing Fofi channel (LCN 999)');
-        sessionStorage.setItem('fofiPlayedThisSession', 'true');
-        playChannelByLCN(999);
-        return;
-    }
+    // NO auto-play on TV Channels page
+    // Playback only starts when user presses OK on a channel card
+    console.log('[Channels] Page loaded - No auto-play, waiting for user selection');
 
     // Set initial focus on first category pill
     setInitialFocus();
@@ -483,7 +478,7 @@ function createChannelCard(ch) {
     const chLogo = ch.chlogo || ch.logo_url || "";
     const streamLink = ch.streamlink || ch.channel_url || "";
     const chNo = ch.channelno || ch.urno || ch.chno || ch.ch_no || "";
-    const chPrice = ch.chprice || ch.price || "";
+    const chPrice = ch.chprice || ch.price || "0";
     const isSubscribed = ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1;
 
     const card = document.createElement("div");
@@ -505,16 +500,10 @@ function createChannelCard(ch) {
     // Price Badge - Top Right
     const priceBadge = document.createElement("div");
     priceBadge.className = "card-price-badge";
-    if (chPrice && parseFloat(chPrice) > 0) {
-        priceBadge.textContent = "₹" + chPrice;
-        priceBadge.classList.add("paid");
-    } else {
-        priceBadge.textContent = "Free";
-        priceBadge.classList.add("free");
-    }
+    priceBadge.textContent = "₹" + chPrice;
     card.appendChild(priceBadge);
 
-    // Logo Container
+    // Logo Container - Center
     const logoDiv = document.createElement("div");
     logoDiv.className = "channel-logo-container";
 
@@ -524,7 +513,10 @@ function createChannelCard(ch) {
         img.alt = chName;
         img.onerror = function() {
             this.style.display = 'none';
-            this.parentElement.innerHTML = '<div class="no-logo-text">' + chName.charAt(0).toUpperCase() + '</div>';
+            const fallback = document.createElement("div");
+            fallback.className = "no-logo-text";
+            fallback.textContent = chName.charAt(0).toUpperCase();
+            this.parentElement.appendChild(fallback);
         };
         logoDiv.appendChild(img);
     } else {

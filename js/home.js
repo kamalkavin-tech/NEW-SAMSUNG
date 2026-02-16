@@ -125,23 +125,20 @@ window.onload = function () {
         });
     }
 
-    // Auto-play FoFi channel after 3 seconds - ONLY on FIRST app launch ever
-    // Using localStorage so it persists across page navigations and reloads
-    var fofiPlayed = localStorage.getItem('fofi_autoplay_done');
-    var appSession = sessionStorage.getItem('app_session_started');
+    // Auto-play FoFi channel (LCN 999) after 3 seconds - ONLY on app launch
+    // Not when returning from other pages within the app
+    var fofiPlayedThisSession = sessionStorage.getItem('fofi_autoplay_done');
     
-    if (!fofiPlayed && !appSession) {
-        // First time ever launching app - set flags IMMEDIATELY
-        localStorage.setItem('fofi_autoplay_done', 'true');
-        sessionStorage.setItem('app_session_started', 'true');
-        console.log("[HOME] Setting FoFi auto-play timer (3 seconds) - First app launch...");
+    if (!fofiPlayedThisSession) {
+        // First time loading home page this session - auto-play FoFi
+        sessionStorage.setItem('fofi_autoplay_done', 'true');
+        console.log("[HOME] Setting FoFi auto-play timer (3 seconds) - App launch...");
         setTimeout(function () {
             console.log("[HOME] Auto-playing FoFi channel from API...");
             playFoFiChannel();
         }, 3000);
     } else {
-        console.log("[HOME] Skipping FoFi auto-play - Already played before");
-        sessionStorage.setItem('app_session_started', 'true');
+        console.log("[HOME] Skipping FoFi auto-play - Already played this session");
     }
 };
 

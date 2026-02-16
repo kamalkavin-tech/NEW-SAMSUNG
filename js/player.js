@@ -476,13 +476,22 @@ function setupPlayer(channel) {
 
     // Update ui-subscription (info bar on right side)
     if (uiSubscription) {
+        // Remove existing classes
+        uiSubscription.classList.remove('subscribed-yes', 'subscribed-no');
+        
         if (isSubscribed) {
-            uiSubscription.innerText = "Subscribed : Yes";
-            uiSubscription.style.color = "#10b981"; // Green
+            uiSubscription.innerText = "Subscribed: Yes";
+            uiSubscription.classList.add('subscribed-yes');
         } else {
-            uiSubscription.innerText = "Subscribed : No";
-            uiSubscription.style.color = "#ef4444"; // Red
+            uiSubscription.innerText = "Subscribed: No";
+            uiSubscription.classList.add('subscribed-no');
         }
+    }
+    
+    // Update Price display
+    const uiPrice = document.getElementById("ui-price");
+    if (uiPrice) {
+        uiPrice.innerText = "₹ " + price;
     }
 
     // Update Device ID display
@@ -490,7 +499,7 @@ function setupPlayer(channel) {
     if (uiDeviceId) {
         const device = DeviceInfo.getDeviceInfo();
         const deviceId = device.devslno || device.mac_address || "Unknown";
-        uiDeviceId.innerText = "Device ID: " + deviceId;
+        uiDeviceId.innerText = "Device: " + deviceId;
     }
 
     // User Info (from session)

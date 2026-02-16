@@ -79,125 +79,162 @@ video {
 }
 
 
-/* NEW INFO BAR DESIGN - Bottom Horizontal Layout */
-.info-bar-bottom {
+/* ==========================================
+   PREMIUM INFO BAR DESIGN
+   ========================================== */
+
+.info-bar-premium {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.85) 50%, transparent 100%);
-    padding: 30px 60px 40px 60px;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 1600px;
+    background: rgba(0, 0, 0, 0.75);
+    border: 2px solid #1e90ff;
+    border-radius: 20px;
+    padding: 24px 35px;
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    gap: 40px;
+    gap: 30px;
+    box-shadow: 0 0 30px rgba(30, 144, 255, 0.3), 0 8px 32px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
 }
 
-/* LEFT SECTION: Channel Logo + Info */
-.info-left {
-    display: flex;
-    align-items: center;
-    gap: 25px;
+/* Left: Logo Section */
+.info-logo-section {
+    flex-shrink: 0;
 }
 
-.channel-logo-box {
-    width: 120px;
-    height: 80px;
-    background: white;
-    border-radius: 8px;
+.info-bar-premium .channel-logo-box {
+    width: 130px;
+    height: 90px;
+    background: #ffffff;
+    border-radius: 12px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 10px;
-    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.channel-logo-box img {
+.info-bar-premium .channel-logo-box img {
     width: 100%;
     height: 100%;
     object-fit: contain;
 }
 
-.channel-details {
+/* Center: Details Section */
+.info-details-section {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+    min-width: 0;
 }
 
-.channel-number-name {
+.info-row-primary {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+}
+
+.info-bar-premium .channel-lcn {
+    color: #ffffff;
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.info-bar-premium .channel-name {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.info-row-secondary {
     display: flex;
     align-items: center;
     gap: 15px;
+    flex-wrap: wrap;
 }
 
-.channel-lcn {
-    color: white;
+.info-row-tertiary {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.info-divider {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 18px;
+}
+
+.info-bar-premium .expiry-info {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.info-bar-premium .expiry-info.expiry-expired,
+.info-bar-premium .expiry-info.expiry-red {
+    color: #ff4444;
+}
+
+.info-bar-premium .price-info {
+    color: #4ade80;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.info-bar-premium .subscription-status {
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.info-bar-premium .subscription-status.subscribed-yes {
+    color: #4ade80;
+}
+
+.info-bar-premium .subscription-status.subscribed-no {
+    color: #ff4444;
+}
+
+.info-bar-premium .device-id {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 16px;
+    font-weight: 400;
+}
+
+/* Right: Time Section */
+.info-time-section {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+
+.info-bar-premium .current-time {
+    color: #ffffff;
     font-size: 32px;
     font-weight: 700;
     line-height: 1;
 }
 
-.channel-name {
-    color: white;
-    font-size: 24px;
-    font-weight: 600;
-    line-height: 1;
-}
-
-.channel-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.expiry-info {
-    color: #ffffff;
-    font-size: 16px;
-    font-weight: 400;
-}
-
-.price-info {
-    color: #ffffff;
-    font-size: 16px;
-    font-weight: 400;
-}
-
-/* RIGHT SECTION: Device Info + Time */
-.info-right {
-    display: flex;
-    align-items: center;
-    gap: 40px;
-}
-
-.device-subscription {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    align-items: flex-end;
-}
-
-.device-id {
-    color: #ffffff;
-    font-size: 16px;
-    font-weight: 400;
-}
-
-.subscription-status {
-    color: #ffffff;
-    font-size: 16px;
-    font-weight: 400;
-}
-
-.user-info {
-    color: #4ade80;
-    font-size: 14px;
+.info-bar-premium .current-date {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 18px;
     font-weight: 500;
 }
-
-.time-date {
-    display: flex;
-    flex-direction: column;
     gap: 4px;
     align-items: flex-end;
 }
