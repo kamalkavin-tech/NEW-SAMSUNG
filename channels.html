@@ -13,40 +13,67 @@
 
 <body class="channels-page">
 
-    <!-- Fixed Header -->
-    <div class="channels-header">
-        <button class="back-btn focusable" tabindex="0">
-            <span class="back-icon">←</span>
-        </button>
-        <h1 class="page-title">TV Channels<span id="titleLanguage"></span></h1>
-        <!-- Search Bar (Same style as Home page) -->
-        <div class="search-bar">
-            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="tel" class="search-input focusable" tabindex="0" placeholder="Enter Channel Number..." id="searchInput" inputmode="numeric" pattern="[0-9]*">
+    <!-- Categories Sidebar -->
+    <aside class="channels-sidebar" id="channelsSidebar">
+        <!-- Sidebar Header -->
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">Categories</h2>
         </div>
-    </div>
-
-    <!-- Category Pills - Below Header -->
-    <div class="category-section">
-        <div class="category-pills" id="categoryPills">
-            <!-- Categories will be loaded dynamically from API -->
-            <button class="category-pill language-pill focusable" tabindex="0" id="languagePill">
-                <span>Language</span>
-                <svg class="pill-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
+        <div class="sidebar-divider"></div>
+        
+        <!-- Language Selector Section -->
+        <div class="language-selector" id="languageSelector">
+            <button class="lang-arrow lang-arrow-left focusable" tabindex="0" id="langArrowLeft">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="selected-language focusable" tabindex="0" id="selectedLanguageText">All Languages</span>
+            <button class="lang-arrow lang-arrow-right focusable" tabindex="0" id="langArrowRight">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
             </button>
         </div>
+        <div class="sidebar-divider"></div>
+        
+        <!-- Category List -->
+        <div class="category-list" id="categoryList">
+            <!-- Categories will be loaded dynamically -->
+            <div class="category-loading">Loading...</div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="channels-main">
+        <!-- Fixed Header -->
+        <div class="channels-header">
+            <button class="back-btn focusable" tabindex="0">
+                <span class="back-icon">←</span>
+            </button>
+            <h1 class="page-title">TV Channels<span id="titleLanguage"></span></h1>
+            <!-- Search Bar (Same style as Home page) -->
+            <div class="search-bar">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="tel" class="search-input focusable" tabindex="0" placeholder="Enter Channel Number..." id="searchInput" inputmode="numeric" pattern="[0-9]*">
+            </div>
+        </div>
+
+        <!-- Main Content Area / Channel Grid -->
+        <div id="channel-grid-container" class="subpage-section">
+            <!-- Channels will be loaded here dynamically -->
+            <div class="loading-spinner">Loading Channels...</div>
+        </div>
     </div>
 
-    <!-- Main Content Area / Channel Grid -->
-    <div id="channel-grid-container" class="subpage-section">
-        <!-- Channels will be loaded here dynamically -->
-        <div class="loading-spinner">Loading Channels...</div>
+    <!-- Hidden Category Pills (for compatibility) -->
+    <div class="category-pills" id="categoryPills" style="display: none;">
+        <button class="category-pill language-pill focusable" tabindex="-1" id="languagePill" style="display: none;">
+            <span>Language</span>
+        </button>
     </div>
 
     <!-- Error Popup - No Channels -->

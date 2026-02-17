@@ -4,6 +4,16 @@
    Navigation: Header ↔ Apps Grid
    ================================ */
 
+// Check authentication - redirect to login only if never logged in before
+(function checkAuth() {
+    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+    if (hasLoggedInOnce !== "true") {
+        console.log("[Auth] User has never logged in, redirecting to login...");
+        window.location.replace("login.html");
+        return;
+    }
+})();
+
 var focusables = [];
 var currentFocus = 0;
 var currentZone = 'apps'; // 'header' or 'apps'

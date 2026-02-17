@@ -27,54 +27,46 @@
             <img id="streamAdImage" src="" alt="Ad">
         </div>
 
-        <!-- Player Sidebar - Matching Reference Design -->
+        <!-- Player Sidebar - Redesigned Layout -->
         <div class="player-sidebar" id="playerSidebar">
 
-            <!-- Top Header -->
-            <div class="sidebar-top-header">
-                <div class="sidebar-header-title">Categories</div>
+            <!-- Top Header: CATEGORIES -->
+            <div class="sidebar-main-header">
+                <span class="sidebar-main-title">CATEGORIES</span>
             </div>
 
-            <!-- Language Selector with Double Arrows -->
-            <div class="sidebar-language-header" id="sidebarLanguageHeader">
-                <button class="language-arrow language-arrow-left focusable" id="languageArrowLeft">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <!-- Language Navigation with Arrows -->
+            <div class="language-nav-section" id="languageNavSection">
+                <button class="lang-nav-arrow lang-nav-left focusable" id="langNavLeft" tabindex="0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <polyline points="15 18 9 12 15 6"></polyline>
-                        <polyline points="11 18 5 12 11 6"></polyline>
                     </svg>
                 </button>
-                <div class="language-display" id="languageDisplay">
-                    <div class="language-name" id="currentLanguageName">English</div>
-                </div>
-                <button class="language-arrow language-arrow-right focusable" id="languageArrowRight">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <span class="lang-nav-name" id="langNavName">All Channels</span>
+                <button class="lang-nav-arrow lang-nav-right focusable" id="langNavRight" tabindex="0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <polyline points="9 18 15 12 9 6"></polyline>
-                        <polyline points="13 18 19 12 13 6"></polyline>
                     </svg>
                 </button>
             </div>
 
-            <!-- Hidden categories container for internal use -->
-            <div class="sidebar-categories-section" id="sidebarCategoriesSection" style="display:none;">
-                <div class="categories-container" id="categoriesContainer"></div>
-            </div>
-
-            <!-- Channels List - Direct below language -->
-            <div class="sidebar-channels-section" id="sidebarChannelsSection">
-                <div class="channels-list" id="channelsList">
-                    <!-- Channels will be loaded dynamically -->
-                    <!-- Example structure:
-                    <button class="channel-item focusable" data-channel-index="0">
-                        <div class="channel-item-left">
-                            <div class="channel-item-name">Star Sports HD 1</div>
-                            <div class="channel-item-price">₹19.00</div>
-                        </div>
-                        <div class="channel-item-right">
-                            <div class="channel-item-lcn">610</div>
-                        </div>
-                    </button>
-                    -->
+            <!-- Scrollable Content: Categories + Channels -->
+            <div class="sidebar-scroll-content" id="sidebarScrollContent">
+                
+                <!-- Category List Section (hidden when only 1 category) -->
+                <div class="sidebar-categories-section" id="sidebarCategoriesSection">
+                    <div class="categories-list" id="categoriesList">
+                        <!-- Categories will be loaded dynamically -->
+                    </div>
                 </div>
+
+                <!-- Channels List Section -->
+                <div class="sidebar-channels-section" id="sidebarChannelsSection">
+                    <div class="channels-list" id="channelsList">
+                        <!-- Channels will be loaded dynamically -->
+                    </div>
+                </div>
+
             </div>
 
         </div>

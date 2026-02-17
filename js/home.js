@@ -7,11 +7,11 @@ var currentFocus = 0;
 var exitPopupOpen = false; // Track if exit/logout popup is open
 var homeSearchTimeout = null; // Timer for auto-play channel by number
 
-// Check authentication - redirect to login if not logged in
+// Check authentication - redirect to login only if never logged in before
 (function checkAuth() {
-    var userData = localStorage.getItem("bbnl_user");
-    if (!userData) {
-        console.log("[Auth] User not logged in, redirecting to login...");
+    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+    if (hasLoggedInOnce !== "true") {
+        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
@@ -107,12 +107,12 @@ window.onload = function () {
             clearTimeout(homeSearchTimeout);
 
             if (cleaned.length > 0) {
-                // Auto-play channel after 2 seconds of no input
+                // Auto-play channel after 3 seconds of no input
                 homeSearchTimeout = setTimeout(function () {
                     var lcn = parseInt(cleaned, 10);
                     console.log("[HOME] Auto-playing LCN:", lcn);
                     playChannelByLCNFromHome(lcn);
-                }, 2000);
+                }, 3000);
             }
         });
 
@@ -226,6 +226,28 @@ document.addEventListener('keydown', function (e) {
             return;
         }
         // Let all other keys (typing, backspace, etc.) work naturally
+        return;
+    }
+
+    // NUMBER KEYS (0-9): Auto-focus search input and type the number
+    // This allows users to search LCN from any zone (sidebar, cards, etc.)
+    var code = e.keyCode;
+    if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            // Get the typed number
+            var num = (code >= 96) ? (code - 96) : (code - 48);
+            
+            // Focus search input and append number
+            searchInput.focus();
+            searchInput.value += num.toString();
+            
+            // Trigger input event to start LCN auto-play timer
+            var inputEvent = new Event('input', { bubbles: true });
+            searchInput.dispatchEvent(inputEvent);
+            
+            console.log('[HOME] Number key pressed, focusing search:', num);
+        }
         return;
     }
 

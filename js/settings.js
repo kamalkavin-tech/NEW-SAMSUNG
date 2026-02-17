@@ -21,11 +21,11 @@
    BACK KEY: always go to home.html
    ================================ */
 
-// Check authentication
+// Check authentication - redirect to login only if never logged in before
 (function checkAuth() {
-    var userData = localStorage.getItem("bbnl_user");
-    if (!userData) {
-        console.log("[Auth] User not logged in, redirecting to login...");
+    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+    if (hasLoggedInOnce !== "true") {
+        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
@@ -384,10 +384,26 @@ function switchSection(section) {
 async function handleLogout() {
     var confirmLogout = confirm('Are you sure you want to logout?');
     if (confirmLogout) {
-        console.log("[Settings] User confirmed logout - clearing all data");
+        console.log("[Settings] User confirmed logout - clearing session data");
 
-        // Clear all localStorage
-        localStorage.clear();
+        // Clear session-related data but KEEP hasLoggedInOnce and MAC
+        // This ensures app relaunch goes directly to Home, not Login
+        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId'];
+        var keysToRemove = [];
+        
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (keysToKeep.indexOf(key) === -1) {
+                keysToRemove.push(key);
+            }
+        }
+        
+        keysToRemove.forEach(function(key) {
+            localStorage.removeItem(key);
+            console.log("[Settings] Removed localStorage key:", key);
+        });
+        
+        console.log("[Settings] Kept localStorage keys:", keysToKeep);
 
         // Clear all sessionStorage
         sessionStorage.clear();
@@ -407,19 +423,23 @@ async function handleLogout() {
             }
         }
 
-        console.log("[Settings] Logout complete - redirecting to login");
+        console.log("[Settings] Logout complete - exiting application");
 
-        // Redirect to login page (replace history to prevent back navigation)
-        window.location.replace('login.html');
-
-        // Try to exit the Tizen application completely
+        // Exit the Tizen application completely (NOT redirect to login)
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
-                console.log("[Settings] Attempting to exit Tizen application");
+                console.log("[Settings] Exiting Tizen application");
                 tizen.application.getCurrentApplication().exit();
+            } else {
+                // For browser testing - just close the window or show message
+                console.log("[Settings] Not on Tizen - closing window");
+                alert("Logout successful. App will close.");
+                window.close();
             }
         } catch (e) {
-            console.log("[Settings] Not on Tizen or exit failed:", e);
+            console.log("[Settings] Exit failed:", e);
+            // Fallback: close window or just show message
+            alert("Logout successful. Please close the app.");
         }
     }
 }

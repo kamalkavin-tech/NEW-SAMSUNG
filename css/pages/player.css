@@ -400,18 +400,18 @@ video {
 }
 
 /* ==========================================
-   PLAYER SIDEBAR - ANDROID TV 3-LEVEL DESIGN
+   PLAYER SIDEBAR - 2-LEVEL DYNAMIC DESIGN
    ========================================== */
 
 .player-sidebar {
     position: fixed;
     left: 0;
     top: 0;
-    width: 450px;
-    height: 1080px;
-    background: rgba(25, 30, 45, 0.98);
-    backdrop-filter: blur(10px);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    width: 420px;
+    height: 100vh;
+    background: rgba(15, 15, 20, 0.95);
+    backdrop-filter: blur(15px);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 1001;
     display: flex;
     flex-direction: column;
@@ -430,182 +430,198 @@ video {
 }
 
 /* ==========================================
-   TOP HEADER - "Categories" text
+   SIDEBAR MAIN HEADER - "CATEGORIES"
    ========================================== */
 
-.sidebar-top-header {
-    background: rgba(20, 25, 35, 0.95);
-    padding: 15px 20px;
+.sidebar-main-header {
+    background: rgba(20, 20, 28, 0.98);
+    padding: 20px 24px;
     text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     flex-shrink: 0;
 }
 
-.sidebar-header-title {
-    font-size: 16px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
-    letter-spacing: 0.5px;
+.sidebar-main-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 /* ==========================================
-   LANGUAGE SELECTOR
+   LANGUAGE NAVIGATION SECTION (< Tamil >)
    ========================================== */
 
-.sidebar-language-header {
+.language-nav-section {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 18px 25px;
-    background: rgba(30, 35, 50, 0.9);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    justify-content: center;
+    gap: 20px;
+    padding: 15px 20px;
+    background: rgba(25, 25, 35, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
 }
 
-.language-arrow {
-    width: 40px;
-    height: 40px;
-    background: transparent;
-    border: none;
+.lang-nav-arrow {
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid transparent;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    color: #fff;
+    transition: all 0.2s;
+}
+
+.lang-nav-arrow:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.lang-nav-arrow:focus {
+    border-color: #FFFFFF !important;
+    background: rgba(30, 100, 180, 0.5);
     outline: none;
-    transition: all 0.2s ease;
-    color: #00bcd4;
 }
 
-.language-arrow:hover,
-.language-arrow:focus {
-    color: #00e5ff;
-    transform: scale(1.1);
-}
-
-.language-display {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 0 15px;
-}
-
-.language-icon {
-    font-size: 28px;
-}
-
-.language-name {
-    font-size: 22px;
+.lang-nav-name {
+    font-size: 30px;
     font-weight: 700;
     color: #00bcd4;
+    min-width: 200px;
     text-align: center;
+    transition: color 0.3s ease;
 }
 
-/* ==========================================
-   LEVEL 2: CATEGORIES LIST
-   ========================================== */
-
-.sidebar-categories-section {
-    flex-shrink: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(10, 10, 15, 0.5);
-}
-
-.section-title {
-    padding: 18px 20px 12px;
-    font-size: 16px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.categories-container {
-    padding: 0 20px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 320px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-.categories-container::-webkit-scrollbar {
-    width: 5px;
-}
-
-.categories-container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.categories-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-}
-
-.category-item {
-    width: 100%;
-    padding: 14px 18px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 18px;
-    font-weight: 500;
-    text-align: left;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s ease;
-}
-
-.category-item:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.15);
+/* Language name appears white when sidebar closes */
+.player-sidebar:not(.open) .lang-nav-name {
     color: #ffffff;
 }
 
-.category-item:focus,
-.category-item.active {
-    background: rgba(0, 188, 212, 0.25);
-    border-color: rgba(0, 188, 212, 0.5);
-    color: #ffffff;
-    box-shadow: 0 0 15px rgba(0, 188, 212, 0.3);
-    transform: translateX(4px);
-}
-
-.category-name {
-    display: block;
-}
-
 /* ==========================================
-   CHANNELS LIST - Matching Reference Design
+   SCROLLABLE CONTENT CONTAINER
    ========================================== */
 
-.sidebar-channels-section {
+.sidebar-scroll-content {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: rgba(20, 25, 35, 0.95);
-}
-
-.channels-list {
-    flex: 1;
-    padding: 0;
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
+.sidebar-scroll-content::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sidebar-scroll-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-scroll-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.sidebar-section-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 10px 15px;
+}
+
+/* ==========================================
+   CATEGORIES LIST SECTION
+   ========================================== */
+
+.sidebar-categories-section {
+    padding: 10px 0;
+}
+
+.categories-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.category-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    min-height: 60px;
+    background: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.category-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.category-item:focus {
+    background: rgba(30, 100, 180, 0.5);
+    border-left-color: #00bcd4;
+    outline: none;
+}
+
+.category-item.active {
+    background: rgba(30, 100, 180, 0.5);
+    border-left-color: #00bcd4;
+}
+
+.category-name {
+    font-size: 22px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.category-count {
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ==========================================
+   CHANNELS LIST SECTION
+   ========================================== */
+
+.sidebar-channels-section {
+    padding: 0 0 10px;
+}
+
+.channels-section-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    background: transparent;
+}
+
+.channels-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.channels-list {
+    padding: 0;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
 .channels-list::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
 }
 
 .channels-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent;
 }
 
 .channels-list::-webkit-scrollbar-thumb {
@@ -613,52 +629,78 @@ video {
     border-radius: 3px;
 }
 
-.channels-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
-}
-
 .channel-item {
     width: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 18px 25px;
+    padding: 16px 20px;
+    min-height: 100px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 0;
+    border-left: 3px solid transparent;
     cursor: pointer;
     outline: none;
-    transition: background 0.15s ease;
+    transition: all 0.15s ease;
+    gap: 18px;
 }
 
 .channel-item:hover {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.channel-item:focus,
-.channel-item.active {
-    background: #00bcd4;
-    border-color: #00bcd4;
+.channel-item:focus {
+    background: rgba(30, 100, 180, 0.5);
+    border-left-color: #00bcd4;
+    outline: none;
 }
 
-.channel-item-left {
+.channel-item.active {
+    background: rgba(30, 100, 180, 0.5);
+    border-left-color: #00bcd4;
+}
+
+/* Channel Info - Name and Price */
+.channel-item-info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
 }
 
-/* Channel Logo in sidebar */
-.channel-item-logo {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    margin-right: 12px;
-    border-radius: 6px;
+.channel-item-name {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.05);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.channel-item-price {
+    font-size: 22px;
+    font-weight: 600;
+    color: #7fdc7f;
+}
+
+/* Channel LCN - Right side */
+.channel-item-lcn {
+    flex-shrink: 0;
+    font-size: 30px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.95);
+    min-width: 70px;
+    text-align: right;
+}
+
+/* Channel Logo - Left side */
+.channel-item-logo {
+    width: 90px;
+    height: 90px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -667,38 +709,19 @@ video {
 .channel-item-logo img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    border-radius: 6px;
+    object-fit: contain;
 }
 
-.channel-item-name {
-    font-size: 20px;
-    font-weight: 600;
-    color: #ffffff;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.channel-item-price {
-    font-size: 15px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.channel-item-right {
-    flex-shrink: 0;
+.channel-item-logo .logo-placeholder {
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
-    margin-left: 20px;
-}
-
-.channel-item-lcn {
-    font-size: 24px;
+    justify-content: center;
+    font-size: 20px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.85);
-    min-width: 70px;
-    text-align: right;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
 }
 
 /* Focus states for TV remote */

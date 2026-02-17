@@ -28,7 +28,29 @@ body {
 
 /* Default focus outline removal - we use custom styles */
 *:focus {
-    outline: none;
+    outline: none !important;
+}
+
+/* GLOBAL RULE: All focusable elements - WHITE BORDER ONLY */
+.focusable:focus,
+button:focus,
+.card:focus,
+.channel-card:focus,
+.app-card:focus,
+.movie-card:focus,
+.nav-item:focus,
+.sidebar-item:focus,
+.filter-chip:focus,
+.category-pill:focus,
+.language-pill:focus,
+.btn:focus,
+input:focus,
+select:focus,
+textarea:focus,
+[tabindex]:focus {
+    outline: none !important;
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none !important;
 }
 
 /* Global focusable element styles */
@@ -36,18 +58,12 @@ body {
     transition: all 0.15s ease;
 }
 
-.focusable:focus {
-    outline: none;
-    border: 2px solid #FFFFFF !important;
-    box-shadow: none;
-}
-
 /* Button focus styles */
 button.focusable:focus,
 .btn:focus {
-    outline: none;
+    outline: none !important;
     border: 2px solid #FFFFFF !important;
-    box-shadow: none;
+    box-shadow: none !important;
     background: rgba(255, 255, 255, 0.1);
 }
 
@@ -56,9 +72,9 @@ button.focusable:focus,
 .channel-card:focus,
 .app-card:focus,
 .movie-card:focus {
-    outline: none;
+    outline: none !important;
     border: 2px solid #FFFFFF !important;
-    box-shadow: none;
+    box-shadow: none !important;
     transform: scale(1.02);
 }
 
@@ -66,23 +82,23 @@ button.focusable:focus,
 input.focusable:focus,
 select.focusable:focus,
 textarea.focusable:focus {
-    outline: none;
+    outline: none !important;
     border: 2px solid #FFFFFF !important;
-    box-shadow: none;
+    box-shadow: none !important;
 }
 
 /* Navigation item focus */
 .nav-item:focus,
 .sidebar-item:focus,
 .filter-chip:focus {
-    outline: none;
+    outline: none !important;
     border: 2px solid #FFFFFF !important;
-    box-shadow: none;
+    box-shadow: none !important;
     background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Active state for selected items */
 .focusable.active:focus {
     border: 2px solid #FFFFFF !important;
-    box-shadow: none;
+    box-shadow: none !important;
 }

@@ -23,8 +23,8 @@
              DOWN = cards, LEFT from search = sidebar
    ================================ */
 
-// Grid columns for the language cards
-var GRID_COLS = 4;
+// Grid columns for the language cards (same as TV Channel page)
+var GRID_COLS = 5;
 
 // Navigation State
 var navState = {
@@ -65,7 +65,9 @@ function getHeaderElements() {
 function getCards() {
     var container = document.getElementById('home-languages-container');
     if (!container) return [];
-    return Array.from(container.querySelectorAll('.channel-card'));
+    // Support both channel-card and language-item (home page uses language-item)
+    var cards = Array.from(container.querySelectorAll('.channel-card, .language-item'));
+    return cards;
 }
 
 function getSidebarIndex(el) {
@@ -193,9 +195,14 @@ function handleDownNavigation() {
         if (idx >= 0 && idx < btns.length - 1) {
             focusSidebar(idx + 1);
         } else if (idx === btns.length - 1) {
-            // At last sidebar icon: DOWN goes to cards
-            console.log('[DOWN] Last sidebar icon → Cards');
-            focusCard(navState.lastCardIndex || 0);
+            // At last sidebar icon: DOWN goes to first language card
+            var cards = getCards();
+            if (cards.length > 0) {
+                console.log('[DOWN] Last sidebar icon → First Language Card');
+                focusCard(0);
+            } else {
+                console.log('[DOWN] No cards loaded yet');
+            }
         }
     }
     else if (navState.zone === 'header') {
@@ -265,9 +272,10 @@ function handleUpNavigation() {
                 focusCard(target.index);
             }
         } else {
-            // At row 0: UP goes to header (Search)
-            console.log('[UP] Cards row 0 → Header');
-            focusHeader(0);
+            // At row 0: UP goes to sidebar (last icon) - NOT header
+            console.log('[UP] Cards row 0 → Sidebar (last icon)');
+            var btns = getSidebarBtns();
+            focusSidebar(btns.length - 1);
         }
     }
 }

@@ -363,8 +363,19 @@ textarea.focusable:focus {
 
 /* Subtle pulse animation for cards on focus */
 .channel-card:focus,
-.app-card:focus {
+.app-card:focus,
+.language-item:focus {
     animation: focusPulse 2s ease-in-out infinite;
+}
+
+/* Language item focus - white border */
+.language-item:focus {
+    transform: scale(1.05) !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
+                0 10px 30px rgba(255, 255, 255, 0.3) !important;
+    outline: none;
+    z-index: 10;
 }
 
 /* ========================================

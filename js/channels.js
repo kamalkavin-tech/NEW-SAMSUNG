@@ -12,11 +12,11 @@
    8. DOWN from Back/Search: Move to tabs
    ================================ */
 
-// Check authentication - redirect to login if not logged in
+// Check authentication - redirect to login only if never logged in before
 (function checkAuth() {
-    var userData = localStorage.getItem("bbnl_user");
-    if (!userData) {
-        console.log("[Auth] User not logged in, redirecting to login...");
+    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+    if (hasLoggedInOnce !== "true") {
+        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
@@ -25,14 +25,17 @@
 var focusables = [];
 var currentFocus = 0;
 var allChannels = [];
+var allCategories = []; // Store categories globally
 var currentCategory = "All";
 var currentLanguage = "All";
 var allLanguages = [];
 var searchTimeout = null;
+var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages)
 
-// Navigation zones: 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
-var currentZone = 'tabs';
+// Navigation zones: 'sidebar', 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
+var currentZone = 'sidebar';
 var lastTopControlElement = null; // Track last focused top control for UP navigation
+var sidebarCategoryIndex = 0; // Track focused category in sidebar
 
 window.onload = function () {
     console.log("=== BBNL Channels Page Initialized ===");
@@ -48,12 +51,24 @@ window.onload = function () {
 
     // Initialize language dropdown
     initLanguageDropdown();
+    
+    // Initialize sidebar language selector
+    initLanguageSelector();
 
     // Initialize search functionality
     initSearchFunctionality();
 
     // Add zone tracking listeners
     addZoneTrackingListeners();
+    
+    // Set initial focus on sidebar language selector
+    setTimeout(function() {
+        var langText = document.getElementById('selectedLanguageText');
+        if (langText) {
+            langText.focus();
+            currentZone = 'sidebar';
+        }
+    }, 300);
 
     // Register All Remote Keys (supports all Samsung remote types)
     if (typeof RemoteKeys !== 'undefined') {
@@ -68,6 +83,15 @@ window.onload = function () {
 
 // Add listeners to track which zone is focused
 function addZoneTrackingListeners() {
+    // Sidebar elements
+    var sidebarElements = document.querySelectorAll('.channels-sidebar .focusable');
+    sidebarElements.forEach(function(el) {
+        el.addEventListener('focus', function() {
+            currentZone = 'sidebar';
+            console.log('[Channels Navigation] Zone: Sidebar');
+        });
+    });
+    
     // Top controls (back button, search input)
     var topControls = document.querySelectorAll('.back-btn, .search-input');
     topControls.forEach(function (el) {
@@ -147,6 +171,13 @@ async function initPage() {
             if (textSpan) {
                 textSpan.textContent = 'Language - ' + selectedLangName;
             }
+            
+            // Add active class to Language pill and remove from other category pills
+            languagePill.classList.add('active');
+            var categoryPills = document.querySelectorAll('.category-pill[data-category]');
+            categoryPills.forEach(function(pill) {
+                pill.classList.remove('active');
+            });
         }
 
         if (selectedLangId === '' || !selectedLangId) {
@@ -177,6 +208,22 @@ async function initPage() {
 }
 
 function setInitialFocus() {
+    // Check if returning from language selection - focus language pill
+    var selectedLangId = sessionStorage.getItem('selectedLanguageId');
+    var selectedLangName = sessionStorage.getItem('selectedLanguageName');
+    
+    if (selectedLangId || selectedLangName) {
+        // Returning from language selection - focus the language pill
+        var languagePill = document.getElementById('languagePill');
+        if (languagePill) {
+            languagePill.focus();
+            currentZone = 'tabs';
+            console.log('[Channels] Focus set to Language pill (returned from language selection)');
+            return;
+        }
+    }
+    
+    // Default: focus first category pill
     var firstPill = document.querySelector('.category-pill.focusable');
     if (firstPill) {
         firstPill.focus();
@@ -190,11 +237,17 @@ function setInitialFocus() {
 // ==========================================
 
 function renderCategories(categories) {
+    // Store categories globally for sidebar
+    allCategories = categories;
+    
     const categoryPillsContainer = document.getElementById('categoryPills');
     if (!categoryPillsContainer) return;
 
     const languagePill = document.getElementById('languagePill');
     categoryPillsContainer.innerHTML = '';
+    
+    // Check if language filter is active - don't mark first pill as active
+    const hasLanguageFilter = sessionStorage.getItem('selectedLanguageId') || sessionStorage.getItem('selectedLanguageName');
 
     categories.forEach((cat, index) => {
         const pill = document.createElement('button');
@@ -204,7 +257,8 @@ function renderCategories(categories) {
         pill.dataset.grid = cat.grid || '';
         pill.textContent = cat.grtitle || 'Unknown';
 
-        if (index === 0) {
+        // Only mark first pill as active if no language filter
+        if (index === 0 && !hasLanguageFilter) {
             pill.classList.add('active');
         }
 
@@ -221,6 +275,245 @@ function renderCategories(categories) {
     }
 
     initCategoryPills();
+    
+    // Also render sidebar categories
+    renderSidebarCategories(categories);
+}
+
+// ==========================================
+// SIDEBAR CATEGORIES FUNCTIONALITY
+// ==========================================
+
+function renderSidebarCategories(categories) {
+    const categoryList = document.getElementById('categoryList');
+    if (!categoryList) return;
+    
+    categoryList.innerHTML = '';
+    
+    // Check if language filter is active
+    const hasLanguageFilter = sessionStorage.getItem('selectedLanguageId') || sessionStorage.getItem('selectedLanguageName');
+    
+    categories.forEach((cat, index) => {
+        const item = document.createElement('div');
+        item.className = 'category-item focusable';
+        item.tabIndex = 0;
+        item.dataset.category = (cat.grtitle || '').toLowerCase();
+        item.dataset.grid = cat.grid || '';
+        item.dataset.index = index;
+        
+        // Create category name span
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'category-name';
+        nameSpan.textContent = cat.grtitle || 'Unknown';
+        
+        // Create category count span (will be updated when channels load)
+        const countSpan = document.createElement('span');
+        countSpan.className = 'category-count';
+        countSpan.textContent = '(...)';
+        countSpan.id = 'count-' + (cat.grid || index);
+        
+        item.appendChild(nameSpan);
+        item.appendChild(countSpan);
+        
+        // Mark first as active if no language filter
+        if (index === 0 && !hasLanguageFilter) {
+            item.classList.add('active');
+        }
+        
+        // Focus listener
+        item.addEventListener('focus', function() {
+            currentZone = 'sidebar';
+            sidebarCategoryIndex = index;
+        });
+        
+        // Click/Enter handler
+        item.addEventListener('click', function() {
+            handleSidebarCategorySelect(item);
+        });
+        
+        categoryList.appendChild(item);
+    });
+    
+    // Update channel counts after channels are loaded
+    setTimeout(updateCategoryCounts, 500);
+}
+
+function updateCategoryCounts() {
+    if (allChannels.length === 0) {
+        // Try again after delay if channels not loaded yet
+        setTimeout(updateCategoryCounts, 500);
+        return;
+    }
+    
+    const categoryItems = document.querySelectorAll('.category-item');
+    categoryItems.forEach(item => {
+        const categoryName = item.dataset.category;
+        const grid = item.dataset.grid;
+        
+        // Count channels matching this category
+        let count = 0;
+        if (categoryName === 'all' || grid === '') {
+            count = allChannels.length;
+        } else {
+            count = allChannels.filter(ch => {
+                const chCategory = (ch.grtitle || '').toLowerCase();
+                return chCategory === categoryName;
+            }).length;
+        }
+        
+        const countSpan = item.querySelector('.category-count');
+        if (countSpan) {
+            countSpan.textContent = '(' + count + ')';
+        }
+    });
+}
+
+function handleSidebarCategorySelect(item) {
+    // Remove active from all sidebar categories
+    document.querySelectorAll('.category-item').forEach(el => {
+        el.classList.remove('active');
+    });
+    
+    // Add active to selected
+    item.classList.add('active');
+    
+    // Clear language filter when category is selected
+    sessionStorage.removeItem('selectedLanguageId');
+    sessionStorage.removeItem('selectedLanguageName');
+    
+    // Reset language selector to "All Languages"
+    selectedLanguageIndex = 0;
+    updateLanguageSelectorDisplay();
+    
+    // Update title
+    updateHeaderWithLanguage(null);
+    
+    // Filter channels by this category
+    const categoryName = item.dataset.category;
+    const grid = item.dataset.grid;
+    
+    filterChannelsByCategory(categoryName, grid);
+}
+
+function filterChannelsByCategory(categoryName, grid) {
+    let filteredChannels;
+    
+    if (categoryName === 'all' || grid === '' || !categoryName) {
+        filteredChannels = allChannels;
+    } else {
+        filteredChannels = allChannels.filter(ch => {
+            const chCategory = (ch.grtitle || '').toLowerCase();
+            return chCategory === categoryName;
+        });
+    }
+    
+    renderAllChannels(filteredChannels);
+}
+
+// Language selector functions
+function initLanguageSelector() {
+    const leftArrow = document.getElementById('langArrowLeft');
+    const rightArrow = document.getElementById('langArrowRight');
+    const langText = document.getElementById('selectedLanguageText');
+    
+    if (leftArrow) {
+        leftArrow.addEventListener('click', function() {
+            changeLanguageSelection(-1);
+        });
+        leftArrow.addEventListener('focus', function() {
+            currentZone = 'sidebar';
+        });
+    }
+    
+    if (rightArrow) {
+        rightArrow.addEventListener('click', function() {
+            changeLanguageSelection(1);
+        });
+        rightArrow.addEventListener('focus', function() {
+            currentZone = 'sidebar';
+        });
+    }
+    
+    if (langText) {
+        langText.addEventListener('focus', function() {
+            currentZone = 'sidebar';
+        });
+    }
+    
+    // Check if there was a previously selected language
+    const savedLangName = sessionStorage.getItem('selectedLanguageName');
+    if (savedLangName && allLanguages.length > 0) {
+        const idx = allLanguages.findIndex(lang => 
+            (lang.name || lang.lalng || '').toLowerCase() === savedLangName.toLowerCase()
+        );
+        if (idx >= 0) {
+            selectedLanguageIndex = idx + 1; // +1 because 0 is "All Languages"
+        }
+    }
+    
+    updateLanguageSelectorDisplay();
+}
+
+function changeLanguageSelection(direction) {
+    const totalOptions = allLanguages.length + 1; // +1 for "All Languages"
+    selectedLanguageIndex += direction;
+    
+    // Wrap around
+    if (selectedLanguageIndex < 0) {
+        selectedLanguageIndex = totalOptions - 1;
+    } else if (selectedLanguageIndex >= totalOptions) {
+        selectedLanguageIndex = 0;
+    }
+    
+    updateLanguageSelectorDisplay();
+    applyLanguageFilter();
+}
+
+function updateLanguageSelectorDisplay() {
+    const langText = document.getElementById('selectedLanguageText');
+    if (!langText) return;
+    
+    if (selectedLanguageIndex === 0) {
+        langText.textContent = 'All Languages';
+    } else {
+        const lang = allLanguages[selectedLanguageIndex - 1];
+        langText.textContent = lang ? (lang.name || lang.lalng || 'Unknown') : 'Unknown';
+    }
+}
+
+function applyLanguageFilter() {
+    if (selectedLanguageIndex === 0) {
+        // All Languages - clear filter
+        sessionStorage.removeItem('selectedLanguageId');
+        sessionStorage.removeItem('selectedLanguageName');
+        updateHeaderWithLanguage(null);
+        
+        // Show all channels
+        renderAllChannels(allChannels);
+    } else {
+        const lang = allLanguages[selectedLanguageIndex - 1];
+        if (lang) {
+            const langName = lang.name || lang.lalng || '';
+            const langId = lang.id || lang.value || '';
+            
+            sessionStorage.setItem('selectedLanguageId', langId);
+            sessionStorage.setItem('selectedLanguageName', langName);
+            updateHeaderWithLanguage(langName);
+            
+            // Filter channels by language
+            const filteredChannels = allChannels.filter(ch => {
+                const chLang = (ch.lalng || ch.language || '').toLowerCase();
+                return chLang === langName.toLowerCase();
+            });
+            
+            renderAllChannels(filteredChannels);
+        }
+    }
+    
+    // Clear category selection when language changes
+    document.querySelectorAll('.category-item').forEach(el => {
+        el.classList.remove('active');
+    });
 }
 
 function initCategoryPills() {
@@ -230,11 +523,29 @@ function initCategoryPills() {
         pill.addEventListener('click', function () {
             if (pill.id === 'languagePill') return;
 
+            // Remove active from ALL pills including language pill
             pills.forEach(p => {
-                if (p.id !== 'languagePill') {
-                    p.classList.remove('active');
-                }
+                p.classList.remove('active');
             });
+            var languagePill = document.getElementById('languagePill');
+            if (languagePill) {
+                languagePill.classList.remove('active');
+            }
+            
+            // Clear language filter when category is selected
+            sessionStorage.removeItem('selectedLanguageId');
+            sessionStorage.removeItem('selectedLanguageName');
+            
+            // Reset language pill text
+            if (languagePill) {
+                var textSpan = languagePill.querySelector('span');
+                if (textSpan) {
+                    textSpan.textContent = 'Language';
+                }
+            }
+            
+            // Update header title
+            updateHeaderWithLanguage(null);
 
             pill.classList.add('active');
 
@@ -324,12 +635,12 @@ function initSearchFunctionality() {
             clearTimeout(searchTimeout);
 
             if (cleaned.length > 0) {
-                // Auto-play the channel after 2 seconds of no input
+                // Auto-play the channel after 3 seconds of no input
                 searchTimeout = setTimeout(function () {
                     var lcn = parseInt(cleaned, 10);
                     console.log("[Channels] Auto-playing LCN:", lcn);
                     playChannelByLCN(lcn);
-                }, 2000);
+                }, 3000);
             }
         });
 
@@ -626,6 +937,27 @@ document.addEventListener("keydown", function (e) {
         return;
     }
 
+    // NUMBER KEYS (0-9): Auto-focus search input and type the number
+    // This allows users to search LCN from any zone (tabs, cards, etc.)
+    if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            // Get the typed number
+            var num = (code >= 96) ? (code - 96) : (code - 48);
+            
+            // Focus search input and append number
+            searchInput.focus();
+            searchInput.value += num.toString();
+            
+            // Trigger input event to start LCN auto-play timer
+            var inputEvent = new Event('input', { bubbles: true });
+            searchInput.dispatchEvent(inputEvent);
+            
+            console.log('[Channels] Number key pressed, focusing search:', num);
+        }
+        return;
+    }
+
     e.preventDefault();
 
     switch (code) {
@@ -651,9 +983,12 @@ document.addEventListener("keydown", function (e) {
 function handleDownNavigation() {
     console.log('[DOWN] Zone:', currentZone);
 
-    if (currentZone === 'topControls') {
-        // DOWN from Back/Search: Move to first category pill
-        moveToFirstCategoryPill();
+    if (currentZone === 'sidebar') {
+        // DOWN in sidebar: Navigate through sidebar elements
+        handleSidebarDownNavigation();
+    } else if (currentZone === 'topControls') {
+        // DOWN from Back/Search: Move to first channel card
+        moveToFirstChannelCard();
     } else if (currentZone === 'tabs') {
         // DOWN from tabs: Move to first channel card
         moveToFirstChannelCard();
@@ -667,11 +1002,14 @@ function handleDownNavigation() {
 function handleUpNavigation() {
     console.log('[UP] Zone:', currentZone);
 
-    if (currentZone === 'topControls') {
+    if (currentZone === 'sidebar') {
+        // UP in sidebar: Navigate through sidebar elements
+        handleSidebarUpNavigation();
+    } else if (currentZone === 'topControls') {
         // Already at top, do nothing
         console.log('[UP] Already at top controls');
     } else if (currentZone === 'tabs') {
-        // UP from tabs: Move to last focused top control (Back or Search)
+        // UP from tabs: Move to top controls
         if (lastTopControlElement) {
             lastTopControlElement.focus();
             currentZone = 'topControls';
@@ -679,11 +1017,11 @@ function handleUpNavigation() {
             moveToBackButton();
         }
     } else if (currentZone === 'cards') {
-        // UP in cards: Try to move up in grid, or go to tabs
+        // UP in cards: Try to move up in grid, or go to top controls
         var moved = moveWithinCardsGrid(0, -1);
         if (!moved) {
-            // At top row, move to category tabs
-            moveToFirstCategoryPill();
+            // At top row, move to top controls
+            moveToBackButton();
         }
     }
 }
@@ -692,20 +1030,33 @@ function handleUpNavigation() {
 function handleLeftNavigation() {
     console.log('[LEFT] Zone:', currentZone);
 
-    if (currentZone === 'topControls') {
-        // LEFT in top controls: Move between Search and Back
+    if (currentZone === 'sidebar') {
+        // LEFT in sidebar: Handle language selector left arrow
+        handleSidebarLeftNavigation();
+    } else if (currentZone === 'topControls') {
+        // LEFT in top controls: Move between Search and Back, or to sidebar
         var topControls = Array.from(document.querySelectorAll('.back-btn, .search-input'));
         var currentIndex = topControls.indexOf(document.activeElement);
 
         if (currentIndex > 0) {
             topControls[currentIndex - 1].focus();
+        } else if (currentIndex === 0) {
+            // At back button, go to sidebar
+            focusSidebarLanguage();
         }
     } else if (currentZone === 'tabs') {
-        // LEFT in tabs: Move to previous pill
-        moveWithinTabs(-1);
+        // LEFT in tabs: Move to previous pill, or to sidebar
+        var moved = moveWithinTabs(-1);
+        if (!moved) {
+            focusSidebarLanguage();
+        }
     } else if (currentZone === 'cards') {
-        // LEFT in cards: Move left in grid
-        moveWithinCardsGrid(-1, 0);
+        // LEFT in cards: Move left in grid, or to sidebar
+        var moved = moveWithinCardsGrid(-1, 0);
+        if (!moved) {
+            // At first column, move to sidebar
+            focusSidebarLanguage();
+        }
     }
 }
 
@@ -713,7 +1064,10 @@ function handleLeftNavigation() {
 function handleRightNavigation() {
     console.log('[RIGHT] Zone:', currentZone);
 
-    if (currentZone === 'topControls') {
+    if (currentZone === 'sidebar') {
+        // RIGHT from sidebar: Move to main content
+        handleSidebarRightNavigation();
+    } else if (currentZone === 'topControls') {
         // RIGHT in top controls: Move between Back and Search
         var topControls = Array.from(document.querySelectorAll('.back-btn, .search-input'));
         var currentIndex = topControls.indexOf(document.activeElement);
@@ -727,6 +1081,108 @@ function handleRightNavigation() {
     } else if (currentZone === 'cards') {
         // RIGHT in cards: Move right in grid
         moveWithinCardsGrid(1, 0);
+    }
+}
+
+// Sidebar navigation helpers
+function handleSidebarDownNavigation() {
+    var active = document.activeElement;
+    
+    // If on language arrows or text, move to first category
+    if (active.id === 'langArrowLeft' || active.id === 'langArrowRight' || active.id === 'selectedLanguageText') {
+        var firstCategory = document.querySelector('.category-item.focusable');
+        if (firstCategory) {
+            firstCategory.focus();
+            sidebarCategoryIndex = 0;
+        }
+        return;
+    }
+    
+    // If on category item, move to next
+    if (active.classList.contains('category-item')) {
+        var categories = Array.from(document.querySelectorAll('.category-item.focusable'));
+        var idx = categories.indexOf(active);
+        if (idx < categories.length - 1) {
+            categories[idx + 1].focus();
+            sidebarCategoryIndex = idx + 1;
+        }
+    }
+}
+
+function handleSidebarUpNavigation() {
+    var active = document.activeElement;
+    
+    // If on language arrows or text, stay there (already at top)
+    if (active.id === 'langArrowLeft' || active.id === 'langArrowRight' || active.id === 'selectedLanguageText') {
+        return;
+    }
+    
+    // If on first category, move to language selector
+    if (active.classList.contains('category-item')) {
+        var categories = Array.from(document.querySelectorAll('.category-item.focusable'));
+        var idx = categories.indexOf(active);
+        if (idx === 0) {
+            // Move to language text
+            var langText = document.getElementById('selectedLanguageText');
+            if (langText) {
+                langText.focus();
+            }
+        } else if (idx > 0) {
+            categories[idx - 1].focus();
+            sidebarCategoryIndex = idx - 1;
+        }
+    }
+}
+
+function handleSidebarLeftNavigation() {
+    var active = document.activeElement;
+    
+    // If on language text or right arrow, move to left arrow
+    if (active.id === 'selectedLanguageText' || active.id === 'langArrowRight') {
+        // Trigger language change
+        changeLanguageSelection(-1);
+        return;
+    }
+    
+    // If on left arrow, trigger language change
+    if (active.id === 'langArrowLeft') {
+        changeLanguageSelection(-1);
+        return;
+    }
+}
+
+function handleSidebarRightNavigation() {
+    var active = document.activeElement;
+    
+    // If on language elements, change selection or move right
+    if (active.id === 'langArrowLeft' || active.id === 'selectedLanguageText') {
+        changeLanguageSelection(1);
+        return;
+    }
+    
+    if (active.id === 'langArrowRight') {
+        changeLanguageSelection(1);
+        return;
+    }
+    
+    // If on category item, move to main content (first card)
+    if (active.classList.contains('category-item')) {
+        var firstCard = document.querySelector('.channel-card.focusable');
+        if (firstCard) {
+            firstCard.focus();
+            currentZone = 'cards';
+        } else {
+            // No cards, try back button
+            moveToBackButton();
+        }
+    }
+}
+
+function focusSidebarLanguage() {
+    var langText = document.getElementById('selectedLanguageText');
+    if (langText) {
+        langText.focus();
+        currentZone = 'sidebar';
     }
 }
 
@@ -762,19 +1218,56 @@ function moveToFirstChannelCard() {
     }
 }
 
-// Helper: Move within tabs (category pills)
+// Helper: Move within tabs (category pills) - AUTO LOAD ON FOCUS
 function moveWithinTabs(direction) {
     var pills = Array.from(document.querySelectorAll('.category-pill.focusable'));
     var currentIndex = pills.indexOf(document.activeElement);
 
-    if (currentIndex < 0) return;
+    if (currentIndex < 0) return false;
 
     var newIndex = currentIndex + direction;
 
-    if (newIndex >= 0 && newIndex < pills.length) {
-        pills[newIndex].focus();
-        pills[newIndex].scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+    // Check if at boundary
+    if (newIndex < 0 || newIndex >= pills.length) {
+        return false; // Could not move
     }
+
+    var targetPill = pills[newIndex];
+    targetPill.focus();
+    targetPill.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+    
+    // AUTO-LOAD: Trigger category load on focus (TV Channel page only)
+    if (targetPill.id !== 'languagePill' && targetPill.dataset.category) {
+        // Remove active from ALL pills including language pill
+        pills.forEach(function(p) {
+            p.classList.remove('active');
+        });
+        
+        // Clear language filter when category is selected
+        sessionStorage.removeItem('selectedLanguageId');
+        sessionStorage.removeItem('selectedLanguageName');
+        
+        // Reset language pill text
+        var languagePill = document.getElementById('languagePill');
+        if (languagePill) {
+            var textSpan = languagePill.querySelector('span');
+            if (textSpan) {
+                textSpan.textContent = 'Language';
+            }
+        }
+        
+        // Update header title
+        updateHeaderWithLanguage(null);
+        
+        targetPill.classList.add('active');
+        
+        // Load channels for this category
+        var category = targetPill.dataset.category;
+        var gridId = targetPill.dataset.grid;
+        handleCategoryFilter(category, gridId);
+    }
+    
+    return true; // Successfully moved
 }
 
 // Helper: Move within channel cards grid

@@ -2,11 +2,11 @@
    BBNL Feedback CONTROLLER
    ================================ */
 
-// Check authentication - redirect to login if not logged in
+// Check authentication - redirect to login only if never logged in before
 (function checkAuth() {
-    var userData = localStorage.getItem("bbnl_user");
-    if (!userData) {
-        console.log("[Auth] User not logged in, redirecting to login...");
+    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+    if (hasLoggedInOnce !== "true") {
+        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }

@@ -5,6 +5,7 @@
 var focusables = [];
 var currentFocus = 0;
 var otpRequestInProgress = false; // Flag to prevent duplicate OTP requests
+var otpVerifyInProgress = false; // Flag to prevent duplicate OTP verification
 
 // Check authentication on page load - redirect logged in users away from auth pages
 (function checkAuthRedirect() {
@@ -12,11 +13,11 @@ var otpRequestInProgress = false; // Flag to prevent duplicate OTP requests
     var authPages = ['index.html', 'login.html', 'verify.html', ''];
     var isAuthPage = authPages.indexOf(currentPage) !== -1;
 
-    // If user is logged in and on an auth page, redirect to home
+    // If user has logged in before (even after logout), skip login pages
     if (isAuthPage) {
-        var userData = localStorage.getItem("bbnl_user");
-        if (userData) {
-            console.log("[Auth] User already logged in, redirecting to home...");
+        var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
+        if (hasLoggedInOnce === "true") {
+            console.log("[Auth] User has logged in before, redirecting to home...");
             // Replace history to prevent back navigation to login
             window.location.replace("home.html");
             return;
@@ -58,8 +59,18 @@ window.onload = function () {
             el.focus();
         });
 
-        // Handle mouse clicks
+        // Handle mouse clicks (skip getOtpBtn - it has its own handler via handleOK)
         el.addEventListener("click", function (e) {
+            // Skip OTP button to prevent double triggering
+            if (el.id === 'getOtpBtn') {
+                // Only trigger if button is enabled
+                if (!el.disabled && !otpRequestInProgress) {
+                    console.log("Get OTP button clicked directly");
+                    e.preventDefault();
+                    handleOK();
+                }
+                return;
+            }
             console.log("Click detected on:", el.id || el.className);
             e.preventDefault();
             handleOK();
@@ -179,31 +190,65 @@ function showIPv6() {
     if (!ipv6Text) return;
 
     try {
-        if (typeof webapis !== 'undefined' && webapis.network) {
-            var networkType = webapis.network.getActiveConnectionType();
-
-            if (networkType === 0) {
-                ipv6Text.innerText = "N/A";
-                return;
-            }
-
-            // Try to get IPv6 address from Tizen Network API
-            var ipv6 = webapis.network.getIpv6(networkType);
-            if (ipv6 && ipv6.length > 0) {
-                ipv6Text.innerText = ipv6;
-                console.log("Device IPv6:", ipv6);
-            } else {
-                // IPv6 not available - show N/A
-                ipv6Text.innerText = "N/A";
-                console.log("IPv6 not available from Tizen API");
-            }
-        } else {
-            // Fallback for non-Tizen devices
-            ipv6Text.innerText = "N/A";
+        // First try tizen.systeminfo API (recommended for IPv6)
+        if (typeof tizen !== 'undefined' && tizen.systeminfo) {
+            tizen.systeminfo.getPropertyValue(
+                "NETWORK",
+                function (network) {
+                    console.log("IPv4:", network.ipAddress);
+                    console.log("IPv6:", network.ipv6Address);
+                    
+                    if (network.ipv6Address && network.ipv6Address.length > 0) {
+                        ipv6Text.innerText = network.ipv6Address;
+                    } else {
+                        ipv6Text.innerText = "N/A";
+                    }
+                },
+                function (error) {
+                    console.log("Network Info Error:", error);
+                    // Fallback to webapis.network
+                    tryWebapisNetwork();
+                }
+            );
+            return;
         }
+        
+        // Fallback to webapis.network
+        tryWebapisNetwork();
+        
     } catch (e) {
         console.error("IPv6 Fetch Error:", e);
         ipv6Text.innerText = "N/A";
+    }
+    
+    function tryWebapisNetwork() {
+        try {
+            if (typeof webapis !== 'undefined' && webapis.network) {
+                var networkType = webapis.network.getActiveConnectionType();
+
+                if (networkType === 0) {
+                    ipv6Text.innerText = "N/A";
+                    return;
+                }
+
+                // Try to get IPv6 address from Tizen Network API
+                var ipv6 = webapis.network.getIpv6(networkType);
+                if (ipv6 && ipv6.length > 0) {
+                    ipv6Text.innerText = ipv6;
+                    console.log("Device IPv6:", ipv6);
+                } else {
+                    // IPv6 not available - show N/A
+                    ipv6Text.innerText = "N/A";
+                    console.log("IPv6 not available from Tizen API");
+                }
+            } else {
+                // Fallback for non-Tizen devices
+                ipv6Text.innerText = "N/A";
+            }
+        } catch (e) {
+            console.error("webapis IPv6 Fetch Error:", e);
+            ipv6Text.innerText = "N/A";
+        }
     }
 }
 
@@ -377,6 +422,8 @@ function initializePhoneInput() {
 function setupNumberOnlyInputs() {
     // Phone Input - only allow numbers
     var phoneInput = document.getElementById("phoneInput");
+    var getOtpBtn = document.getElementById("getOtpBtn");
+    
     if (phoneInput) {
         // Block non-numeric keypress
         phoneInput.addEventListener("keypress", function (e) {
@@ -388,12 +435,36 @@ function setupNumberOnlyInputs() {
             }
         });
 
-        // Filter on input (for paste/auto-fill)
+        // Filter on input (for paste/auto-fill) + validate 10 digits for OTP button
         phoneInput.addEventListener("input", function (e) {
             this.value = this.value.replace(/[^0-9]/g, '');
+            
+            // Enable/disable Get OTP button based on 10 digit validation
+            if (getOtpBtn) {
+                var value = this.value.replace(/\D/g, '');
+                if (value.length === 10) {
+                    getOtpBtn.disabled = false;
+                    getOtpBtn.classList.add('enabled');
+                } else {
+                    getOtpBtn.disabled = true;
+                    getOtpBtn.classList.remove('enabled');
+                }
+            }
         });
+        
+        // Initial state - disable button if not 10 digits
+        if (getOtpBtn) {
+            var initialValue = phoneInput.value.replace(/\D/g, '');
+            if (initialValue.length !== 10) {
+                getOtpBtn.disabled = true;
+                getOtpBtn.classList.remove('enabled');
+            } else {
+                getOtpBtn.disabled = false;
+                getOtpBtn.classList.add('enabled');
+            }
+        }
 
-        console.log("Phone input: number-only validation enabled");
+        console.log("Phone input: number-only validation + 10-digit OTP validation enabled");
     }
 
     // OTP Inputs - only allow numbers + auto-advance
@@ -548,13 +619,15 @@ document.addEventListener("keydown", function (e) {
                 return; // Let default handle it
             }
 
-            // Enter - submit
+            // Enter - submit OTP request (only if 10 digits and not already in progress)
             if (e.keyCode === 13) {
                 e.preventDefault();
                 var getOtpBtn = document.getElementById('getOtpBtn');
-                if (getOtpBtn) {
+                if (getOtpBtn && !getOtpBtn.disabled && !otpRequestInProgress && active.value.length === 10) {
+                    console.log("[Login] Enter pressed on phone input - triggering OTP request");
                     getOtpBtn.focus();
-                    getOtpBtn.click();
+                    // Call handleOK directly instead of click to avoid double trigger
+                    handleOK();
                 }
                 return;
             }
@@ -705,33 +778,37 @@ function handleOK() {
     if (active.id === "getOtpBtn") {
         // Prevent duplicate OTP requests
         if (otpRequestInProgress) {
-            console.log("[Login] OTP request already in progress, ignoring duplicate");
+            console.log("[Login] ⚠️ OTP request already in progress, ignoring duplicate click");
             return;
         }
 
         var phoneInput = document.getElementById("phoneInput");
         var val = phoneInput ? phoneInput.value : "";
-        console.log("Get OTP clicked - Phone number:", val);
+        console.log("[Login] Get OTP clicked - Phone number:", val, "| Length:", val.length);
 
         if (val.length === 10) {
-            console.log("[Login] Requesting OTP for mobile:", val);
+            console.log("[Login] ✅ Starting OTP request for mobile:", val);
+            console.log("[Login] ⏱️ OTP API call timestamp:", new Date().toISOString());
 
             // Set flag to prevent duplicate requests
             otpRequestInProgress = true;
 
-            // Show loading state
+            // Show loading state and disable button
             var btn = document.getElementById("getOtpBtn");
             var originalText = btn.innerText;
             btn.innerText = "Sending OTP...";
             btn.disabled = true;
+            btn.classList.remove('enabled');
 
-            // Call actual API
+            // Call actual API - SINGLE CALL ONLY
             const userIdToUse = "testiser1";
+            console.log("[Login] 📡 Calling AuthAPI.requestOTP() - ONE TIME ONLY");
             AuthAPI.requestOTP(userIdToUse, val)
                 .then(function (response) {
-                    console.log("[Login] OTP Response:", response);
+                    console.log("[Login] 📨 OTP API Response received:", response);
+                    console.log("[Login] ⏱️ Response timestamp:", new Date().toISOString());
 
-                    // Reset flag and restore button
+                    // Reset flag
                     otpRequestInProgress = false;
                     btn.innerText = originalText;
                     btn.disabled = false;
@@ -783,16 +860,26 @@ function handleOK() {
 
     // VERIFY PAGE: Verify Button (if exists)
     if (active.id === "verifyBtn") {
+        // Prevent duplicate verification requests
+        if (otpVerifyInProgress) {
+            console.log("[Verify] ⚠️ Verification already in progress, ignoring duplicate");
+            return;
+        }
+
         var fullOTP = "";
         for (var i = 1; i <= 4; i++) {
             var val = document.getElementById('otp' + i).value;
             if (val) fullOTP += val;
         }
 
-        console.log("Verify button clicked - OTP:", fullOTP);
+        console.log("[Verify] Verify button clicked - OTP:", fullOTP, "| Length:", fullOTP.length);
 
         if (fullOTP.length === 4) {
-            console.log("[Verify] Verifying OTP:", fullOTP);
+            console.log("[Verify] ✅ Starting OTP verification:", fullOTP);
+            console.log("[Verify] ⏱️ Verify API call timestamp:", new Date().toISOString());
+
+            // Set flag to prevent duplicate requests
+            otpVerifyInProgress = true;
 
             // Get user info from URL
             var urlParams = new URLSearchParams(window.location.search);
@@ -805,10 +892,15 @@ function handleOK() {
             btn.innerText = "Verifying...";
             btn.disabled = true;
 
-            // Call actual API
+            // Call actual API - SINGLE CALL ONLY
+            console.log("[Verify] 📡 Calling AuthAPI.verifyOTP() - ONE TIME ONLY");
             AuthAPI.verifyOTP(userid, mobile, fullOTP)
                 .then(function (response) {
-                    console.log("[Verify] OTP Verification Response:", response);
+                    console.log("[Verify] 📨 OTP Verification Response:", response);
+                    console.log("[Verify] ⏱️ Response timestamp:", new Date().toISOString());
+
+                    // Reset flag
+                    otpVerifyInProgress = false;
 
                     // Restore button
                     btn.innerText = originalText;
@@ -823,6 +915,10 @@ function handleOK() {
                         localStorage.setItem('userid', userid);
                         localStorage.setItem('mobile', mobile);
                         localStorage.setItem('loginTime', new Date().toISOString());
+                        
+                        // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
+                        localStorage.setItem('hasLoggedInOnce', 'true');
+                        console.log("[Verify] ✅ hasLoggedInOnce flag set - future app launches will skip login");
 
                         alert("Login successful!");
 
@@ -841,6 +937,10 @@ function handleOK() {
                 })
                 .catch(function (error) {
                     console.error("[Verify] ❌ OTP verification error:", error);
+                    
+                    // Reset flag
+                    otpVerifyInProgress = false;
+                    
                     btn.innerText = originalText;
                     btn.disabled = false;
 

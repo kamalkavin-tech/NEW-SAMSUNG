@@ -307,7 +307,9 @@ input:checked + .slider:before {
 .action-btn:hover,
 .action-btn:focus {
     background: rgba(255, 255, 255, 0.15);
+    border: 2px solid #FFFFFF;
     outline: none;
+    box-shadow: none;
 }
 
 /* Dropdown Select */
@@ -325,6 +327,9 @@ input:checked + .slider:before {
 
 .dropdown-select:focus {
     background: rgba(255, 255, 255, 0.15);
+    border: 2px solid #FFFFFF;
+    outline: none;
+    box-shadow: none;
 }
 
 .dropdown-select option {
@@ -657,8 +662,9 @@ input:checked + .slider:before {
 .check-btn:hover,
 .check-btn:focus {
     background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    border: 2px solid #FFFFFF;
     outline: none;
+    box-shadow: none;
 }
 
 /* Scrollbar */
@@ -680,10 +686,11 @@ input:checked + .slider:before {
     background: rgba(255, 255, 255, 0.3);
 }
 
-/* Focus styles for keyboard navigation */
+/* Focus styles for keyboard navigation - WHITE BORDER ONLY */
 .focusable:focus {
-    outline: 2px solid #4285f4;
-    outline-offset: 2px;
+    outline: none !important;
+    border: 2px solid #FFFFFF !important;
+    box-shadow: none !important;
 }
 
 /* ========================================
