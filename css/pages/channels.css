@@ -1,14 +1,17 @@
 /* ==========================================
-   CHANNELS PAGE LAYOUT WITH SIDEBAR
+   CHANNELS PAGE LAYOUT WITH FILTER PILLS
    ========================================== */
 
 body.channels-page {
-    display: grid !important;
-    grid-template-columns: 280px 1fr !important;
-    grid-template-rows: 100vh !important;
+    display: block !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden;
+    background: #0a0a0a;
+}
+
+body.channels-page-pills {
+    display: block !important;
 }
 
 /* ==========================================
@@ -146,6 +149,11 @@ body.channels-page {
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+    width: 100%;
+}
+
+.channels-main-fullwidth {
+    width: 100%;
 }
 
 /* ==========================================
@@ -155,12 +163,12 @@ body.channels-page {
 .channels-header {
     background: #0a0a0a;
     height: 70px;
-    padding: 15px 20px 10px;
+    padding: 15px 30px 10px;
     display: grid;
     grid-template-columns: auto 1fr auto;
-    gap: 20px;
+    gap: 25px;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 100;
     box-sizing: border-box;
     flex-shrink: 0;
@@ -203,13 +211,12 @@ body.channels-page {
 
 /* Page Title - Grid Center */
 .page-title {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 500;
     color: #fff;
     margin: 0;
     white-space: nowrap;
     text-align: center;
-    /* Removed absolute positioning */
 }
 
 .page-title #titleLanguage {
@@ -295,14 +302,10 @@ body.channels-page {
    ========================================== */
 
 .category-section {
-    position: fixed;
-    top: 70px;
-    left: 0;
-    right: 0;
     background: #0a0a0a;
-    padding: 12px 20px 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    z-index: 99;
+    padding: 12px 30px 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
 }
 
 .category-pills {
@@ -429,8 +432,8 @@ body.channels-page {
    ========================================== */
 
 .subpage-section {
-    padding: 20px 20px 30px;
-    background: #000000;
+    padding: 20px 30px 30px;
+    background: #0a0a0a;
     overflow-y: auto;
     overflow-x: hidden;
     flex: 1;

@@ -407,10 +407,11 @@ video {
     position: fixed;
     left: 0;
     top: 0;
-    width: 420px;
+    width: 460px;
     height: 100vh;
-    background: rgba(15, 15, 20, 0.95);
-    backdrop-filter: blur(15px);
+    background: rgba(10, 15, 25, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 1001;
     display: flex;
@@ -434,19 +435,19 @@ video {
    ========================================== */
 
 .sidebar-main-header {
-    background: rgba(20, 20, 28, 0.98);
-    padding: 20px 24px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 16px 20px;
     text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
 }
 
 .sidebar-main-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.9);
     text-transform: uppercase;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
 }
 
 /* ==========================================
@@ -458,16 +459,16 @@ video {
     align-items: center;
     justify-content: center;
     gap: 20px;
-    padding: 15px 20px;
-    background: rgba(25, 25, 35, 0.95);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 14px 20px;
+    background: rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
 }
 
 .lang-nav-arrow {
-    width: 36px;
-    height: 36px;
-    background: rgba(255, 255, 255, 0.08);
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.1);
     border: 2px solid transparent;
     border-radius: 8px;
     display: flex;
@@ -479,22 +480,23 @@ video {
 }
 
 .lang-nav-arrow:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.18);
 }
 
 .lang-nav-arrow:focus {
     border-color: #FFFFFF !important;
-    background: rgba(30, 100, 180, 0.5);
+    background: rgba(255, 255, 255, 0.2);
     outline: none;
 }
 
 .lang-nav-name {
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 700;
-    color: #00bcd4;
-    min-width: 200px;
+    color: #00e5ff;
+    min-width: 180px;
     text-align: center;
     transition: color 0.3s ease;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
 /* Language name appears white when sidebar closes */
@@ -551,41 +553,45 @@ video {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 22px;
-    min-height: 60px;
+    padding: 14px 20px;
+    min-height: 52px;
     background: transparent;
-    border: none;
-    border-left: 3px solid transparent;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    margin: 3px 10px 3px 6px;
     cursor: pointer;
     outline: none;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
 }
 
 .category-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .category-item:focus {
-    background: rgba(30, 100, 180, 0.5);
-    border-left-color: #00bcd4;
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
     outline: none;
 }
 
 .category-item.active {
-    background: rgba(30, 100, 180, 0.5);
-    border-left-color: #00bcd4;
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
 }
 
 .category-name {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 600;
     color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .category-count {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 /* ==========================================
@@ -633,30 +639,33 @@ video {
     width: 100%;
     display: flex;
     align-items: center;
-    padding: 16px 20px;
-    min-height: 100px;
+    padding: 12px 16px;
+    min-height: 110px;
     background: transparent;
-    border: none;
-    border-left: 3px solid transparent;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    margin: 5px 10px 5px 6px;
     cursor: pointer;
     outline: none;
-    transition: all 0.15s ease;
-    gap: 18px;
+    transition: all 0.2s ease;
+    gap: 20px;
 }
 
 .channel-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .channel-item:focus {
-    background: rgba(30, 100, 180, 0.5);
-    border-left-color: #00bcd4;
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
     outline: none;
 }
 
 .channel-item.active {
-    background: rgba(30, 100, 180, 0.5);
-    border-left-color: #00bcd4;
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
 /* Channel Info - Name and Price */
@@ -665,63 +674,70 @@ video {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 .channel-item-name {
-    font-size: 28px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 600;
     color: #ffffff;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .channel-item-price {
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 600;
-    color: #7fdc7f;
+    color: #4eff4e;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 /* Channel LCN - Right side */
 .channel-item-lcn {
     flex-shrink: 0;
-    font-size: 30px;
+    font-size: 20px;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.95);
-    min-width: 70px;
+    min-width: 60px;
     text-align: right;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
 
 /* Channel Logo - Left side */
 .channel-item-logo {
-    width: 90px;
-    height: 90px;
+    width: 80px;
+    height: 80px;
     flex-shrink: 0;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 8px;
 }
 
 .channel-item-logo img {
-    width: 100%;
-    height: 100%;
+    width: 70px;
+    height: 70px;
     object-fit: contain;
+    filter: brightness(1.1) contrast(1.05);
 }
 
 .channel-item-logo .logo-placeholder {
-    width: 100%;
-    height: 100%;
+    width: 70px;
+    height: 70px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.85);
     text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
 }
 
 /* Focus states for TV remote */

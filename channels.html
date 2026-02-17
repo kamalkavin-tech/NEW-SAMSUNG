@@ -11,41 +11,10 @@
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body class="channels-page">
+<body class="channels-page channels-page-pills">
 
-    <!-- Categories Sidebar -->
-    <aside class="channels-sidebar" id="channelsSidebar">
-        <!-- Sidebar Header -->
-        <div class="sidebar-header">
-            <h2 class="sidebar-title">Categories</h2>
-        </div>
-        <div class="sidebar-divider"></div>
-        
-        <!-- Language Selector Section -->
-        <div class="language-selector" id="languageSelector">
-            <button class="lang-arrow lang-arrow-left focusable" tabindex="0" id="langArrowLeft">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-            </button>
-            <span class="selected-language focusable" tabindex="0" id="selectedLanguageText">All Languages</span>
-            <button class="lang-arrow lang-arrow-right focusable" tabindex="0" id="langArrowRight">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-            </button>
-        </div>
-        <div class="sidebar-divider"></div>
-        
-        <!-- Category List -->
-        <div class="category-list" id="categoryList">
-            <!-- Categories will be loaded dynamically -->
-            <div class="category-loading">Loading...</div>
-        </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <div class="channels-main">
+    <!-- Main Content Area (Full Width - No Sidebar) -->
+    <div class="channels-main channels-main-fullwidth">
         <!-- Fixed Header -->
         <div class="channels-header">
             <button class="back-btn focusable" tabindex="0">
@@ -62,6 +31,19 @@
             </div>
         </div>
 
+        <!-- Filter Pills Row - Below Header -->
+        <div class="category-section">
+            <div class="category-pills" id="categoryPills">
+                <!-- Category pills will be loaded dynamically -->
+                <button class="category-pill language-pill focusable" tabindex="0" id="languagePill">
+                    <span>Language - Hindi</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 6px;">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
         <!-- Main Content Area / Channel Grid -->
         <div id="channel-grid-container" class="subpage-section">
             <!-- Channels will be loaded here dynamically -->
@@ -69,12 +51,30 @@
         </div>
     </div>
 
-    <!-- Hidden Category Pills (for compatibility) -->
-    <div class="category-pills" id="categoryPills" style="display: none;">
-        <button class="category-pill language-pill focusable" tabindex="-1" id="languagePill" style="display: none;">
-            <span>Language</span>
-        </button>
-    </div>
+    <!-- Hidden Sidebar (for compatibility - not displayed) -->
+    <aside class="channels-sidebar" id="channelsSidebar" style="display: none;">
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">Categories</h2>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="language-selector" id="languageSelector">
+            <button class="lang-arrow lang-arrow-left focusable" tabindex="-1" id="langArrowLeft">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="selected-language focusable" tabindex="-1" id="selectedLanguageText">All Languages</span>
+            <button class="lang-arrow lang-arrow-right focusable" tabindex="-1" id="langArrowRight">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </button>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="category-list" id="categoryList">
+            <div class="category-loading">Loading...</div>
+        </div>
+    </aside>
 
     <!-- Error Popup - No Channels -->
     <div class="error-popup-overlay" id="noChannelsPopup" style="display: none;">
