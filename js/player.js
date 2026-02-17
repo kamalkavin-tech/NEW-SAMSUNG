@@ -371,12 +371,12 @@ function setupPlayer(channel) {
     
     if (uiExpiry) {
         // Remove all previous expiry classes
-        uiExpiry.classList.remove('expiry-pink', 'expiry-yellow', 'expiry-red', 'expiry-expired', 'expiry-active');
+        uiExpiry.classList.remove('expiry-free', 'expiry-active', 'expiry-warning', 'expiry-urgent', 'expiry-critical', 'expiry-expired');
 
         // Check if it's a free channel (price = 0)
         if (channelPrice === 0) {
-            uiExpiry.innerText = "Free";
-            uiExpiry.classList.add('expiry-active');
+            uiExpiry.innerText = "N/A";
+            uiExpiry.classList.add('expiry-free');
         } else if (channel.expirydate && channel.expirydate.trim() !== "") {
             const expiryDate = new Date(channel.expirydate);
             const today = new Date();
@@ -387,42 +387,34 @@ function setupPlayer(channel) {
 
             if (diffDays > 7) {
                 // More than 7 days - normal display
-                uiExpiry.innerText = "Expires in " + diffDays + " days";
+                uiExpiry.innerText = diffDays + " days";
                 uiExpiry.classList.add('expiry-active');
-            } else if (diffDays === 7) {
-                // 7 days remaining - Pink
-                uiExpiry.innerText = "⚠ 7 days remaining";
-                uiExpiry.classList.add('expiry-pink');
-            } else if (diffDays > 3 && diffDays < 7) {
-                // Between 4-6 days - Pink
-                uiExpiry.innerText = "⚠ " + diffDays + " days remaining";
-                uiExpiry.classList.add('expiry-pink');
-            } else if (diffDays === 3) {
-                // 3 days remaining - Yellow
-                uiExpiry.innerText = "⚠ 3 days remaining";
-                uiExpiry.classList.add('expiry-yellow');
-            } else if (diffDays === 2) {
-                // 2 days remaining - Yellow
-                uiExpiry.innerText = "⚠ 2 days remaining";
-                uiExpiry.classList.add('expiry-yellow');
+            } else if (diffDays >= 4 && diffDays <= 7) {
+                // 4-7 days remaining - Warning (pink)
+                uiExpiry.innerText = diffDays + " days";
+                uiExpiry.classList.add('expiry-urgent');
+            } else if (diffDays >= 2 && diffDays <= 3) {
+                // 2-3 days remaining - Yellow
+                uiExpiry.innerText = diffDays + " days";
+                uiExpiry.classList.add('expiry-warning');
             } else if (diffDays === 1) {
                 // 1 day remaining - Red
-                uiExpiry.innerText = "🔴 1 day remaining!";
-                uiExpiry.classList.add('expiry-red');
+                uiExpiry.innerText = "1 day";
+                uiExpiry.classList.add('expiry-critical');
             } else if (diffDays === 0) {
-                // Last day - Show QR code for renewal
-                uiExpiry.innerText = "🔴 LAST DAY - Renew Now!";
-                uiExpiry.classList.add('expiry-red');
+                // Last day - Red
+                uiExpiry.innerText = "Today";
+                uiExpiry.classList.add('expiry-critical');
                 // Show QR code popup for renewal
                 showRenewalQRCode();
             } else {
                 // Expired
-                uiExpiry.innerText = "Subscription Expired";
+                uiExpiry.innerText = "Expired";
                 uiExpiry.classList.add('expiry-expired');
             }
         } else {
             // No expiry or unlimited subscription
-            uiExpiry.innerText = "✓ Active";
+            uiExpiry.innerText = "Active";
             uiExpiry.classList.add('expiry-active');
         }
     }
@@ -480,28 +472,31 @@ function setupPlayer(channel) {
         }
     }
 
-    // Update ui-subscription (info bar on right side)
+    // Update ui-subscription (info bar center section)
     if (uiSubscription) {
         // Remove existing classes
         uiSubscription.classList.remove('subscribed-yes', 'subscribed-no');
         
         if (isSubscribed) {
-            uiSubscription.innerText = "Subscribed : Yes";
+            uiSubscription.innerText = "Yes";
             uiSubscription.classList.add('subscribed-yes');
         } else {
-            uiSubscription.innerText = "Subscribed : No";
-            uiSubscription.classList.add('subscribed-no');
+            uiSubscription.innerText = "No";
+            // subscribed-no is default styling (red)
         }
     }
     
     // Update Price display
     const uiPrice = document.getElementById("ui-price");
     if (uiPrice) {
+        uiPrice.classList.remove('price-paid');
         const priceVal = parseFloat(price) || 0;
         if (priceVal > 0) {
-            uiPrice.innerText = "Channel Price ₹ : " + priceVal.toFixed(2);
+            uiPrice.innerText = "₹" + priceVal.toFixed(2);
+            uiPrice.classList.add('price-paid');
         } else {
             uiPrice.innerText = "Free";
+            // Default green color for Free
         }
     }
 
@@ -510,7 +505,7 @@ function setupPlayer(channel) {
     if (uiDeviceId) {
         const device = DeviceInfo.getDeviceInfo();
         const deviceId = device.devslno || device.mac_address || "Unknown";
-        uiDeviceId.innerText = "Device: " + deviceId;
+        uiDeviceId.innerText = deviceId;
     }
 
     // User Info (from session)

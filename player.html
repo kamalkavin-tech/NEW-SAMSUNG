@@ -74,32 +74,42 @@
         <div class="player-overlay visible">
             <!-- Premium Info Bar - Bottom Overlay -->
             <div class="info-bar-premium" id="infoBarPremium">
-                <!-- Left: Channel Logo -->
-                <div class="info-logo-section">
+                <!-- LEFT SECTION: Logo + LCN + Channel Name -->
+                <div class="info-left-section">
                     <div class="channel-logo-box">
                         <img src="" alt="Channel Logo" id="ui-channel-logo">
                     </div>
+                    <span class="channel-lcn" id="ui-channel-number">11</span>
+                    <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
                 </div>
 
-                <!-- Center: Channel Details -->
-                <div class="info-details-section">
-                    <div class="info-row-primary">
-                        <span class="channel-lcn" id="ui-channel-number">008</span>
-                        <span class="channel-name" id="ui-channel-name">Colors Super TV</span>
+                <!-- CENTER SECTION: Channel Information Grid -->
+                <div class="info-center-section">
+                    <div class="info-item">
+                        <span class="info-label">Channel Price</span>
+                        <span class="info-value price-value" id="ui-price">Free</span>
                     </div>
-                    <div class="info-row-secondary">
-                        <span class="expiry-info" id="ui-expiry">Expires in 4 days</span>
-                        <span class="info-divider">•</span>
-                        <span class="price-info" id="ui-price">Channel Price ₹ : 19.00</span>
-                        <span class="info-divider">•</span>
-                        <span class="subscription-status" id="ui-subscription">Subscribed : Yes</span>
+                    <div class="info-divider-line"></div>
+                    <div class="info-item">
+                        <span class="info-label">Subscribed</span>
+                        <span class="info-value subscribed-value" id="ui-subscription">No</span>
+                    </div>
+                    <div class="info-divider-line"></div>
+                    <div class="info-item">
+                        <span class="info-label">Expiry</span>
+                        <span class="info-value expiry-value" id="ui-expiry">N/A</span>
+                    </div>
+                    <div class="info-divider-line"></div>
+                    <div class="info-item">
+                        <span class="info-label">Device ID</span>
+                        <span class="info-value device-value" id="ui-device-id">Loading...</span>
                     </div>
                 </div>
 
-                <!-- Right: Time & Date -->
-                <div class="info-time-section">
-                    <div class="current-time" id="ui-time">8:39 PM</div>
-                    <div class="current-date" id="ui-date">Dec 04, 2025</div>
+                <!-- RIGHT SECTION: Time & Date -->
+                <div class="info-right-section">
+                    <div class="current-time" id="ui-time">9:14 PM</div>
+                    <div class="current-date" id="ui-date">Feb 17, 2026</div>
                 </div>
             </div>
         </div>

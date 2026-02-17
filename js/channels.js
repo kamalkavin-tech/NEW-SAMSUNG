@@ -24,14 +24,16 @@
 
 var focusables = [];
 var currentFocus = 0;
-var allChannels = [];
-var currentDisplayedChannels = []; // Track currently filtered/displayed channels for LCN search
+var masterChannelList = []; // MASTER LIST - ALL channels, NEVER filtered, used for LCN search
+var allChannels = []; // Currently loaded channels (may be filtered)
+var currentDisplayedChannels = []; // Track currently filtered/displayed channels
 var allCategories = []; // Store categories globally
 var currentCategory = "All";
 var currentLanguage = "All";
 var allLanguages = [];
 var searchTimeout = null;
 var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages)
+var masterListLoaded = false; // Flag to track if master list is loaded
 
 // Navigation zones: 'sidebar', 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
 var currentZone = 'sidebar';
@@ -117,6 +119,10 @@ function addZoneTrackingListeners() {
 
 async function initPage() {
     try {
+        // FIRST: Load master channel list (ALL channels, no filters)
+        // This is used for LCN search and is NEVER overwritten
+        await loadMasterChannelList();
+        
         // Fetch Categories
         const categoryResponse = await BBNL_API.getCategoryList();
         console.log("Categories Fetched:", categoryResponse);
@@ -189,6 +195,7 @@ async function initPage() {
         // Handle language filter from URL (from home page language card click)
         await loadChannels({ langid: urlLang });
     } else {
+        // Default: Load all channels (first category)
         await loadChannels();
     }
 
@@ -200,6 +207,32 @@ async function initPage() {
 
     // Set initial focus on first category pill
     setInitialFocus();
+}
+
+/**
+ * Load the MASTER channel list - ALL channels without any filters
+ * This list is used ONLY for LCN search and is NEVER modified by filters
+ */
+async function loadMasterChannelList() {
+    if (masterListLoaded && masterChannelList.length > 0) {
+        console.log("[Channels] Master list already loaded:", masterChannelList.length, "channels");
+        return;
+    }
+    
+    try {
+        console.log("[Channels] Loading MASTER channel list (all channels, no filters)...");
+        const response = await BBNL_API.getChannelList({}); // No filters = ALL channels
+        
+        if (Array.isArray(response) && response.length > 0) {
+            masterChannelList = response;
+            masterListLoaded = true;
+            console.log("[Channels] Master channel list loaded:", masterChannelList.length, "channels");
+        } else {
+            console.warn("[Channels] Failed to load master channel list");
+        }
+    } catch (e) {
+        console.error("[Channels] Error loading master channel list:", e);
+    }
 }
 
 function setInitialFocus() {
@@ -244,7 +277,34 @@ function renderCategories(categories) {
     // Check if language filter is active - don't mark first pill as active
     const hasLanguageFilter = sessionStorage.getItem('selectedLanguageId') || sessionStorage.getItem('selectedLanguageName');
 
-    categories.forEach((cat, index) => {
+    // Reorder categories: Put "All Channels" first to attract users
+    var reorderedCategories = [];
+    var subscribedCategory = null;
+    var allChannelsCategory = null;
+    var otherCategories = [];
+    
+    categories.forEach(function(cat) {
+        var title = (cat.grtitle || '').toLowerCase();
+        if (title === 'subscribed channels' || title === 'subscribed' || cat.grid === 'subs') {
+            subscribedCategory = cat;
+        } else if (title === 'all channels' || title === 'all' || cat.grid === '') {
+            allChannelsCategory = cat;
+        } else {
+            otherCategories.push(cat);
+        }
+    });
+    
+    // Build reordered array: All Channels first, then Subscribed, then others
+    if (allChannelsCategory) reorderedCategories.push(allChannelsCategory);
+    if (subscribedCategory) reorderedCategories.push(subscribedCategory);
+    reorderedCategories = reorderedCategories.concat(otherCategories);
+    
+    // If reordering didn't find expected categories, use original order
+    if (reorderedCategories.length === 0) {
+        reorderedCategories = categories;
+    }
+
+    reorderedCategories.forEach((cat, index) => {
         const pill = document.createElement('button');
         pill.className = 'category-pill focusable';
         pill.tabIndex = 0;
@@ -271,8 +331,8 @@ function renderCategories(categories) {
 
     initCategoryPills();
     
-    // Also render sidebar categories
-    renderSidebarCategories(categories);
+    // Also render sidebar categories (with reordered categories)
+    renderSidebarCategories(reorderedCategories);
 }
 
 // ==========================================
@@ -1414,17 +1474,19 @@ function handleEnter(el) {
 
 /**
  * Play a channel directly by its LCN number
- * Searches allChannels array for matching channelno and plays immediately
+ * ALWAYS searches masterChannelList (ALL channels, no filters)
  * @param {Number} lcn - The LCN number to play
  */
 function playChannelByLCN(lcn) {
     console.log("[Channels] Playing channel by LCN:", lcn);
 
-    if (allChannels.length === 0) {
-        console.warn("[Channels] No channels loaded, fetching...");
-        BBNL_API.getChannelList().then(function (channels) {
+    // Use masterChannelList for LCN search (never filtered)
+    if (masterChannelList.length === 0) {
+        console.warn("[Channels] Master channel list empty, fetching ALL channels...");
+        BBNL_API.getChannelList({}).then(function (channels) {
             if (channels && Array.isArray(channels)) {
-                allChannels = channels;
+                masterChannelList = channels;
+                masterListLoaded = true;
                 findAndPlayLCN(lcn);
             }
         });
@@ -1435,26 +1497,28 @@ function playChannelByLCN(lcn) {
 }
 
 function findAndPlayLCN(lcn) {
-    // First search in currently displayed/filtered channels
-    var channel = currentDisplayedChannels.find(function (ch) {
+    // ALWAYS search in MASTER channel list (ALL channels, NEVER filtered)
+    // This ensures LCN search works regardless of active filter
+    console.log("[Channels] Searching LCN", lcn, "in MASTER channel list (total:", masterChannelList.length, "channels)");
+    
+    var channel = masterChannelList.find(function (ch) {
         var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
         return chNo === lcn;
     });
 
-    // If not found in filtered channels, search in all channels
-    if (!channel) {
-        console.log("[Channels] LCN", lcn, "not in filtered list, searching all channels...");
-        channel = allChannels.find(function (ch) {
-            var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
-            return chNo === lcn;
-        });
-    }
-
     if (channel) {
         console.log("[Channels] Found LCN", lcn, ":", channel.chtitle || channel.channel_name);
+        
+        // Clear search input
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        
+        // Play the channel immediately
         BBNL_API.playChannel(channel);
     } else {
-        console.warn("[Channels] LCN", lcn, "not found");
+        console.warn("[Channels] LCN", lcn, "not found in master list");
         alert("Channel " + lcn + " not found");
     }
 }

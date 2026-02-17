@@ -80,7 +80,7 @@ video {
 
 
 /* ==========================================
-   PREMIUM INFO BAR DESIGN - OTT STYLE
+   PREMIUM INFO BAR DESIGN - REDESIGNED
    ========================================== */
 
 .info-bar-premium {
@@ -88,36 +88,51 @@ video {
     bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
-    width: 80%;
-    max-width: 1500px;
-    height: 120px;
-    background: rgba(0, 0, 0, 0.65);
-    border-radius: 16px;
-    padding: 20px 30px;
+    width: calc(100% - 60px);
+    max-width: 1800px;
+    height: 145px;
+    background: rgba(20, 20, 20, 0.8);
+    border-radius: 12px;
+    padding: 0 40px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 30px;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    gap: 40px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
+    animation: infoBarFadeIn 0.3s ease-out;
+}
+
+@keyframes infoBarFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 }
 
 /* Info bar position adjustment when sidebar is open */
 .info-bar-premium.sidebar-active {
-    left: calc(50% + 250px);
-    width: calc(80% - 520px);
-    max-width: 950px;
+    left: calc(50% + 180px);
+    width: calc(100% - 420px);
+    max-width: 1400px;
 }
 
-/* Left: Logo Section */
-.info-logo-section {
+/* LEFT SECTION: Logo + LCN + Channel Name */
+.info-left-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
     flex-shrink: 0;
 }
 
 .info-bar-premium .channel-logo-box {
-    width: 80px;
-    height: 80px;
+    width: 85px;
+    height: 85px;
     background: #ffffff;
     border-radius: 12px;
     overflow: hidden;
@@ -125,7 +140,7 @@ video {
     align-items: center;
     justify-content: center;
     padding: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
 }
 
 .info-bar-premium .channel-logo-box img {
@@ -134,135 +149,168 @@ video {
     object-fit: contain;
 }
 
-/* Center: Details Section */
-.info-details-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-    justify-content: center;
-}
-
-.info-row-primary {
-    display: flex;
-    align-items: baseline;
-    gap: 20px;
-}
-
 .info-bar-premium .channel-lcn {
     color: #ffffff;
-    font-size: 28px;
+    font-size: 40px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 1px;
+    flex-shrink: 0;
 }
 
 .info-bar-premium .channel-name {
     color: #ffffff;
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 32px;
+    font-weight: 500;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 320px;
 }
 
-.info-row-secondary {
+/* CENTER SECTION: Channel Information Grid */
+.info-center-section {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 30px;
+    flex: 1;
 }
 
-.info-divider {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 14px;
-    font-weight: 400;
+.info-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    min-width: 140px;
 }
 
-.info-bar-premium .expiry-info {
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 16px;
+.info-label {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 18px;
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.info-bar-premium .expiry-info.expiry-expired,
-.info-bar-premium .expiry-info.expiry-red {
-    color: #ff4444;
+.info-value {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
-.info-bar-premium .expiry-info.expiry-yellow {
+/* Price value colors */
+.price-value {
+    color: #4ade80; /* Green for Free */
+}
+
+.price-value.price-paid {
+    color: #ffffff;
+}
+
+/* Subscribed value colors */
+.subscribed-value {
+    color: #ff4444; /* Red for No */
+}
+
+.subscribed-value.subscribed-yes {
+    color: #4ade80; /* Green for Yes */
+}
+
+/* Expiry value colors */
+.expiry-value {
+    color: #ffffff;
+}
+
+.expiry-value.expiry-free {
+    color: #4ade80;
+}
+
+.expiry-value.expiry-active {
+    color: #4ade80;
+}
+
+.expiry-value.expiry-warning {
     color: #fbbf24;
 }
 
-.info-bar-premium .expiry-info.expiry-pink {
+.expiry-value.expiry-urgent {
     color: #f472b6;
 }
 
-.info-bar-premium .expiry-info.expiry-active {
-    color: #4ade80;
-}
-
-.info-bar-premium .price-info {
-    color: #4ade80;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-.info-bar-premium .subscription-status {
-    font-size: 16px;
-    font-weight: 500;
-}
-
-.info-bar-premium .subscription-status.subscribed-yes {
-    color: #4ade80;
-}
-
-.info-bar-premium .subscription-status.subscribed-no {
+.expiry-value.expiry-critical {
     color: #ff4444;
 }
 
-/* Right: Time Section */
-.info-time-section {
+.expiry-value.expiry-expired {
+    color: #ff4444;
+}
+
+/* Device ID value */
+.device-value {
+    color: #ffffff;
+    font-size: 22px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Vertical divider line between info items */
+.info-divider-line {
+    width: 1px;
+    height: 55px;
+    background: rgba(255, 255, 255, 0.25);
     flex-shrink: 0;
+}
+
+/* RIGHT SECTION: Time & Date */
+.info-right-section {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     justify-content: center;
-    gap: 6px;
-    min-width: 120px;
+    gap: 10px;
+    flex-shrink: 0;
+    min-width: 160px;
 }
 
 .info-bar-premium .current-time {
     color: #ffffff;
-    font-size: 26px;
+    font-size: 38px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0.5px;
 }
 
 .info-bar-premium .current-date {
-    color: rgba(255, 255, 255, 0.65);
-    font-size: 14px;
-    font-weight: 400;
-}
-    gap: 4px;
-    align-items: flex-end;
-}
-
-.current-time {
-    color: #ffffff;
+    color: rgba(255, 255, 255, 0.75);
     font-size: 20px;
-    font-weight: 600;
-}
-
-.current-date {
-    color: #ffffff;
-    font-size: 16px;
     font-weight: 400;
 }
 
+/* Legacy classes kept for compatibility */
+.info-logo-section {
+    display: none;
+}
+
+.info-details-section {
+    display: none;
+}
+
+.info-time-section {
+    display: none;
+}
+
+.info-row-primary,
+.info-row-secondary {
+    display: none;
+}
+
+.info-divider {
+    display: none;
+}
 
 .program-time {
     color: #b0b0b0;

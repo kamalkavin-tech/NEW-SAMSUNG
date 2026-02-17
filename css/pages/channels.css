@@ -538,35 +538,35 @@ body.channels-page-pills {
 }
 
 /* ==========================================
-   CHANNEL LOGO - CENTERED (SMALLER)
+   CHANNEL LOGO - CENTERED (LARGER)
    ========================================== */
 
 .channel-logo-container {
     width: 100%;
-    height: 60px;
+    height: 80px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 20px;
+    margin-top: 15px;
     margin-bottom: 4px;
 }
 
 .channel-logo-container img {
-    max-width: 85px;
-    max-height: 60px;
+    max-width: 110px;
+    max-height: 80px;
     object-fit: contain;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .no-logo-text {
-    width: 45px;
-    height: 45px;
+    width: 60px;
+    height: 60px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 8px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 26px;
     font-weight: 700;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -578,10 +578,10 @@ body.channels-page-pills {
 
 .card-channel-name {
     color: #ffffff;
-    font-size: 18px;
+    font-size: 25px;
     font-weight: 600;
     text-align: center;
-    padding: 4px 8px;
+    padding: 6px 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -616,9 +616,9 @@ body.channels-page-pills {
     background: #ef4444;
     /* Red */
     color: #fff;
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: 4px;
-    font-size: 9px;
+    font-size: 15px;
     font-weight: 700;
     text-transform: uppercase;
     z-index: 2;
@@ -642,9 +642,9 @@ body.channels-page-pills {
     left: 6px;
     background: rgba(65, 105, 225, 0.95);
     color: #fff;
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: capitalize;
     z-index: 2;
@@ -659,15 +659,15 @@ body.channels-page-pills {
 .card-info {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 8px;
     align-items: flex-start;
     /* Left Align */
-    padding-left: 2px;
+    padding-left: 4px;
 }
 
 .card-title-bottom {
     color: #1a1a1a;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -688,14 +688,14 @@ body.channels-page-pills {
 
 .card-lcn {
     color: #6b7280;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 500;
     white-space: nowrap;
 }
 
 .card-price {
     color: #059669;
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 700;
     white-space: nowrap;
 }
