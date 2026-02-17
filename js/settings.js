@@ -630,11 +630,8 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                     return webapis.network.getIp(networkType);
                 }, 'N/A'));
                 
-                // Load IPv6 Address
-                setElementText('device-ipv6', safeCall(function () {
-                    var ipv6 = webapis.network.getIpv6(networkType);
-                    return (ipv6 && ipv6.length > 0) ? ipv6 : 'N/A';
-                }, 'N/A'));
+                // Load IPv6 Address - use tizen.systeminfo first (more reliable)
+                loadIPv6Address(networkType);
             } else {
                 setElementText('device-ipv4', 'Disconnected');
                 setElementText('device-ipv6', 'N/A');
@@ -746,5 +743,110 @@ function initDarkMode() {
         document.body.classList.remove('light-mode');
     } else {
         document.body.classList.add('light-mode');
+    }
+}
+/**
+ * Load IPv6 Address using tizen.systeminfo first, then fallback to webapis.network
+ * Implements reliable detection for Tizen 5.0+
+ * @param {number} networkType - The active network type
+ */
+function loadIPv6Address(networkType) {
+    var ipv6El = document.getElementById('device-ipv6');
+    if (!ipv6El) return;
+
+    try {
+        // First try tizen.systeminfo API (more reliable for IPv6 on Tizen 5.0+)
+        if (typeof tizen !== 'undefined' && tizen.systeminfo) {
+            tizen.systeminfo.getPropertyValue(
+                "NETWORK",
+                function (network) {
+                    // Log full network object for debugging
+                    console.log("[Settings] Network Info:", JSON.stringify(network));
+                    console.log("[Settings] IPv6 from systeminfo:", network.ipv6Address);
+                    
+                    var ipv6Address = null;
+                    
+                    // Check IPv6 array/string first
+                    if (network.ipv6Address && network.ipv6Address.length > 0) {
+                        // May be array or string depending on firmware
+                        if (Array.isArray(network.ipv6Address)) {
+                            ipv6Address = network.ipv6Address[0] || null;
+                        } else {
+                            ipv6Address = network.ipv6Address;
+                        }
+                    }
+                    // Fallback: check if ipAddress contains ":" (IPv6 format)
+                    else if (network.ipAddress && network.ipAddress.includes(":")) {
+                        ipv6Address = network.ipAddress;
+                    }
+                    
+                    if (ipv6Address) {
+                        ipv6El.innerText = ipv6Address;
+                        console.log("[Settings] IPv6 found:", ipv6Address);
+                    } else {
+                        // Fallback to webapis
+                        loadIPv6FromWebapis(networkType, ipv6El);
+                    }
+                },
+                function (error) {
+                    console.log("[Settings] systeminfo IPv6 error:", error);
+                    // Fallback to webapis
+                    loadIPv6FromWebapis(networkType, ipv6El);
+                }
+            );
+            return;
+        }
+
+        // Direct fallback to webapis
+        loadIPv6FromWebapis(networkType, ipv6El);
+        
+    } catch (e) {
+        console.error("[Settings] IPv6 fetch error:", e);
+        ipv6El.innerText = 'N/A';
+    }
+}
+
+/**
+ * Fallback IPv6 loader using webapis.network
+ * Tries multiple methods for compatibility with different TV models
+ */
+function loadIPv6FromWebapis(networkType, ipv6El) {
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            // Try getIpv6() first
+            var ipv6 = null;
+            try {
+                ipv6 = webapis.network.getIpv6(networkType);
+            } catch (e) {
+                console.log("[Settings] getIpv6 not available:", e);
+            }
+            
+            if (ipv6 && ipv6.length > 0) {
+                ipv6El.innerText = ipv6;
+                console.log("[Settings] IPv6 from getIpv6:", ipv6);
+                return;
+            }
+            
+            // Alternative: check if getIp returns IPv6 (some models)
+            try {
+                var ip = webapis.network.getIp(networkType);
+                if (ip && ip.includes(":")) {
+                    ipv6El.innerText = ip;
+                    console.log("[Settings] IPv6 from getIp:", ip);
+                    return;
+                }
+            } catch (e) {
+                console.log("[Settings] getIp fallback failed:", e);
+            }
+            
+            // IPv6 not available
+            ipv6El.innerText = 'N/A';
+            console.log("[Settings] IPv6 not available");
+        } else {
+            ipv6El.innerText = 'N/A';
+        }
+    } catch (e) {
+        console.error("[Settings] webapis IPv6 error:", e);
+        ipv6El.innerText = 'N/A';
     }
 }

@@ -65,7 +65,7 @@ video {
     flex-direction: column;
     justify-content: flex-end;
     pointer-events: auto;
-    z-index: 10;
+    z-index: 1002; /* Above sidebar (1001) */
     opacity: 1;
     transition: opacity 0.3s;
 }
@@ -80,7 +80,7 @@ video {
 
 
 /* ==========================================
-   PREMIUM INFO BAR DESIGN
+   PREMIUM INFO BAR DESIGN - OTT STYLE
    ========================================== */
 
 .info-bar-premium {
@@ -88,18 +88,26 @@ video {
     bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
-    width: 90%;
-    max-width: 1600px;
-    background: rgba(0, 0, 0, 0.75);
-    border: 2px solid #1e90ff;
-    border-radius: 20px;
-    padding: 24px 35px;
+    width: 80%;
+    max-width: 1500px;
+    height: 120px;
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: 16px;
+    padding: 20px 30px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 30px;
-    box-shadow: 0 0 30px rgba(30, 144, 255, 0.3), 0 8px 32px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
+}
+
+/* Info bar position adjustment when sidebar is open */
+.info-bar-premium.sidebar-active {
+    left: calc(50% + 250px);
+    width: calc(80% - 520px);
+    max-width: 950px;
 }
 
 /* Left: Logo Section */
@@ -108,15 +116,15 @@ video {
 }
 
 .info-bar-premium .channel-logo-box {
-    width: 130px;
-    height: 90px;
+    width: 80px;
+    height: 80px;
     background: #ffffff;
     border-radius: 12px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px;
+    padding: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -131,8 +139,9 @@ video {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
+    justify-content: center;
 }
 
 .info-row-primary {
@@ -143,15 +152,15 @@ video {
 
 .info-bar-premium .channel-lcn {
     color: #ffffff;
-    font-size: 42px;
-    font-weight: 800;
+    font-size: 28px;
+    font-weight: 700;
     line-height: 1;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 1px;
 }
 
 .info-bar-premium .channel-name {
     color: #ffffff;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
@@ -162,25 +171,19 @@ video {
 .info-row-secondary {
     display: flex;
     align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-
-.info-row-tertiary {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    flex-wrap: wrap;
+    gap: 12px;
+    flex-wrap: nowrap;
 }
 
 .info-divider {
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 18px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    font-weight: 400;
 }
 
 .info-bar-premium .expiry-info {
-    color: #ffffff;
-    font-size: 18px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 16px;
     font-weight: 500;
 }
 
@@ -189,14 +192,26 @@ video {
     color: #ff4444;
 }
 
+.info-bar-premium .expiry-info.expiry-yellow {
+    color: #fbbf24;
+}
+
+.info-bar-premium .expiry-info.expiry-pink {
+    color: #f472b6;
+}
+
+.info-bar-premium .expiry-info.expiry-active {
+    color: #4ade80;
+}
+
 .info-bar-premium .price-info {
     color: #4ade80;
-    font-size: 20px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
 }
 
 .info-bar-premium .subscription-status {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 500;
 }
 
@@ -208,32 +223,29 @@ video {
     color: #ff4444;
 }
 
-.info-bar-premium .device-id {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 16px;
-    font-weight: 400;
-}
-
 /* Right: Time Section */
 .info-time-section {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 5px;
+    justify-content: center;
+    gap: 6px;
+    min-width: 120px;
 }
 
 .info-bar-premium .current-time {
     color: #ffffff;
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 700;
     line-height: 1;
+    letter-spacing: 0.5px;
 }
 
 .info-bar-premium .current-date {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 18px;
-    font-weight: 500;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 14px;
+    font-weight: 400;
 }
     gap: 4px;
     align-items: flex-end;
@@ -407,9 +419,9 @@ video {
     position: fixed;
     left: 0;
     top: 0;
-    width: 460px;
+    width: 480px;
     height: 100vh;
-    background: rgba(10, 15, 25, 0.75);
+    background: rgba(0, 0, 0, 0.78);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-right: 1px solid rgba(255, 255, 255, 0.1);
@@ -419,6 +431,7 @@ video {
     overflow: hidden;
     transform: translateX(-100%);
     transition: transform 0.3s ease-out;
+    /* Clean flat design - no shadow or fade */
 }
 
 .player-sidebar.open {
@@ -435,19 +448,19 @@ video {
    ========================================== */
 
 .sidebar-main-header {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 18px 24px;
     text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
 }
 
 .sidebar-main-title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(255, 255, 255, 0.85);
     text-transform: uppercase;
-    letter-spacing: 3px;
+    letter-spacing: 4px;
 }
 
 /* ==========================================
@@ -490,13 +503,13 @@ video {
 }
 
 .lang-nav-name {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     color: #00e5ff;
-    min-width: 180px;
+    min-width: 200px;
     text-align: center;
     transition: color 0.3s ease;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 
 /* Language name appears white when sidebar closes */
@@ -636,36 +649,39 @@ video {
 }
 
 .channel-item {
-    width: 100%;
+    width: calc(100% - 24px);
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: 16px 18px;
     min-height: 110px;
+    height: 110px;
     background: transparent;
     border: 2px solid transparent;
     border-radius: 12px;
-    margin: 5px 10px 5px 6px;
+    margin: 5px 12px;
     cursor: pointer;
     outline: none;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
     gap: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .channel-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .channel-item:focus {
-    background: rgba(255, 255, 255, 0.12);
-    border: 2px solid #ffffff;
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, rgba(30, 144, 255, 0.25) 0%, rgba(30, 144, 255, 0.15) 100%);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 25px rgba(30, 144, 255, 0.35), inset 0 0 20px rgba(255, 255, 255, 0.05);
     outline: none;
+    transform: scale(1.01);
 }
 
 .channel-item.active {
-    background: rgba(255, 255, 255, 0.12);
-    border: 2px solid #ffffff;
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, rgba(30, 144, 255, 0.25) 0%, rgba(30, 144, 255, 0.15) 100%);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 25px rgba(30, 144, 255, 0.35), inset 0 0 20px rgba(255, 255, 255, 0.05);
 }
 
 /* Channel Info - Name and Price */
@@ -674,7 +690,8 @@ video {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+    justify-content: center;
 }
 
 .channel-item-name {
@@ -684,59 +701,76 @@ video {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    line-height: 1.3;
+    margin-bottom: 4px;
 }
 
 .channel-item-price {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 600;
-    color: #4eff4e;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    color: #4ade80;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    letter-spacing: 0.3px;
 }
 
-/* Channel LCN - Right side */
+/* Channel LCN - Right side (Bold & Prominent) */
 .channel-item-lcn {
     flex-shrink: 0;
-    font-size: 20px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.95);
+    font-size: 26px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 1);
     min-width: 60px;
     text-align: right;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    letter-spacing: 1px;
 }
 
-/* Channel Logo - Left side */
+/* Channel Logo - Left side (Large & Visible) */
 .channel-item-logo {
-    width: 80px;
-    height: 80px;
+    width: 85px;
+    height: 85px;
+    min-width: 85px;
+    min-height: 85px;
     flex-shrink: 0;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 8px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
 }
 
 .channel-item-logo img {
     width: 70px;
     height: 70px;
+    min-width: 70px;
+    min-height: 70px;
+    max-width: 70px;
+    max-height: 70px;
     object-fit: contain;
-    filter: brightness(1.1) contrast(1.05);
+    filter: brightness(1) contrast(1.05);
 }
 
 .channel-item-logo .logo-placeholder {
     width: 70px;
     height: 70px;
+    min-width: 70px;
+    min-height: 70px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(0, 0, 0, 0.7);
     text-transform: uppercase;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(200, 200, 200, 0.5);
     border-radius: 8px;
 }
 
@@ -744,16 +778,25 @@ video {
 .channel-item:focus .channel-item-name,
 .channel-item.active .channel-item-name {
     color: #ffffff;
+    text-shadow: 0 2px 8px rgba(255, 255, 255, 0.3);
 }
 
 .channel-item:focus .channel-item-price,
 .channel-item.active .channel-item-price {
-    color: #ffffff;
+    color: #4ade80;
+    text-shadow: 0 2px 6px rgba(74, 222, 128, 0.4);
 }
 
 .channel-item:focus .channel-item-lcn,
 .channel-item.active .channel-item-lcn {
     color: #ffffff;
+    text-shadow: 0 2px 8px rgba(255, 255, 255, 0.3);
+}
+
+.channel-item:focus .channel-item-logo,
+.channel-item.active .channel-item-logo {
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
 /* Legacy compatibility - keep old classes for backward compatibility */
@@ -796,120 +839,10 @@ video {
     overflow-x: hidden;
 }
 
-.category-item {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #9ca3af;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s ease;
-    text-align: left;
-}
-
-.category-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    color: #fff;
-}
-
-.category-item:focus {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid #FFFFFF;
-    color: #fff;
-    box-shadow: none;
-}
-
-.category-item.active {
-    background: rgba(255, 255, 255, 0.15);
-    border: 2px solid #FFFFFF;
-    color: #fff;
-}
+/* Legacy category-item styles removed - see main .category-item definition above */
 
 .channels-section {
     flex: 1;
 }
 
-.channels-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    overflow-y: auto;
-}
-
-.channels-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.channels-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.channels-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-}
-
-.channels-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.channel-item {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #d1d5db;
-    padding: 10px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 400;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s ease;
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.channel-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: #fff;
-}
-
-.channel-item:focus {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: #3b82f6;
-    color: #fff;
-    box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
-}
-
-.channel-item.active {
-    background: rgba(59, 130, 246, 0.3);
-    border-color: #3b82f6;
-    color: #fff;
-}
-
-.channel-item-number {
-    min-width: 30px;
-    font-weight: 600;
-    opacity: 0.8;
-}
-
-.channel-item-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.channel-item-logo {
-    width: 24px;
-    height: 24px;
-    border-radius: 2px;
-    object-fit: cover;
-    opacity: 0.8;
-}
+/* Legacy channel-item styles removed - see main .channel-item definition above */

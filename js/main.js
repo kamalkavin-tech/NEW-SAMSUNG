@@ -190,22 +190,42 @@ function showIPv6() {
     if (!ipv6Text) return;
 
     try {
-        // First try tizen.systeminfo API (recommended for IPv6)
+        // First try tizen.systeminfo API (recommended for IPv6 on Tizen 5.0+)
         if (typeof tizen !== 'undefined' && tizen.systeminfo) {
             tizen.systeminfo.getPropertyValue(
                 "NETWORK",
                 function (network) {
-                    console.log("IPv4:", network.ipAddress);
-                    console.log("IPv6:", network.ipv6Address);
+                    // Log full network object for debugging
+                    console.log("[IPv6] Network Info:", JSON.stringify(network));
+                    console.log("[IPv6] IPv4:", network.ipAddress);
+                    console.log("[IPv6] IPv6:", network.ipv6Address);
                     
+                    var ipv6Address = "N/A";
+                    
+                    // Check IPv6 array/string first
                     if (network.ipv6Address && network.ipv6Address.length > 0) {
-                        ipv6Text.innerText = network.ipv6Address;
+                        // May be array or string depending on firmware
+                        if (Array.isArray(network.ipv6Address)) {
+                            ipv6Address = network.ipv6Address[0] || "N/A";
+                        } else {
+                            ipv6Address = network.ipv6Address;
+                        }
+                    }
+                    // Fallback: check if ipAddress contains ":" (IPv6 format)
+                    else if (network.ipAddress && network.ipAddress.includes(":")) {
+                        ipv6Address = network.ipAddress;
+                    }
+                    
+                    if (ipv6Address && ipv6Address !== "N/A") {
+                        ipv6Text.innerText = ipv6Address;
+                        console.log("[IPv6] Found:", ipv6Address);
                     } else {
-                        ipv6Text.innerText = "N/A";
+                        // Try webapis fallback
+                        tryWebapisNetwork();
                     }
                 },
                 function (error) {
-                    console.log("Network Info Error:", error);
+                    console.log("[IPv6] systeminfo error:", error);
                     // Fallback to webapis.network
                     tryWebapisNetwork();
                 }
@@ -217,7 +237,7 @@ function showIPv6() {
         tryWebapisNetwork();
         
     } catch (e) {
-        console.error("IPv6 Fetch Error:", e);
+        console.error("[IPv6] Fetch Error:", e);
         ipv6Text.innerText = "N/A";
     }
     
@@ -231,22 +251,41 @@ function showIPv6() {
                     return;
                 }
 
-                // Try to get IPv6 address from Tizen Network API
-                var ipv6 = webapis.network.getIpv6(networkType);
+                // Try getIpv6() first
+                var ipv6 = null;
+                try {
+                    ipv6 = webapis.network.getIpv6(networkType);
+                } catch (e) {
+                    console.log("[IPv6] getIpv6 not available:", e);
+                }
+                
                 if (ipv6 && ipv6.length > 0) {
                     ipv6Text.innerText = ipv6;
-                    console.log("Device IPv6:", ipv6);
-                } else {
-                    // IPv6 not available - show N/A
-                    ipv6Text.innerText = "N/A";
-                    console.log("IPv6 not available from Tizen API");
+                    console.log("[IPv6] from getIpv6:", ipv6);
+                    return;
                 }
+                
+                // Alternative: check if getIp returns IPv6 (some models)
+                try {
+                    var ip = webapis.network.getIp(networkType);
+                    if (ip && ip.includes(":")) {
+                        ipv6Text.innerText = ip;
+                        console.log("[IPv6] from getIp:", ip);
+                        return;
+                    }
+                } catch (e) {
+                    console.log("[IPv6] getIp fallback failed:", e);
+                }
+                
+                // IPv6 not available
+                ipv6Text.innerText = "N/A";
+                console.log("[IPv6] not available from Tizen API");
             } else {
                 // Fallback for non-Tizen devices
                 ipv6Text.innerText = "N/A";
             }
         } catch (e) {
-            console.error("webapis IPv6 Fetch Error:", e);
+            console.error("[IPv6] webapis error:", e);
             ipv6Text.innerText = "N/A";
         }
     }

@@ -25,6 +25,7 @@
 var focusables = [];
 var currentFocus = 0;
 var allChannels = [];
+var currentDisplayedChannels = []; // Track currently filtered/displayed channels for LCN search
 var allCategories = []; // Store categories globally
 var currentCategory = "All";
 var currentLanguage = "All";
@@ -61,14 +62,8 @@ window.onload = function () {
     // Add zone tracking listeners
     addZoneTrackingListeners();
     
-    // Set initial focus on sidebar language selector
-    setTimeout(function() {
-        var langText = document.getElementById('selectedLanguageText');
-        if (langText) {
-            langText.focus();
-            currentZone = 'sidebar';
-        }
-    }, 300);
+    // Initial focus will be set by setInitialFocus() called from initPage()
+    // (Sidebar is hidden on this page, so we don't focus sidebar elements)
 
     // Register All Remote Keys (supports all Samsung remote types)
     if (typeof RemoteKeys !== 'undefined') {
@@ -727,7 +722,8 @@ async function loadChannels(options = {}) {
         const apiOptions = {
             grid: options.grid || "",
             langid: options.langid || "",
-            search: options.search || ""
+            search: options.search || "",
+            subscribed: options.subscribed || ""
         };
 
         let response = await BBNL_API.getChannelList(apiOptions);
@@ -765,6 +761,9 @@ async function loadChannels(options = {}) {
 function renderAllChannels(channels) {
     const container = document.getElementById("channel-grid-container");
     container.innerHTML = "";
+
+    // Store currently displayed channels for LCN search
+    currentDisplayedChannels = channels;
 
     if (channels.length === 0) {
         container.innerHTML = '<div class="loading-spinner">No channels found</div>';
@@ -884,15 +883,28 @@ document.addEventListener("keydown", function (e) {
             moveToFirstCategoryPill();
             return;
         }
-        // Check if we came from language filter
+        // Check if we came from language filter (either from home page or language-select)
         var selectedLang = sessionStorage.getItem('selectedLanguageId');
+        var focusedLangIndex = sessionStorage.getItem('homeFocusedLanguageIndex');
+        
         if (selectedLang && selectedLang !== '') {
-            console.log('[Channels] Navigating back to language-select (filtered view)');
-            // Clear the filter and go to language-select
+            // Clear the language filter
             sessionStorage.removeItem('selectedLanguageId');
             sessionStorage.removeItem('selectedLanguageName');
-            window.location.href = "language-select.html";
+            
+            // If user came from home page language selection, go back to home with focus preserved
+            if (focusedLangIndex !== null) {
+                console.log('[Channels] Returning to home page (language card focus preserved)');
+                sessionStorage.setItem('returningFromChannels', 'true');
+                window.location.href = "home.html";
+            } else {
+                // User came from language-select page
+                console.log('[Channels] Navigating back to language-select');
+                window.location.href = "language-select.html";
+            }
         } else {
+            // No language filter, just go back to home
+            sessionStorage.setItem('returningFromChannels', 'true');
             window.location.href = "home.html";
         }
         return;
@@ -987,8 +999,8 @@ function handleDownNavigation() {
         // DOWN in sidebar: Navigate through sidebar elements
         handleSidebarDownNavigation();
     } else if (currentZone === 'topControls') {
-        // DOWN from Back/Search: Move to first channel card
-        moveToFirstChannelCard();
+        // DOWN from Back/Search: Move to first category pill
+        moveToFirstCategoryPill();
     } else if (currentZone === 'tabs') {
         // DOWN from tabs: Move to first channel card
         moveToFirstChannelCard();
@@ -1009,19 +1021,19 @@ function handleUpNavigation() {
         // Already at top, do nothing
         console.log('[UP] Already at top controls');
     } else if (currentZone === 'tabs') {
-        // UP from tabs: Move to top controls
-        if (lastTopControlElement) {
-            lastTopControlElement.focus();
+        // UP from tabs: Move to back button (top controls)
+        var backBtn = document.querySelector('.back-btn');
+        if (backBtn) {
+            backBtn.focus();
             currentZone = 'topControls';
-        } else {
-            moveToBackButton();
+            console.log('[UP] Moved from tabs to back button');
         }
     } else if (currentZone === 'cards') {
-        // UP in cards: Try to move up in grid, or go to top controls
+        // UP in cards: Try to move up in grid, or go to tabs
         var moved = moveWithinCardsGrid(0, -1);
         if (!moved) {
-            // At top row, move to top controls
-            moveToBackButton();
+            // At top row, move to category pills (tabs)
+            moveToFirstCategoryPill();
         }
     }
 }
@@ -1030,33 +1042,23 @@ function handleUpNavigation() {
 function handleLeftNavigation() {
     console.log('[LEFT] Zone:', currentZone);
 
-    if (currentZone === 'sidebar') {
-        // LEFT in sidebar: Handle language selector left arrow
-        handleSidebarLeftNavigation();
-    } else if (currentZone === 'topControls') {
-        // LEFT in top controls: Move between Search and Back, or to sidebar
+    if (currentZone === 'topControls') {
+        // LEFT in top controls: Move between Search and Back
         var topControls = Array.from(document.querySelectorAll('.back-btn, .search-input'));
         var currentIndex = topControls.indexOf(document.activeElement);
 
         if (currentIndex > 0) {
             topControls[currentIndex - 1].focus();
-        } else if (currentIndex === 0) {
-            // At back button, go to sidebar
-            focusSidebarLanguage();
         }
+        // At back button - stay there (no sidebar on this page)
     } else if (currentZone === 'tabs') {
-        // LEFT in tabs: Move to previous pill, or to sidebar
-        var moved = moveWithinTabs(-1);
-        if (!moved) {
-            focusSidebarLanguage();
-        }
+        // LEFT in tabs: Move to previous pill
+        moveWithinTabs(-1);
+        // If at first pill, stay there (no sidebar on this page)
     } else if (currentZone === 'cards') {
-        // LEFT in cards: Move left in grid, or to sidebar
-        var moved = moveWithinCardsGrid(-1, 0);
-        if (!moved) {
-            // At first column, move to sidebar
-            focusSidebarLanguage();
-        }
+        // LEFT in cards: Move left in grid
+        moveWithinCardsGrid(-1, 0);
+        // If at first column, stay there (no sidebar on this page)
     }
 }
 
@@ -1433,10 +1435,20 @@ function playChannelByLCN(lcn) {
 }
 
 function findAndPlayLCN(lcn) {
-    var channel = allChannels.find(function (ch) {
+    // First search in currently displayed/filtered channels
+    var channel = currentDisplayedChannels.find(function (ch) {
         var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
         return chNo === lcn;
     });
+
+    // If not found in filtered channels, search in all channels
+    if (!channel) {
+        console.log("[Channels] LCN", lcn, "not in filtered list, searching all channels...");
+        channel = allChannels.find(function (ch) {
+            var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
+            return chNo === lcn;
+        });
+    }
 
     if (channel) {
         console.log("[Channels] Found LCN", lcn, ":", channel.chtitle || channel.channel_name);

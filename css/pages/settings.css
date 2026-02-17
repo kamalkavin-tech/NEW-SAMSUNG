@@ -598,6 +598,14 @@ input:checked + .slider:before {
     font-weight: 500;
 }
 
+/* IPv6 value - handle long addresses */
+#device-ipv6 {
+    font-size: 14px;
+    word-break: break-all;
+    line-height: 1.4;
+    max-width: 280px;
+}
+
 /* Simple Info Row (About App) */
 .info-row-simple {
     display: flex;

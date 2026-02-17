@@ -367,11 +367,17 @@ function setupPlayer(channel) {
 
     // Expiry Date with color-coded indicators
     const uiExpiry = document.getElementById("ui-expiry");
+    const channelPrice = parseFloat(channel.chprice || channel.chPrice || channel.price || 0);
+    
     if (uiExpiry) {
         // Remove all previous expiry classes
         uiExpiry.classList.remove('expiry-pink', 'expiry-yellow', 'expiry-red', 'expiry-expired', 'expiry-active');
 
-        if (channel.expirydate && channel.expirydate.trim() !== "") {
+        // Check if it's a free channel (price = 0)
+        if (channelPrice === 0) {
+            uiExpiry.innerText = "Free";
+            uiExpiry.classList.add('expiry-active');
+        } else if (channel.expirydate && channel.expirydate.trim() !== "") {
             const expiryDate = new Date(channel.expirydate);
             const today = new Date();
             today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
@@ -480,10 +486,10 @@ function setupPlayer(channel) {
         uiSubscription.classList.remove('subscribed-yes', 'subscribed-no');
         
         if (isSubscribed) {
-            uiSubscription.innerText = "Subscribed: Yes";
+            uiSubscription.innerText = "Subscribed : Yes";
             uiSubscription.classList.add('subscribed-yes');
         } else {
-            uiSubscription.innerText = "Subscribed: No";
+            uiSubscription.innerText = "Subscribed : No";
             uiSubscription.classList.add('subscribed-no');
         }
     }
@@ -491,7 +497,12 @@ function setupPlayer(channel) {
     // Update Price display
     const uiPrice = document.getElementById("ui-price");
     if (uiPrice) {
-        uiPrice.innerText = "₹ " + price;
+        const priceVal = parseFloat(price) || 0;
+        if (priceVal > 0) {
+            uiPrice.innerText = "Channel Price ₹ : " + priceVal.toFixed(2);
+        } else {
+            uiPrice.innerText = "Free";
+        }
     }
 
     // Update Device ID display
@@ -1312,20 +1323,30 @@ function openSidebar() {
         // Categories hidden - focus first channel
         var firstChannel = document.querySelector('.channel-item');
         if (firstChannel) {
-            firstChannel.focus();
             sidebarState.currentLevel = 'channels';
             sidebarState.channelIndex = 0;
+            // Use focusChannelItem for proper focus management
+            focusChannelItem(0);
+            console.log("[Sidebar] Initial focus set to first channel");
         }
     } else {
         // Categories visible - focus first category
         var firstCat = document.querySelector('.category-item');
         if (firstCat) {
             firstCat.focus();
+            sidebarState.categoryIndex = 0;
+            console.log("[Sidebar] Initial focus set to first category");
         }
     }
 
     // Show info bar together with sidebar (force show)
     showInfoBarForced();
+
+    // Add class to shift info bar to the right
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.add('sidebar-active');
+    }
 
     // Start auto-hide timer (5 seconds)
     resetSidebarInactivityTimer();
@@ -1341,16 +1362,24 @@ function closeSidebar() {
     var sidebar = document.getElementById('playerSidebar');
     if (!sidebar) return;
 
+    // Mark sidebar as closing
+    sidebarState.isOpen = false;
+
     sidebar.classList.add('close');
     setTimeout(function () {
         sidebar.classList.remove('open', 'close');
-        sidebarState.isOpen = false;
     }, 300);
 
     // Clear sidebar inactivity timer
     clearSidebarInactivityTimer();
     
-    // Also hide info bar
+    // Remove sidebar-active class from info bar
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.remove('sidebar-active');
+    }
+    
+    // Also hide info bar together with sidebar
     hideOverlay();
 
     console.log("[Sidebar] Closed - info bar hidden together");
@@ -1359,6 +1388,7 @@ function closeSidebar() {
 /**
  * Reset sidebar inactivity timer
  * Called on every key press while sidebar is open
+ * Timer resets at ALL navigation levels (language, categories, channels)
  */
 function resetSidebarInactivityTimer() {
     // Clear existing timer
@@ -1369,13 +1399,20 @@ function resetSidebarInactivityTimer() {
         return;
     }
 
-    // Start new timer
+    // Keep info bar visible while sidebar is open
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+    }
+
+    // Start new timer - both sidebar and info bar will hide after 5 seconds of inactivity
     sidebarInactivityTimer = setTimeout(function () {
-        console.log("[Sidebar] Inactivity timeout - auto-closing");
+        console.log("[Sidebar] Inactivity timeout (5s) - auto-closing sidebar and info bar");
         closeSidebar();
     }, SIDEBAR_HIDE_DELAY);
 
-    console.log("[Sidebar] Inactivity timer reset (5 seconds) - channel level only");
+    console.log("[Sidebar] Inactivity timer reset (5 seconds)");
 }
 
 /**
@@ -1390,6 +1427,7 @@ function clearSidebarInactivityTimer() {
 
 /**
  * Focus on a specific category item
+ * This properly sets both DOM focus and active class
  */
 function focusCategoryItem(index) {
     if (index < 0 || index >= sidebarState.categories.length) return;
@@ -1400,12 +1438,14 @@ function focusCategoryItem(index) {
     items.forEach(function (item, i) {
         if (i === index) {
             item.classList.add('active');
+            // CRITICAL: Call .focus() to update document.activeElement
+            item.focus();
 
             // Ensure item is fully visible
             setTimeout(function () {
                 item.scrollIntoView({
                     behavior: 'smooth',
-                    block: 'center',  // Center in view for better visibility
+                    block: 'center',
                     inline: 'nearest'
                 });
             }, 50);
@@ -1419,6 +1459,7 @@ function focusCategoryItem(index) {
 
 /**
  * Focus on a specific channel item
+ * This properly sets both DOM focus and active class
  */
 function focusChannelItem(index) {
     if (index < 0 || index >= sidebarState.channels.length) return;
@@ -1429,12 +1470,14 @@ function focusChannelItem(index) {
     items.forEach(function (item, i) {
         if (i === index) {
             item.classList.add('active');
+            // CRITICAL: Call .focus() to update document.activeElement
+            item.focus();
 
-            // Ensure item is fully visible
+            // Ensure item is fully visible with smooth scroll
             setTimeout(function () {
                 item.scrollIntoView({
                     behavior: 'smooth',
-                    block: 'center',  // Center in view for better visibility
+                    block: 'center',
                     inline: 'nearest'
                 });
             }, 50);
@@ -1443,13 +1486,14 @@ function focusChannelItem(index) {
         }
     });
 
-    console.log("[Sidebar] Channel focused:", index);
+    console.log("[Sidebar] Channel focused:", index, "of", sidebarState.channels.length);
 }
 
 /**
  * Handle sidebar keydown navigation - New Layout
  * Language Arrows → Categories → Channels (all visible)
  * Returns true if keydown was handled by sidebar
+ * Timer is reset on EVERY key press to keep sidebar visible during active navigation
  */
 function handleSidebarKeydown(e) {
     if (!sidebarState.isOpen) return false;
@@ -1457,7 +1501,8 @@ function handleSidebarKeydown(e) {
     var code = e.keyCode;
     var handled = false;
 
-    // Reset inactivity timer on EVERY key press
+    // Reset inactivity timer on EVERY key press - this keeps sidebar visible
+    // Timer only fires after 5 seconds of NO key presses
     resetSidebarInactivityTimer();
 
     var activeEl = document.activeElement;
@@ -1498,16 +1543,13 @@ function handleSidebarKeydown(e) {
                 if (categoriesHidden) {
                     // Categories hidden - go directly to first channel
                     sidebarState.currentLevel = 'channels';
-                    var firstChannel = document.querySelector('.channel-item');
-                    if (firstChannel) {
-                        firstChannel.focus();
-                        sidebarState.channelIndex = 0;
-                    }
+                    sidebarState.channelIndex = 0;
+                    focusChannelItem(0);
                 } else {
                     // Categories visible - go to first category
                     sidebarState.currentLevel = 'categories';
-                    var firstCat = document.querySelector('.category-item');
-                    if (firstCat) firstCat.focus();
+                    sidebarState.categoryIndex = 0;
+                    focusCategoryItem(0);
                 }
                 e.preventDefault();
                 handled = true;
@@ -1545,9 +1587,10 @@ function handleSidebarKeydown(e) {
             case 38: // UP
                 if (currentCatIndex > 0) {
                     // Move to previous category
-                    sidebarState.categoryIndex = currentCatIndex - 1;
-                    categories[sidebarState.categoryIndex].focus();
-                    selectCategory(sidebarState.categoryIndex);
+                    var newCatIdx = currentCatIndex - 1;
+                    sidebarState.categoryIndex = newCatIdx;
+                    focusCategoryItem(newCatIdx);
+                    selectCategory(newCatIdx);
                 } else {
                     // At first category, move to language arrow
                     var leftArrow = document.getElementById('langNavLeft');
@@ -1560,17 +1603,15 @@ function handleSidebarKeydown(e) {
             case 40: // DOWN
                 if (currentCatIndex < categories.length - 1) {
                     // Move to next category
-                    sidebarState.categoryIndex = currentCatIndex + 1;
-                    categories[sidebarState.categoryIndex].focus();
-                    selectCategory(sidebarState.categoryIndex);
+                    var newCatIdx = currentCatIndex + 1;
+                    sidebarState.categoryIndex = newCatIdx;
+                    focusCategoryItem(newCatIdx);
+                    selectCategory(newCatIdx);
                 } else {
                     // At last category, move to first channel
                     sidebarState.currentLevel = 'channels';
-                    var firstChannel = document.querySelector('.channel-item');
-                    if (firstChannel) {
-                        firstChannel.focus();
-                        sidebarState.channelIndex = 0;
-                    }
+                    sidebarState.channelIndex = 0;
+                    focusChannelItem(0);
                 }
                 e.preventDefault();
                 handled = true;
@@ -1581,11 +1622,8 @@ function handleSidebarKeydown(e) {
                 selectCategory(currentCatIndex);
                 // Move to channels
                 sidebarState.currentLevel = 'channels';
-                var firstChannel = document.querySelector('.channel-item');
-                if (firstChannel) {
-                    firstChannel.focus();
-                    sidebarState.channelIndex = 0;
-                }
+                sidebarState.channelIndex = 0;
+                focusChannelItem(0);
                 e.preventDefault();
                 handled = true;
                 break;
@@ -1604,8 +1642,11 @@ function handleSidebarKeydown(e) {
     // ==========================================
     if (isOnChannel) {
         var channels = Array.from(document.querySelectorAll('.channel-item'));
-        var currentChIndex = channels.findIndex(function(el) { return el === activeEl; });
-        if (currentChIndex === -1) currentChIndex = sidebarState.channelIndex;
+        // Use sidebarState.channelIndex as the source of truth
+        var currentChIndex = sidebarState.channelIndex;
+        // Clamp to valid range
+        if (currentChIndex < 0) currentChIndex = 0;
+        if (currentChIndex >= channels.length) currentChIndex = channels.length - 1;
         
         // Check if categories are hidden
         var categoriesSection = document.getElementById('sidebarCategoriesSection');
@@ -1626,8 +1667,10 @@ function handleSidebarKeydown(e) {
             case 38: // UP
                 if (currentChIndex > 0) {
                     // Move to previous channel
-                    sidebarState.channelIndex = currentChIndex - 1;
-                    focusChannelItem(sidebarState.channelIndex);
+                    var newIndex = currentChIndex - 1;
+                    sidebarState.channelIndex = newIndex;
+                    focusChannelItem(newIndex);
+                    console.log("[Sidebar] UP: Moving to channel", newIndex);
                 } else {
                     // At first channel
                     if (categoriesHidden) {
@@ -1651,8 +1694,13 @@ function handleSidebarKeydown(e) {
             case 40: // DOWN
                 if (currentChIndex < channels.length - 1) {
                     // Move to next channel
-                    sidebarState.channelIndex = currentChIndex + 1;
-                    focusChannelItem(sidebarState.channelIndex);
+                    var newIndex = currentChIndex + 1;
+                    sidebarState.channelIndex = newIndex;
+                    focusChannelItem(newIndex);
+                    console.log("[Sidebar] DOWN: Moving to channel", newIndex);
+                } else {
+                    // At last channel - stay there
+                    console.log("[Sidebar] DOWN: Already at last channel", currentChIndex);
                 }
                 e.preventDefault();
                 handled = true;
@@ -1686,6 +1734,39 @@ function handleSidebarKeydown(e) {
                 break;
         }
         return handled;
+    }
+
+    // ==========================================
+    // FALLBACK: No specific element focused
+    // Force focus to channels or categories based on current level
+    // ==========================================
+    if (!handled && (code === 38 || code === 40 || code === 37 || code === 39 || code === 13)) {
+        console.log("[Sidebar] No element focused, forcing focus based on current level:", sidebarState.currentLevel);
+        
+        var categoriesSection = document.getElementById('sidebarCategoriesSection');
+        var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
+        
+        if (sidebarState.currentLevel === 'channels' || categoriesHidden) {
+            // Focus current channel
+            var channels = document.querySelectorAll('.channel-item');
+            if (channels.length > 0) {
+                var idx = Math.max(0, Math.min(sidebarState.channelIndex, channels.length - 1));
+                sidebarState.channelIndex = idx;
+                focusChannelItem(idx);
+                handled = true;
+            }
+        } else {
+            // Focus current category
+            var categories = document.querySelectorAll('.category-item');
+            if (categories.length > 0) {
+                var idx = Math.max(0, Math.min(sidebarState.categoryIndex, categories.length - 1));
+                sidebarState.categoryIndex = idx;
+                focusCategoryItem(idx);
+                handled = true;
+            }
+        }
+        
+        e.preventDefault();
     }
 
     return handled;

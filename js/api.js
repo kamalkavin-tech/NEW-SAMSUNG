@@ -817,6 +817,18 @@ const ChannelsAPI = {
             console.log("[ChannelsAPI] Filtered by search=\"" + options.search + "\": " + filteredChannels.length + " channels");
         }
 
+        // Filter by subscribed status (only show channels user is subscribed to)
+        if (options.subscribed && options.subscribed !== "") {
+            filteredChannels = filteredChannels.filter(function (ch) {
+                return ch.subscribed === "yes" ||
+                    ch.subscribed === "1" ||
+                    ch.subscribed === "true" ||
+                    ch.subscribed === true ||
+                    ch.subscribed === 1;
+            });
+            console.log("[ChannelsAPI] Filtered by subscribed=\"" + options.subscribed + "\": " + filteredChannels.length + " channels");
+        }
+
         return filteredChannels;
     },
 

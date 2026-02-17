@@ -647,6 +647,28 @@ function handleClick(element) {
         }
         return;
     }
+
+    // Language item - navigate to channels with language filter
+    if (element.classList.contains('language-item')) {
+        var langId = element.getAttribute('data-langid') || '';
+        var langName = element.getAttribute('data-langname') || '';
+        console.log("[HOME] Language selected via OK key:", langName, "ID:", langId);
+        
+        // Store selected language in sessionStorage for channels page
+        sessionStorage.setItem('selectedLanguageId', langId);
+        sessionStorage.setItem('selectedLanguageName', langName);
+        
+        // Store focused language index for state preservation when returning
+        var languageItems = Array.from(document.querySelectorAll('#home-languages-container .language-item'));
+        var focusedIndex = languageItems.indexOf(element);
+        if (focusedIndex >= 0) {
+            sessionStorage.setItem('homeFocusedLanguageIndex', focusedIndex.toString());
+        }
+        
+        // Navigate to channels page with language filter
+        window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
+        return;
+    }
 }
 
 // ==========================================
@@ -1043,7 +1065,7 @@ function renderLanguagesInHomeGrid(languages) {
     var displayLanguages = languages.slice(0, 9);
 
     // Create minimal language items (logo + name only - NO CIRCLE)
-    displayLanguages.forEach(function (lang) {
+    displayLanguages.forEach(function (lang, index) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
         var langLogo = lang.langlogo || "";
@@ -1054,6 +1076,7 @@ function renderLanguagesInHomeGrid(languages) {
         item.tabIndex = 0;
         item.setAttribute('data-langid', langId);
         item.setAttribute('data-langname', langName);
+        item.setAttribute('data-index', index.toString());
 
         // Display logo directly (no container wrapper)
         if (langLogo && !langLogo.includes('noimage')) {
@@ -1090,6 +1113,8 @@ function renderLanguagesInHomeGrid(languages) {
             // Store selected language in sessionStorage for channels page
             sessionStorage.setItem('selectedLanguageId', langId);
             sessionStorage.setItem('selectedLanguageName', langName);
+            // Store focused index for state preservation when returning
+            sessionStorage.setItem('homeFocusedLanguageIndex', index.toString());
             window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
         });
 
@@ -1120,6 +1145,39 @@ function renderLanguagesInHomeGrid(languages) {
 
     // Refresh focusable elements
     focusables = document.querySelectorAll('.focusable');
+
+    // Restore focus to previously selected language card if returning from channels/player
+    restoreLanguageFocusIfNeeded();
+}
+
+/**
+ * Restore focus to the previously selected language card when returning from channels/player
+ */
+function restoreLanguageFocusIfNeeded() {
+    var savedIndex = sessionStorage.getItem('homeFocusedLanguageIndex');
+    var returningFromChannels = sessionStorage.getItem('returningFromChannels');
+
+    // Only restore focus if we're returning from channels page
+    if (savedIndex !== null && returningFromChannels === 'true') {
+        var index = parseInt(savedIndex, 10);
+        var container = document.getElementById('home-languages-container');
+        if (container) {
+            var languageItems = container.querySelectorAll('.language-item');
+            if (index >= 0 && index < languageItems.length) {
+                setTimeout(function() {
+                    languageItems[index].focus();
+                    languageItems[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    console.log('[HOME] Restored focus to language card index:', index);
+                    // Update nav state to reflect cards zone
+                    if (typeof navState !== 'undefined') {
+                        navState.zone = 'cards';
+                    }
+                }, 200);
+            }
+        }
+        // Clear the flag after restoring
+        sessionStorage.removeItem('returningFromChannels');
+    }
 }
 
 /**
