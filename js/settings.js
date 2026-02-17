@@ -839,14 +839,73 @@ function loadIPv6FromWebapis(networkType, ipv6El) {
                 console.log("[Settings] getIp fallback failed:", e);
             }
             
-            // IPv6 not available
-            ipv6El.innerText = 'N/A';
-            console.log("[Settings] IPv6 not available");
+            // IPv6 not available from Tizen - try external API
+            loadIPv6FromExternalAPI(ipv6El);
         } else {
-            ipv6El.innerText = 'N/A';
+            // No Tizen API - try external API
+            loadIPv6FromExternalAPI(ipv6El);
         }
     } catch (e) {
         console.error("[Settings] webapis IPv6 error:", e);
-        ipv6El.innerText = 'N/A';
+        loadIPv6FromExternalAPI(ipv6El);
     }
+}
+
+/**
+ * Load IPv6 from external API services (for browser/emulator)
+ */
+function loadIPv6FromExternalAPI(ipv6El) {
+    console.log("[Settings] Trying external IPv6 API services...");
+    
+    var ipv6Services = [
+        'https://api64.ipify.org?format=json',
+        'https://v6.ident.me/.json',
+        'https://ipv6.icanhazip.com'
+    ];
+    
+    function tryService(index) {
+        if (index >= ipv6Services.length) {
+            ipv6El.innerText = 'N/A';
+            console.log("[Settings] All external IPv6 services failed or no IPv6 available");
+            return;
+        }
+        
+        var service = ipv6Services[index];
+        console.log("[Settings] Trying IPv6 service:", service);
+        
+        fetch(service, { timeout: 3000 })
+            .then(function(response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                var contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json();
+                } else {
+                    return response.text();
+                }
+            })
+            .then(function(data) {
+                var ip = null;
+                if (typeof data === 'string') {
+                    ip = data.trim();
+                } else {
+                    ip = data.ip || data.IP || data.address || null;
+                }
+                
+                // Check if it's actually an IPv6 address (contains :)
+                if (ip && ip.includes(":")) {
+                    ipv6El.innerText = ip;
+                    console.log("[Settings] IPv6 found via external API:", ip);
+                } else {
+                    // Not IPv6, try next service
+                    console.log("[Settings] Response was IPv4, trying next...");
+                    tryService(index + 1);
+                }
+            })
+            .catch(function(error) {
+                console.log("[Settings] IPv6 service failed:", service, error);
+                tryService(index + 1);
+            });
+    }
+    
+    tryService(0);
 }
