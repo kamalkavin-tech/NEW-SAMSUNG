@@ -650,9 +650,8 @@ function loadNetworkInfo(deviceInfo, isTizen) {
             }, null)) || 'N/A');
 
         } else {
+            // Browser/Emulator mode - use external APIs for IP addresses
             setElementText('device-connection-type', 'Browser/Emulator');
-            setElementText('device-ipv4', 'N/A');
-            setElementText('device-ipv6', 'N/A');
             setElementText('device-gateway', 'N/A');
             setElementText('device-dns', 'N/A');
             setElementText('device-wifi-mac', 'N/A');
@@ -661,6 +660,10 @@ function loadNetworkInfo(deviceInfo, isTizen) {
             if (connectionStatus) {
                 connectionStatus.innerText = 'Emulator Mode';
             }
+            
+            // Load IP addresses from external APIs
+            loadIPv4FromExternalAPI();
+            loadIPv6FromExternalAPI(document.getElementById('device-ipv6'));
         }
     } catch (e) {
         console.error("[Settings] Network info error:", e);
@@ -744,6 +747,66 @@ function initDarkMode() {
     } else {
         document.body.classList.add('light-mode');
     }
+}
+
+/**
+ * Load IPv4 Address from external API services (for browser/emulator)
+ */
+function loadIPv4FromExternalAPI() {
+    var ipv4El = document.getElementById('device-ipv4');
+    if (!ipv4El) return;
+    
+    console.log("[Settings] Loading IPv4 from external API...");
+    ipv4El.innerText = 'Loading...';
+    
+    var ipv4Services = [
+        'https://api.ipify.org?format=json',
+        'https://ipinfo.io/json',
+        'https://ipv4.icanhazip.com'
+    ];
+    
+    function tryService(index) {
+        if (index >= ipv4Services.length) {
+            ipv4El.innerText = 'N/A';
+            console.log("[Settings] All IPv4 services failed");
+            return;
+        }
+        
+        var service = ipv4Services[index];
+        console.log("[Settings] Trying IPv4 service:", service);
+        
+        fetch(service)
+            .then(function(response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                var contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json();
+                } else {
+                    return response.text();
+                }
+            })
+            .then(function(data) {
+                var ip = null;
+                if (typeof data === 'string') {
+                    ip = data.trim();
+                } else {
+                    ip = data.ip || data.IP || null;
+                }
+                
+                if (ip) {
+                    ipv4El.innerText = ip;
+                    console.log("[Settings] IPv4 found:", ip);
+                } else {
+                    tryService(index + 1);
+                }
+            })
+            .catch(function(error) {
+                console.log("[Settings] IPv4 service error:", error);
+                tryService(index + 1);
+            });
+    }
+    
+    tryService(0);
 }
 /**
  * Load IPv6 Address using tizen.systeminfo first, then fallback to webapis.network
