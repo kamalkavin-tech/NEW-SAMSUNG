@@ -59,16 +59,12 @@ window.onload = function () {
             el.focus();
         });
 
-        // Handle mouse clicks (skip getOtpBtn - it has its own handler via handleOK)
+        // Handle mouse clicks
         el.addEventListener("click", function (e) {
-            // Skip OTP button to prevent double triggering
-            if (el.id === 'getOtpBtn') {
-                // Only trigger if button is enabled
-                if (!el.disabled && !otpRequestInProgress) {
-                    console.log("Get OTP button clicked directly");
-                    e.preventDefault();
-                    handleOK();
-                }
+            // Skip OTP button entirely - handled only via handleOK from keydown
+            if (el.id === 'getOtpBtn' || el.id === 'verifyBtn') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
                 return;
             }
             console.log("Click detected on:", el.id || el.className);
@@ -717,11 +713,12 @@ document.addEventListener("keydown", function (e) {
             // Enter - submit OTP request (only if 10 digits and not already in progress)
             if (e.keyCode === 13) {
                 e.preventDefault();
+                e.stopImmediatePropagation();
                 var getOtpBtn = document.getElementById('getOtpBtn');
                 if (getOtpBtn && !getOtpBtn.disabled && !otpRequestInProgress && active.value.length === 10) {
                     console.log("[Login] Enter pressed on phone input - triggering OTP request");
+                    currentFocus = Array.from(focusables).indexOf(getOtpBtn);
                     getOtpBtn.focus();
-                    // Call handleOK directly instead of click to avoid double trigger
                     handleOK();
                 }
                 return;
@@ -912,15 +909,7 @@ function handleOK() {
                     if (response && response.status && response.status.err_code === 0) {
                         console.log("[Login] ✅ OTP sent successfully");
 
-                        // Show OTP code if available (for testing)
-                        if (response.body && response.body[0] && response.body[0].otpcode) {
-                            console.log("[Login] OTP Code:", response.body[0].otpcode);
-                            alert("OTP sent successfully!\n\nFor testing: " + response.body[0].otpcode);
-                        } else {
-                            alert("OTP sent successfully to " + val);
-                        }
-
-                        // Navigate to verify page
+                        // Navigate to verify page directly (no popup)
                         window.location.href = "verify.html?mobile=" + val + "&userid=" + userIdToUse;
                     } else {
                         console.error("[Login] ❌ OTP request failed:", response);
@@ -1015,9 +1004,7 @@ function handleOK() {
                         localStorage.setItem('hasLoggedInOnce', 'true');
                         console.log("[Verify] ✅ hasLoggedInOnce flag set - future app launches will skip login");
 
-                        alert("Login successful!");
-
-                        // Navigate to home page using replace to prevent back navigation to login
+                        // Navigate to home page directly (no popup)
                         window.location.replace("home.html");
                     } else {
                         console.error("[Verify] ❌ OTP verification failed:", response);
