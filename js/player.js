@@ -820,7 +820,7 @@ var sidebarState = {
     channelIndex: 0,
     languages: [
         { name: 'All Channels', code: 'all' },
-        { name: 'Subscribed', code: 'subscribed' }
+        { name: 'Subscribed Channels', code: 'subscribed' }
         // More languages loaded dynamically from API
     ],
     categories: [],
@@ -864,7 +864,7 @@ async function loadLanguagesFromChannels() {
     // Build languages array with special entries first
     sidebarState.languages = [
         { name: 'All Channels', code: 'all' },
-        { name: 'Subscribed', code: 'subscribed' }
+        { name: 'Subscribed Channels', code: 'subscribed' }
     ];
 
     // Try to fetch languages from API first
@@ -873,12 +873,19 @@ async function loadLanguagesFromChannels() {
         if (apiLanguages && apiLanguages.length > 0) {
             console.log("[Sidebar] Got", apiLanguages.length, "languages from API");
             
-            // Add languages from API
+            // Add languages from API (skip duplicates of built-in entries)
             apiLanguages.forEach(function(lang) {
                 var langName = lang.langtitle || lang.langname || lang.title || lang.name || '';
                 var langId = lang.langid || lang.id || '';
-                
+
                 if (langName && langName.trim() !== '') {
+                    var lower = langName.trim().toLowerCase();
+                    // Skip if it matches built-in entries
+                    if (lower === 'all channels' || lower === 'all' ||
+                        lower === 'subscribed' || lower === 'subscribed channels' ||
+                        lower.includes('subscribed')) {
+                        return;
+                    }
                     sidebarState.languages.push({
                         name: langName.trim(),
                         code: langId.toString(),
@@ -904,8 +911,14 @@ async function loadLanguagesFromChannels() {
         }
     });
 
-    // Add dynamic languages from channel data
+    // Add dynamic languages from channel data (skip duplicates of built-in entries)
     languageSet.forEach(function(lang) {
+        var lower = lang.toLowerCase();
+        if (lower === 'all channels' || lower === 'all' ||
+            lower === 'subscribed' || lower === 'subscribed channels' ||
+            lower.includes('subscribed')) {
+            return;
+        }
         sidebarState.languages.push({
             name: lang,
             code: lang.toLowerCase()
@@ -1296,8 +1309,8 @@ function toggleSidebar() {
 }
 
 /**
- * Open sidebar and set initial focus
- * Also shows info bar at the same time
+ * Open sidebar only - info bar stays hidden
+ * LEFT button triggers this
  */
 function openSidebar() {
     var sidebar = document.getElementById('playerSidebar');
@@ -1307,77 +1320,53 @@ function openSidebar() {
     sidebar.classList.add('open');
     sidebar.classList.remove('close');
 
+    // IMPORTANT: Hide info bar when sidebar opens via LEFT
+    hideOverlay();
+
     // Start at categories level
     sidebarState.currentLevel = 'categories';
-    
+
     // Focus first category or first channel if no categories
     var categoriesSection = document.getElementById('sidebarCategoriesSection');
     var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
-    
+
     if (categoriesHidden) {
-        // Categories hidden - focus first channel
         var firstChannel = document.querySelector('.channel-item');
         if (firstChannel) {
             sidebarState.currentLevel = 'channels';
             sidebarState.channelIndex = 0;
-            // Use focusChannelItem for proper focus management
             focusChannelItem(0);
-            console.log("[Sidebar] Initial focus set to first channel");
         }
     } else {
-        // Categories visible - focus first category
         var firstCat = document.querySelector('.category-item');
         if (firstCat) {
             firstCat.focus();
             sidebarState.categoryIndex = 0;
-            console.log("[Sidebar] Initial focus set to first category");
         }
     }
 
-    // Show info bar together with sidebar (force show)
-    showInfoBarForced();
-
-    // Add class to shift info bar to the right
-    var infoBar = document.querySelector('.info-bar-premium');
-    if (infoBar) {
-        infoBar.classList.add('sidebar-active');
-    }
-
-    // Start auto-hide timer (5 seconds)
+    // Sidebar auto-hide after 5s inactivity
     resetSidebarInactivityTimer();
 
-    console.log("[Sidebar] Opened - info bar shown together");
+    console.log("[Sidebar] Opened - sidebar only, no info bar");
 }
 
 /**
- * Close sidebar with animation
- * Also hides info bar at the same time
+ * Close sidebar only - does NOT affect info bar
  */
 function closeSidebar() {
     var sidebar = document.getElementById('playerSidebar');
     if (!sidebar) return;
 
-    // Mark sidebar as closing
     sidebarState.isOpen = false;
-
     sidebar.classList.add('close');
     setTimeout(function () {
         sidebar.classList.remove('open', 'close');
     }, 300);
 
-    // Clear sidebar inactivity timer
     clearSidebarInactivityTimer();
-    
-    // Remove sidebar-active class from info bar
-    var infoBar = document.querySelector('.info-bar-premium');
-    if (infoBar) {
-        infoBar.classList.remove('sidebar-active');
-    }
-    
-    // Also hide info bar together with sidebar
-    hideOverlay();
 
-    console.log("[Sidebar] Closed - info bar hidden together");
+    console.log("[Sidebar] Closed");
 }
 
 /**
@@ -1386,28 +1375,17 @@ function closeSidebar() {
  * Timer resets at ALL navigation levels (language, categories, channels)
  */
 function resetSidebarInactivityTimer() {
-    // Clear existing timer
     clearSidebarInactivityTimer();
 
-    // Only start timer if sidebar is open
     if (!sidebarState.isOpen) {
         return;
     }
 
-    // Keep info bar visible while sidebar is open
-    var overlay = document.querySelector('.player-overlay');
-    if (overlay) {
-        overlay.classList.remove('hidden');
-        overlay.classList.add('visible');
-    }
-
-    // Start new timer - both sidebar and info bar will hide after 5 seconds of inactivity
+    // Auto-close sidebar after 5 seconds of inactivity
     sidebarInactivityTimer = setTimeout(function () {
-        console.log("[Sidebar] Inactivity timeout (5s) - auto-closing sidebar and info bar");
+        console.log("[Sidebar] Inactivity timeout (5s) - auto-closing sidebar");
         closeSidebar();
     }, SIDEBAR_HIDE_DELAY);
-
-    console.log("[Sidebar] Inactivity timer reset (5 seconds)");
 }
 
 /**
@@ -1418,6 +1396,101 @@ function clearSidebarInactivityTimer() {
         clearTimeout(sidebarInactivityTimer);
         sidebarInactivityTimer = null;
     }
+}
+
+// ==========================================
+// SHARED UI TIMER - Sidebar + Info Bar sync
+// ==========================================
+var uiTimer = null;
+
+/**
+ * Show both sidebar and info bar together, start shared 5-second timer
+ */
+function showPlayerUI() {
+    var sidebar = document.getElementById('playerSidebar');
+    var overlay = document.querySelector('.player-overlay');
+    var infoBar = document.querySelector('.info-bar-premium');
+
+    // Show sidebar
+    if (sidebar) {
+        sidebarState.isOpen = true;
+        sidebar.classList.add('open');
+        sidebar.classList.remove('close');
+    }
+
+    // Show info bar
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+    }
+
+    // Add sidebar-active class to shift info bar
+    if (infoBar) {
+        infoBar.classList.add('sidebar-active');
+    }
+
+    // Clear any independent overlay timer - sidebar controls info bar
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+        overlayTimeout = null;
+    }
+
+    // Start shared timer
+    resetUITimer();
+    console.log("[PlayerUI] Sidebar + Info Bar shown together");
+}
+
+/**
+ * Reset the shared UI timer (called on every key press inside sidebar)
+ */
+function resetUITimer() {
+    if (uiTimer) clearTimeout(uiTimer);
+
+    uiTimer = setTimeout(function () {
+        hidePlayerUI();
+    }, 5000);
+}
+
+/**
+ * Hide both sidebar and info bar together
+ */
+function hidePlayerUI() {
+    var sidebar = document.getElementById('playerSidebar');
+    var overlay = document.querySelector('.player-overlay');
+    var infoBar = document.querySelector('.info-bar-premium');
+
+    // Hide sidebar
+    if (sidebar) {
+        sidebarState.isOpen = false;
+        sidebar.classList.add('close');
+        setTimeout(function () {
+            sidebar.classList.remove('open', 'close');
+        }, 300);
+    }
+
+    // Hide info bar
+    if (overlay) {
+        overlay.classList.remove('visible');
+        overlay.classList.add('hidden');
+    }
+
+    // Remove sidebar-active class
+    if (infoBar) {
+        infoBar.classList.remove('sidebar-active');
+    }
+
+    // Clear timers
+    if (uiTimer) {
+        clearTimeout(uiTimer);
+        uiTimer = null;
+    }
+    clearSidebarInactivityTimer();
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+        overlayTimeout = null;
+    }
+
+    console.log("[PlayerUI] Sidebar + Info Bar hidden together");
 }
 
 /**
@@ -1499,6 +1572,7 @@ function handleSidebarKeydown(e) {
     // Reset inactivity timer on EVERY key press - this keeps sidebar visible
     // Timer only fires after 5 seconds of NO key presses
     resetSidebarInactivityTimer();
+    resetUITimer();
 
     var activeEl = document.activeElement;
 
@@ -1774,8 +1848,34 @@ function playChannelFromSidebar(channel) {
     if (!channel) return;
 
     console.log("[Sidebar] Playing channel:", channel.chtitle || channel.channel_name);
-    closeSidebar();
+
+    // Play the selected channel
     setupPlayer(channel);
+
+    // Show BOTH sidebar + info bar together for 5 seconds
+    // Sidebar is already open, now show info bar alongside it
+    var overlay = document.querySelector('.player-overlay');
+    var infoBar = document.querySelector('.info-bar-premium');
+
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+    }
+    if (infoBar) {
+        infoBar.classList.add('sidebar-active');
+    }
+
+    // Clear any existing timers
+    if (overlayTimeout) { clearTimeout(overlayTimeout); overlayTimeout = null; }
+    if (uiTimer) { clearTimeout(uiTimer); uiTimer = null; }
+    clearSidebarInactivityTimer();
+
+    // Both hide together after 5 seconds
+    uiTimer = setTimeout(function () {
+        hidePlayerUI();
+    }, 5000);
+
+    console.log("[Sidebar] Channel selected - both sidebar + info bar shown for 5s");
 }
 
 /**
@@ -1796,7 +1896,7 @@ function handleKeydown(e) {
 
     // Handle sidebar navigation first if sidebar is open
     if (sidebarState.isOpen && handleSidebarKeydown(e)) {
-        showOverlay();
+        // Sidebar handles its own info bar visibility via shared timer
         return;
     }
 
@@ -1804,7 +1904,6 @@ function handleKeydown(e) {
     if (code === 10253 || code === 77) { // Menu or 'M'
         e.preventDefault();
         toggleSidebar();
-        showOverlay();
         return;
     }
 

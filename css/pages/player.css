@@ -8,7 +8,6 @@
     width: 1920px;
     min-height: 1080px;
     min-width: 1920px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 #player-container {
@@ -88,20 +87,21 @@ video {
     bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 60px);
+    width: calc(100% - 80px);
     max-width: 1800px;
-    height: 145px;
-    background: rgba(20, 20, 20, 0.8);
+    height: 130px;
+    background: rgba(20, 20, 20, 0.85);
     border-radius: 12px;
-    padding: 0 40px;
+    padding: 0 30px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 40px;
+    gap: 20px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
     animation: infoBarFadeIn 0.3s ease-out;
+    overflow: hidden;
 }
 
 @keyframes infoBarFadeIn {
@@ -117,29 +117,31 @@ video {
 
 /* Info bar position adjustment when sidebar is open */
 .info-bar-premium.sidebar-active {
-    left: calc(50% + 180px);
-    width: calc(100% - 420px);
-    max-width: 1400px;
+    left: calc(50% + 210px);
+    width: calc(100% - 510px);
+    max-width: 1350px;
 }
 
 /* LEFT SECTION: Logo + LCN + Channel Name */
 .info-left-section {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
     flex-shrink: 0;
+    max-width: 340px;
+    overflow: hidden;
 }
 
 .info-bar-premium .channel-logo-box {
-    width: 85px;
-    height: 85px;
+    width: 70px;
+    height: 70px;
     background: #ffffff;
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
+    padding: 6px;
     flex-shrink: 0;
 }
 
@@ -151,22 +153,22 @@ video {
 
 .info-bar-premium .channel-lcn {
     color: #ffffff;
-    font-size: 40px;
+    font-size: 28px;
     font-weight: 700;
     line-height: 1;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     flex-shrink: 0;
 }
 
 .info-bar-premium .channel-name {
     color: #ffffff;
-    font-size: 32px;
-    font-weight: 500;
+    font-size: 24px;
+    font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 320px;
+    max-width: 180px;
 }
 
 /* CENTER SECTION: Channel Information Grid */
@@ -174,30 +176,37 @@ video {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 30px;
+    gap: 16px;
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .info-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    min-width: 140px;
+    gap: 6px;
+    min-width: 0;
+    flex-shrink: 1;
 }
 
 .info-label {
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 18px;
+    color: rgba(255, 255, 255, 0.70);
+    font-size: 15px;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 .info-value {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 600;
     line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Price value colors */
@@ -247,21 +256,23 @@ video {
     color: #ff4444;
 }
 
-/* Device ID value */
+/* Device ID value - must show fully */
 .device-value {
     color: #ffffff;
-    font-size: 22px;
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 18px;
     white-space: nowrap;
+}
+
+/* Device ID item should not shrink */
+.info-item:last-child {
+    flex-shrink: 0;
 }
 
 /* Vertical divider line between info items */
 .info-divider-line {
     width: 1px;
-    height: 55px;
-    background: rgba(255, 255, 255, 0.25);
+    height: 40px;
+    background: rgba(255, 255, 255, 0.20);
     flex-shrink: 0;
 }
 
@@ -271,22 +282,21 @@ video {
     flex-direction: column;
     align-items: flex-end;
     justify-content: center;
-    gap: 10px;
+    gap: 4px;
     flex-shrink: 0;
-    min-width: 160px;
+    white-space: nowrap;
 }
 
 .info-bar-premium .current-time {
     color: #ffffff;
-    font-size: 38px;
+    font-size: 30px;
     font-weight: 700;
     line-height: 1;
-    letter-spacing: 0.5px;
 }
 
 .info-bar-premium .current-date {
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 20px;
+    color: rgba(255, 255, 255, 0.70);
+    font-size: 16px;
     font-weight: 400;
 }
 
@@ -464,22 +474,21 @@ video {
    ========================================== */
 
 .player-sidebar {
-    position: fixed;
+    position: absolute;
     left: 0;
     top: 0;
-    width: 480px;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.78);
+    width: 420px;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.60);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    z-index: 1001;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 1003;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     transform: translateX(-100%);
     transition: transform 0.3s ease-out;
-    /* Clean flat design - no shadow or fade */
 }
 
 .player-sidebar.open {
@@ -755,8 +764,8 @@ video {
 }
 
 .channel-item-price {
-    font-size: 17px;
-    font-weight: 600;
+    font-size: 22px;
+    font-weight: 700;
     color: #4ade80;
     text-shadow: 0 1px 3px rgba(0,0,0,0.4);
     letter-spacing: 0.3px;
