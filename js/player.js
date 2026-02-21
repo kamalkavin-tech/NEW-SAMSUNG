@@ -250,13 +250,10 @@ window.onload = function () {
         } catch (e) { }
     }
 
-    // Fetch Channel Context for Zapping (and Lookup)
-    loadChannelList(channelNameParam);
-
-    // Initialize sidebar with categories and channels
-    setTimeout(function () {
+    // Fetch Channel Context for Zapping (and Lookup), then init sidebar
+    loadChannelList(channelNameParam).then(function () {
         initializeSidebar();
-    }, 1000); // Wait for channels to load
+    });
 
     // Events
     document.addEventListener("keydown", handleKeydown);
@@ -333,7 +330,7 @@ async function loadChannelList(lookupName = null) {
 
             // Check if channels have expiry data — if not, refresh after background merge
             var hasExpiry = allChannels.some(function (ch) {
-                return ch.expirydate && ch.expirydate.trim() !== "";
+                return ch.expirydate && String(ch.expirydate).trim() !== "";
             });
 
             if (!hasExpiry) {
@@ -538,12 +535,19 @@ function setupPlayer(channel) {
         }
     }
 
-    // Update Device ID display
+    // Update Device ID display (real TV DUID, not API serial number)
     const uiDeviceId = document.getElementById("ui-device-id");
     if (uiDeviceId) {
-        const device = DeviceInfo.getDeviceInfo();
-        const deviceId = device.devslno || device.mac_address || "Unknown";
-        uiDeviceId.innerText = deviceId;
+        try {
+            if (typeof webapis !== 'undefined' && webapis.productinfo) {
+                var duid = webapis.productinfo.getDuid();
+                uiDeviceId.innerText = duid || "Unknown";
+            } else {
+                uiDeviceId.innerText = "Emulator / Web";
+            }
+        } catch (e) {
+            uiDeviceId.innerText = "Not available";
+        }
     }
 
     // User Info (from session)
@@ -887,15 +891,8 @@ async function initializeSidebar() {
  * Load languages dynamically from channel data
  */
 async function loadLanguagesFromChannels() {
-    // Wait for channels to be available
-    var attempts = 0;
-    while ((!allChannels || allChannels.length === 0) && attempts < 10) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
-    }
-    
+    // Channels are already loaded by loadChannelList() before initializeSidebar() is called
     if (!allChannels || allChannels.length === 0) {
-        console.warn("[Sidebar] No channels available for language extraction");
         return;
     }
 
@@ -1231,8 +1228,6 @@ function filterChannelsByCategory() {
  */
 function loadSidebarChannels() {
     if (!allChannels || allChannels.length === 0) {
-        // Channels not loaded yet, retry later
-        setTimeout(loadSidebarChannels, 1000);
         return;
     }
 

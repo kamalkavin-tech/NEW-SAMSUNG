@@ -4,6 +4,23 @@
  */
 
 // ==========================================
+// PRODUCTION MODE - Silence console output
+// Samsung TV console I/O is extremely slow and causes
+// major performance degradation. This must load FIRST.
+// To debug: set window.__BBNL_DEBUG = true in console
+// ==========================================
+(function () {
+    var noop = function () {};
+    if (!window.__BBNL_DEBUG) {
+        console.log = noop;
+        console.warn = noop;
+        console.info = noop;
+        console.debug = noop;
+        // console.error kept for critical errors
+    }
+})();
+
+// ==========================================
 // API CONFIGURATION
 // ==========================================
 
@@ -592,10 +609,9 @@ const AuthAPI = {
 // CHANNELS API (FIXED)
 // ==========================================
 const ChannelsAPI = {
-    // Dedup flag: prevents multiple simultaneous background refreshes
     _backgroundRefreshInProgress: false,
-    // In-flight fetch promise: prevents duplicate first-load API calls
     _fetchInProgress: null,
+    _expiryMergeInProgress: false,
 
     getCategories: async function () {
         // Check cache first
@@ -707,63 +723,50 @@ const ChannelsAPI = {
 
         // ── CACHE HIT: Return cached data immediately ──
         if (cachedChannels && cachedChannels.length > 0) {
-            console.log("[ChannelsAPI] 📦 Using cached channel data (" + cachedChannels.length + " channels)");
-
-            // Background expiry merge (non-blocking, only if not already merged)
+            // Background expiry merge (non-blocking, deduped)
             var hasExpiry = cachedChannels.some(function (ch) {
-                return ch.expirydate && ch.expirydate.trim() !== "";
+                return ch.expirydate && String(ch.expirydate).trim() !== "";
             });
-            if (!hasExpiry) {
+            if (!hasExpiry && !this._expiryMergeInProgress) {
+                this._expiryMergeInProgress = true;
+                var self = this;
                 this._mergeExpiryData(cachedChannels, userid, mobile, device).then(function (merged) {
+                    self._expiryMergeInProgress = false;
                     if (merged && merged.length > 0) {
                         CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, merged, CacheManager.EXPIRY.CHANNEL_LIST);
                     }
-                }).catch(function () {});
+                }).catch(function () { self._expiryMergeInProgress = false; });
             }
 
-            // Apply filters to cached data and return immediately
             var filteredCached = this._applyFilters(cachedChannels, options);
 
             // Background refresh — only ONE at a time (dedup)
             if (!this._backgroundRefreshInProgress) {
                 this._backgroundRefreshInProgress = true;
                 var self = this;
-                this._fetchAndCacheChannels(userid, mobile, device).then(function (freshChannels) {
+                this._fetchAndCacheChannels(userid, mobile, device).then(function () {
                     self._backgroundRefreshInProgress = false;
-                    if (freshChannels && freshChannels.length > 0) {
-                        console.log("[ChannelsAPI] 🔄 Background refresh done (" + freshChannels.length + " channels)");
-                    }
-                }).catch(function (err) {
+                }).catch(function () {
                     self._backgroundRefreshInProgress = false;
-                    console.warn("[ChannelsAPI] Background refresh failed:", err);
                 });
-            } else {
-                console.log("[ChannelsAPI] ⏭️ Background refresh already running, skipping duplicate");
             }
 
             return filteredCached;
         }
 
-        // ── CACHE MISS: Fetch fresh data ──
-        // Deduplicate: if a fetch is already in-flight, wait for it instead of making another API call
+        // ── CACHE MISS: Deduplicate in-flight fetches ──
         if (this._fetchInProgress) {
-            console.log("[ChannelsAPI] ⏳ Fetch already in-flight, waiting for result...");
             var channels = await this._fetchInProgress;
             return this._applyFilters(channels || [], options);
         }
 
-        console.log("[ChannelsAPI] 🌐 Fetching fresh channel data from API...");
         var self = this;
-        this._fetchInProgress = this._fetchAndCacheChannels(userid, mobile, device).then(function (result) {
+        this._fetchInProgress = this._fetchAndCacheChannels(userid, mobile, device).finally(function () {
             self._fetchInProgress = null;
-            return result;
-        }).catch(function (err) {
-            self._fetchInProgress = null;
-            throw err;
         });
 
         var channels = await this._fetchInProgress;
-        return this._applyFilters(channels, options);
+        return this._applyFilters(channels || [], options);
     },
 
     /**
@@ -830,11 +833,14 @@ const ChannelsAPI = {
             console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
         }
 
-        // Merge expiry dates from expiringchnl_list API
+        // Merge expiry dates from expiringchnl_list API (NON-BLOCKING)
+        // Expiry API can be slow — don't block channel return
         if (channels.length > 0) {
-            channels = await this._mergeExpiryData(channels, userid, mobile, device);
-            // Re-cache with expiry data included
-            CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
+            this._mergeExpiryData(channels, userid, mobile, device).then(function (merged) {
+                if (merged && merged.length > 0) {
+                    CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, merged, CacheManager.EXPIRY.CHANNEL_LIST);
+                }
+            }).catch(function () {});
         }
 
         return channels;
@@ -860,11 +866,13 @@ const ChannelsAPI = {
                     ip_address: device.ip_address
                 };
 
-                var response = await apiCall(
-                    API_ENDPOINTS.CHANNEL_EXPIRING,
-                    payload,
-                    { "devmac": device.mac_address, "devslno": device.devslno }
-                );
+                var timeoutPromise = new Promise(function (_, reject) {
+                    setTimeout(function () { reject(new Error("Expiry API timeout")); }, 10000);
+                });
+                var response = await Promise.race([
+                    apiCall(API_ENDPOINTS.CHANNEL_EXPIRING, payload, { "devmac": device.mac_address, "devslno": device.devslno }),
+                    timeoutPromise
+                ]);
 
                 if (response && response.body && Array.isArray(response.body) &&
                     response.body.length > 0 && response.body[0].channels) {

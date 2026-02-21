@@ -582,13 +582,11 @@ function loadDeviceId(deviceInfo, isTizen) {
     try {
         if (isTizen && webapis.productinfo && webapis.productinfo.getDuid) {
             deviceIdEl.innerText = webapis.productinfo.getDuid() || 'N/A';
-        } else if (deviceInfo && deviceInfo.devslno) {
-            deviceIdEl.innerText = deviceInfo.devslno;
         } else {
-            deviceIdEl.innerText = 'N/A';
+            deviceIdEl.innerText = 'Emulator / Web';
         }
     } catch (e) {
-        deviceIdEl.innerText = 'N/A';
+        deviceIdEl.innerText = 'Not available';
     }
 }
 
