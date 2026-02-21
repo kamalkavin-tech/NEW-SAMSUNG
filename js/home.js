@@ -1961,6 +1961,9 @@ window.addEventListener('load', function () {
     setTimeout(loadHomeAds, 100);
     setTimeout(loadHomeLanguages, 150); // Load languages
 
+    // Pre-warm channel cache early so channels/player pages load instantly
+    setTimeout(loadHomeChannels, 200);
+
     // NOTE: FOFI channel (LCN 999) auto-plays after 3 seconds on home page
     // This is handled in window.onload with setTimeout
     console.log("[HOME] Home page loaded - FoFi auto-play timer started");

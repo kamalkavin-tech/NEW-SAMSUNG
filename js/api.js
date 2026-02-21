@@ -102,15 +102,17 @@ const CacheManager = {
         LANGUAGES: 'bbnl_languages_cache',
         LOGIN_TOKEN: 'bbnl_user',
         FOFI_PLAYED: 'fofiPlayedThisSession',  // Uses sessionStorage
-        LAST_CHANNEL: 'bbnl_last_channel'
+        LAST_CHANNEL: 'bbnl_last_channel',
+        EXPIRING_CHANNELS: 'bbnl_expiring_cache'
     },
 
     // Default cache expiry times (in milliseconds)
     EXPIRY: {
         CHANNEL_LIST: 60 * 60 * 1000,   // 1 hour
-        CATEGORIES: 60 * 60 * 1000,      // 1 hour  
+        CATEGORIES: 60 * 60 * 1000,      // 1 hour
         LANGUAGES: 60 * 60 * 1000,       // 1 hour
-        LAST_CHANNEL: 7 * 24 * 60 * 60 * 1000  // 7 days
+        LAST_CHANNEL: 7 * 24 * 60 * 60 * 1000,  // 7 days
+        EXPIRING_CHANNELS: 60 * 60 * 1000  // 1 hour
     },
 
     /**
@@ -216,6 +218,17 @@ const CacheManager = {
             }
         });
         console.log('[CacheManager] All caches cleared');
+    },
+
+    /**
+     * Clear ALL caches including login token (used on logout)
+     */
+    clear: function () {
+        var self = this;
+        Object.keys(this.KEYS).forEach(function (keyName) {
+            self.remove(self.KEYS[keyName]);
+        });
+        console.log('[CacheManager] All caches cleared (full logout)');
     },
 
     /**
@@ -470,7 +483,7 @@ const AuthAPI = {
         };
 
         console.log("[AuthAPI] Verifying OTP Payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.RESEND_OTP, payload);
+        const response = await apiCall(API_ENDPOINTS.LOGIN, payload);
 
         if (response && response.status && response.status.err_code === 0) {
             this.setSession(response);
@@ -558,10 +571,14 @@ const AuthAPI = {
             console.warn("[AuthAPI] Logout API error (proceeding with local cleanup):", e.message);
         }
 
-        // Always clear local session and redirect regardless of API response
+        // Clear local session data (do NOT redirect — caller handles navigation/exit)
         localStorage.removeItem("bbnl_user");
         sessionStorage.clear();
-        window.location.href = "login.html";
+
+        // Clear all cached data (channels, categories, languages, expiry)
+        CacheManager.clear();
+
+        console.log("[AuthAPI] Logout complete - session and cache cleared");
     },
 
     requireAuth: function () {
@@ -575,6 +592,11 @@ const AuthAPI = {
 // CHANNELS API (FIXED)
 // ==========================================
 const ChannelsAPI = {
+    // Dedup flag: prevents multiple simultaneous background refreshes
+    _backgroundRefreshInProgress: false,
+    // In-flight fetch promise: prevents duplicate first-load API calls
+    _fetchInProgress: null,
+
     getCategories: async function () {
         // Check cache first
         var cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES);
@@ -682,32 +704,65 @@ const ChannelsAPI = {
         // ==========================================
 
         var cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST);
-        var shouldFetchFresh = !cachedChannels;
 
-        // If cache exists but options have filters, we still need to filter cached data
+        // ── CACHE HIT: Return cached data immediately ──
         if (cachedChannels && cachedChannels.length > 0) {
             console.log("[ChannelsAPI] 📦 Using cached channel data (" + cachedChannels.length + " channels)");
+
+            // Background expiry merge (non-blocking, only if not already merged)
+            var hasExpiry = cachedChannels.some(function (ch) {
+                return ch.expirydate && ch.expirydate.trim() !== "";
+            });
+            if (!hasExpiry) {
+                this._mergeExpiryData(cachedChannels, userid, mobile, device).then(function (merged) {
+                    if (merged && merged.length > 0) {
+                        CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, merged, CacheManager.EXPIRY.CHANNEL_LIST);
+                    }
+                }).catch(function () {});
+            }
 
             // Apply filters to cached data and return immediately
             var filteredCached = this._applyFilters(cachedChannels, options);
 
-            // Fetch fresh data in background (non-blocking)
-            this._fetchAndCacheChannels(userid, mobile, device).then(function (freshChannels) {
-                if (freshChannels && freshChannels.length > 0) {
-                    console.log("[ChannelsAPI] 🔄 Background refresh completed (" + freshChannels.length + " channels)");
-                }
-            }).catch(function (err) {
-                console.warn("[ChannelsAPI] Background refresh failed:", err);
-            });
+            // Background refresh — only ONE at a time (dedup)
+            if (!this._backgroundRefreshInProgress) {
+                this._backgroundRefreshInProgress = true;
+                var self = this;
+                this._fetchAndCacheChannels(userid, mobile, device).then(function (freshChannels) {
+                    self._backgroundRefreshInProgress = false;
+                    if (freshChannels && freshChannels.length > 0) {
+                        console.log("[ChannelsAPI] 🔄 Background refresh done (" + freshChannels.length + " channels)");
+                    }
+                }).catch(function (err) {
+                    self._backgroundRefreshInProgress = false;
+                    console.warn("[ChannelsAPI] Background refresh failed:", err);
+                });
+            } else {
+                console.log("[ChannelsAPI] ⏭️ Background refresh already running, skipping duplicate");
+            }
 
             return filteredCached;
         }
 
-        // No valid cache - fetch fresh data
-        console.log("[ChannelsAPI] 🌐 Fetching fresh channel data from API...");
-        var channels = await this._fetchAndCacheChannels(userid, mobile, device);
+        // ── CACHE MISS: Fetch fresh data ──
+        // Deduplicate: if a fetch is already in-flight, wait for it instead of making another API call
+        if (this._fetchInProgress) {
+            console.log("[ChannelsAPI] ⏳ Fetch already in-flight, waiting for result...");
+            var channels = await this._fetchInProgress;
+            return this._applyFilters(channels || [], options);
+        }
 
-        // Apply filters and return
+        console.log("[ChannelsAPI] 🌐 Fetching fresh channel data from API...");
+        var self = this;
+        this._fetchInProgress = this._fetchAndCacheChannels(userid, mobile, device).then(function (result) {
+            self._fetchInProgress = null;
+            return result;
+        }).catch(function (err) {
+            self._fetchInProgress = null;
+            throw err;
+        });
+
+        var channels = await this._fetchInProgress;
         return this._applyFilters(channels, options);
     },
 
@@ -773,6 +828,76 @@ const ChannelsAPI = {
         if (channels.length > 0) {
             CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
             console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
+        }
+
+        // Merge expiry dates from expiringchnl_list API
+        if (channels.length > 0) {
+            channels = await this._mergeExpiryData(channels, userid, mobile, device);
+            // Re-cache with expiry data included
+            CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
+        }
+
+        return channels;
+    },
+
+    /**
+     * Fetch expiring channels and merge expirydate into main channel list
+     */
+    _mergeExpiryData: async function (channels, userid, mobile, device) {
+        try {
+            // Check cache first
+            var cachedExpiring = CacheManager.get(CacheManager.KEYS.EXPIRING_CHANNELS);
+            var expiringList = null;
+
+            if (cachedExpiring) {
+                expiringList = cachedExpiring;
+                console.log("[ChannelsAPI] Using cached expiring channels data");
+            } else {
+                var payload = {
+                    userid: userid,
+                    mobile: mobile,
+                    mac_address: device.mac_address,
+                    ip_address: device.ip_address
+                };
+
+                var response = await apiCall(
+                    API_ENDPOINTS.CHANNEL_EXPIRING,
+                    payload,
+                    { "devmac": device.mac_address, "devslno": device.devslno }
+                );
+
+                if (response && response.body && Array.isArray(response.body) &&
+                    response.body.length > 0 && response.body[0].channels) {
+                    expiringList = response.body[0].channels;
+                    CacheManager.set(CacheManager.KEYS.EXPIRING_CHANNELS, expiringList, CacheManager.EXPIRY.EXPIRING_CHANNELS);
+                    console.log("[ChannelsAPI] Fetched " + expiringList.length + " expiring channels");
+                }
+            }
+
+            if (!expiringList || expiringList.length === 0) return channels;
+
+            // Build lookup map by chid for fast merge
+            var expiryMap = {};
+            for (var i = 0; i < expiringList.length; i++) {
+                var exp = expiringList[i];
+                if (exp.chid && exp.expirydate) {
+                    expiryMap[exp.chid] = exp.expirydate;
+                }
+            }
+
+            // Merge expirydate into main channel list
+            var mergedCount = 0;
+            for (var j = 0; j < channels.length; j++) {
+                var chid = channels[j].chid || channels[j].channelid;
+                if (chid && expiryMap[chid]) {
+                    channels[j].expirydate = expiryMap[chid];
+                    mergedCount++;
+                }
+            }
+
+            console.log("[ChannelsAPI] Merged expiry dates for " + mergedCount + " channels");
+        } catch (e) {
+            console.warn("[ChannelsAPI] Expiry data fetch failed (non-blocking):", e.message);
         }
 
         return channels;

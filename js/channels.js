@@ -119,12 +119,12 @@ function addZoneTrackingListeners() {
 
 async function initPage() {
     try {
-        // FIRST: Load master channel list (ALL channels, no filters)
-        // This is used for LCN search and is NEVER overwritten
-        await loadMasterChannelList();
-        
-        // Fetch Categories
-        const categoryResponse = await BBNL_API.getCategoryList();
+        // Load master channel list + categories IN PARALLEL for faster loading
+        var [masterResult, categoryResponse] = await Promise.all([
+            loadMasterChannelList(),
+            BBNL_API.getCategoryList()
+        ]);
+
         console.log("Categories Fetched:", categoryResponse);
         if (Array.isArray(categoryResponse)) {
             renderCategories(categoryResponse);

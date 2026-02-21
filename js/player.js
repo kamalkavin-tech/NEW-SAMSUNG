@@ -324,10 +324,99 @@ async function loadChannelList(lookupName = null) {
                 currentIndex = allChannels.findIndex(ch =>
                     (ch.chtitle || ch.channel_name) === currentName
                 );
+
+                // Update expiry info from merged data (URL params don't have expirydate)
+                if (currentIndex >= 0 && allChannels[currentIndex]) {
+                    updateExpiryDisplay(allChannels[currentIndex]);
+                }
+            }
+
+            // Check if channels have expiry data — if not, refresh after background merge
+            var hasExpiry = allChannels.some(function (ch) {
+                return ch.expirydate && ch.expirydate.trim() !== "";
+            });
+
+            if (!hasExpiry) {
+                // Background merge is running — wait and re-fetch updated cache
+                setTimeout(async function () {
+                    try {
+                        var freshData = await BBNL_API.getChannelList();
+                        if (Array.isArray(freshData) && freshData.length > 0) {
+                            allChannels = freshData.sort(function (a, b) {
+                                var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
+                                var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+                                return aNo - bNo;
+                            });
+
+                            // Update sidebar with expiry data
+                            if (sidebarState && sidebarState.allChannelsCache) {
+                                sidebarState.allChannelsCache = allChannels;
+                            }
+
+                            // Update current channel expiry display
+                            if (currentIndex >= 0 && allChannels[currentIndex]) {
+                                updateExpiryDisplay(allChannels[currentIndex]);
+                            }
+
+                            console.log("[Player] Channels refreshed with expiry data");
+                        }
+                    } catch (e) {
+                        console.warn("[Player] Expiry refresh failed:", e.message);
+                    }
+                }, 3000);
             }
         }
     } catch (e) {
         console.error("Failed to load channel list in player", e);
+    }
+}
+
+/**
+ * Update expiry display with real data from expiringchnl_list API
+ */
+function updateExpiryDisplay(channel) {
+    var uiExpiry = document.getElementById("ui-expiry");
+    if (!uiExpiry) return;
+
+    var channelPrice = parseFloat(channel.chprice || channel.chPrice || channel.price || 0);
+
+    // Remove all previous expiry classes
+    uiExpiry.classList.remove('expiry-free', 'expiry-active', 'expiry-warning', 'expiry-urgent', 'expiry-critical', 'expiry-expired');
+
+    if (channelPrice === 0) {
+        uiExpiry.innerText = "N/A";
+        uiExpiry.classList.add('expiry-free');
+    } else if (channel.expirydate && channel.expirydate.trim() !== "") {
+        var expiryDate = new Date(channel.expirydate);
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        expiryDate.setHours(0, 0, 0, 0);
+        var diffTime = expiryDate - today;
+        var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 7) {
+            uiExpiry.innerText = diffDays + " days";
+            uiExpiry.classList.add('expiry-active');
+        } else if (diffDays >= 4 && diffDays <= 7) {
+            uiExpiry.innerText = diffDays + " days";
+            uiExpiry.classList.add('expiry-urgent');
+        } else if (diffDays >= 2 && diffDays <= 3) {
+            uiExpiry.innerText = diffDays + " days";
+            uiExpiry.classList.add('expiry-warning');
+        } else if (diffDays === 1) {
+            uiExpiry.innerText = "1 day";
+            uiExpiry.classList.add('expiry-critical');
+        } else if (diffDays === 0) {
+            uiExpiry.innerText = "Today";
+            uiExpiry.classList.add('expiry-critical');
+        } else {
+            uiExpiry.innerText = "Expired";
+            uiExpiry.classList.add('expiry-expired');
+        }
+        console.log("[Player] Expiry updated: " + channel.expirydate + " (" + diffDays + " days)");
+    } else {
+        uiExpiry.innerText = "Active";
+        uiExpiry.classList.add('expiry-active');
     }
 }
 
@@ -365,59 +454,8 @@ function setupPlayer(channel) {
         }
     }
 
-    // Expiry Date with color-coded indicators
-    const uiExpiry = document.getElementById("ui-expiry");
-    const channelPrice = parseFloat(channel.chprice || channel.chPrice || channel.price || 0);
-    
-    if (uiExpiry) {
-        // Remove all previous expiry classes
-        uiExpiry.classList.remove('expiry-free', 'expiry-active', 'expiry-warning', 'expiry-urgent', 'expiry-critical', 'expiry-expired');
-
-        // Check if it's a free channel (price = 0)
-        if (channelPrice === 0) {
-            uiExpiry.innerText = "N/A";
-            uiExpiry.classList.add('expiry-free');
-        } else if (channel.expirydate && channel.expirydate.trim() !== "") {
-            const expiryDate = new Date(channel.expirydate);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
-            expiryDate.setHours(0, 0, 0, 0);
-            const diffTime = expiryDate - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            if (diffDays > 7) {
-                // More than 7 days - normal display
-                uiExpiry.innerText = diffDays + " days";
-                uiExpiry.classList.add('expiry-active');
-            } else if (diffDays >= 4 && diffDays <= 7) {
-                // 4-7 days remaining - Warning (pink)
-                uiExpiry.innerText = diffDays + " days";
-                uiExpiry.classList.add('expiry-urgent');
-            } else if (diffDays >= 2 && diffDays <= 3) {
-                // 2-3 days remaining - Yellow
-                uiExpiry.innerText = diffDays + " days";
-                uiExpiry.classList.add('expiry-warning');
-            } else if (diffDays === 1) {
-                // 1 day remaining - Red
-                uiExpiry.innerText = "1 day";
-                uiExpiry.classList.add('expiry-critical');
-            } else if (diffDays === 0) {
-                // Last day - Red
-                uiExpiry.innerText = "Today";
-                uiExpiry.classList.add('expiry-critical');
-                // Show QR code popup for renewal
-                showRenewalQRCode();
-            } else {
-                // Expired
-                uiExpiry.innerText = "Expired";
-                uiExpiry.classList.add('expiry-expired');
-            }
-        } else {
-            // No expiry or unlimited subscription
-            uiExpiry.innerText = "Active";
-            uiExpiry.classList.add('expiry-active');
-        }
-    }
+    // Expiry Date - use shared function
+    updateExpiryDisplay(channel);
 
     // Program Title (Live Stream)
     const uiTitle = document.getElementById("ui-program-title");

@@ -384,62 +384,64 @@ function switchSection(section) {
 async function handleLogout() {
     var confirmLogout = confirm('Are you sure you want to logout?');
     if (confirmLogout) {
-        console.log("[Settings] User confirmed logout - clearing session data");
+        console.log("[Settings] User confirmed logout - stopping all background processes");
 
-        // Clear session-related data but KEEP hasLoggedInOnce and MAC
-        // This ensures app relaunch goes directly to Home, not Login
-        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId'];
-        var keysToRemove = [];
-        
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
-            if (keysToKeep.indexOf(key) === -1) {
-                keysToRemove.push(key);
-            }
+        // 1. Stop all background timers/intervals on this page
+        // Clear any active intervals by clearing a wide range of timer IDs
+        var highestTimerId = setTimeout(function () {}, 0);
+        for (var i = 0; i < highestTimerId; i++) {
+            clearTimeout(i);
+            clearInterval(i);
         }
-        
-        keysToRemove.forEach(function(key) {
-            localStorage.removeItem(key);
-            console.log("[Settings] Removed localStorage key:", key);
-        });
-        
-        console.log("[Settings] Kept localStorage keys:", keysToKeep);
+        console.log("[Settings] All timers/intervals cleared");
 
-        // Clear all sessionStorage
-        sessionStorage.clear();
-
-        // Call API logout if available
+        // 2. Call API logout (server-side cleanup + cache clear)
+        // AuthAPI.logout() no longer redirects — it only clears data
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
             try {
                 await BBNL_API.logout();
             } catch (e) {
                 console.error("[Settings] API logout error:", e);
             }
-        } else if (typeof AuthAPI !== 'undefined' && AuthAPI.logout) {
-            try {
-                await AuthAPI.logout();
-            } catch (e) {
-                console.error("[Settings] AuthAPI logout error:", e);
+        }
+
+        // 3. Clear session-related data but KEEP hasLoggedInOnce and MAC
+        // This ensures app relaunch goes directly to Home, not Login
+        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId'];
+        var keysToRemove = [];
+
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (keysToKeep.indexOf(key) === -1) {
+                keysToRemove.push(key);
             }
         }
 
+        keysToRemove.forEach(function(key) {
+            localStorage.removeItem(key);
+        });
+
+        console.log("[Settings] localStorage cleared (kept:", keysToKeep.join(', '), ")");
+
+        // 4. Clear all sessionStorage
+        sessionStorage.clear();
+        console.log("[Settings] sessionStorage cleared");
+
         console.log("[Settings] Logout complete - exiting application");
 
-        // Exit the Tizen application completely (NOT redirect to login)
+        // 5. Exit the Tizen application completely
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
                 console.log("[Settings] Exiting Tizen application");
                 tizen.application.getCurrentApplication().exit();
             } else {
-                // For browser testing - just close the window or show message
-                console.log("[Settings] Not on Tizen - closing window");
-                alert("Logout successful. App will close.");
-                window.close();
+                // For browser testing - redirect to login
+                console.log("[Settings] Not on Tizen - redirecting to login");
+                window.location.href = "login.html";
             }
         } catch (e) {
             console.log("[Settings] Exit failed:", e);
-            // Fallback: close window or just show message
-            alert("Logout successful. Please close the app.");
+            window.location.href = "login.html";
         }
     }
 }
