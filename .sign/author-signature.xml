@@ -84,8 +84,8 @@ ui1n2Bocqw==</DigestValue>
 </Reference>
 <Reference URI="css%2Fcomponentes%2Fbuttons.css">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>SdRrmh3xQgr6AN9HTC45nnZEVOVsYW9eAgiw4QmxG25DJONGodQAFiBwQhmKnGHIw0r/ISXPgyL0
-kaMR42yDuw==</DigestValue>
+<DigestValue>7D5dBgMeMVHCt6U3+f5btVSl9XHCTNY/FGhszIFimgnZD55FWm9N+HjJZ/7JCznMCuIfhruVFn6z
+yhxIqHW1HA==</DigestValue>
 </Reference>
 <Reference URI="css%2Fcomponentes%2Fcards.css">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -154,8 +154,8 @@ wfSJrY1h7Q==</DigestValue>
 </Reference>
 <Reference URI="css%2Fpages%2Fhomepages.css">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>t8GtnBiD63lVi0N3AbDYgQ1Qx/rK4O2lMyKFBPty6W2rbXnBwcEXi/kQwmETcN/dBtISntSl/SNW
-zBFfNyBMUA==</DigestValue>
+<DigestValue>FXz2TriZeXbQoPU4ueczZyUst5QM1pqWBBWD/C1Eui3td3oUQByIBmPEWvoudf/9Zz3VehTc3iDI
+0Hb0wqoN/g==</DigestValue>
 </Reference>
 <Reference URI="css%2Fpages%2Flanguage-select.css">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -217,6 +217,11 @@ KtAhvieSKQ==</DigestValue>
 <DigestValue>6YdcpffpAhHrvJdv1GIG4sLkSCYAyvXFx6+alXea0jkiP95DcidN4a7wwOEROotR9V4H9Ars+FJT
 v2s2RxA4fA==</DigestValue>
 </Reference>
+<Reference URI="docs%2Fsamsung-tv-distribution-guide.md">
+<DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
+<DigestValue>5daQxzogCFCAAlWTvsqM0OjgZWHm7Fn7n++KTn2tYM/D/1KHCbC98Dvd4gYqh9sI7HNbpRsCI6ob
+7HRUPmhmOw==</DigestValue>
+</Reference>
 <Reference URI="favorites.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
 <DigestValue>ASQBaovQGCDCyRGrsEgXjkm+nCDzkY1/PjoQI3K/apjSdLtlY7lYFlOxYYHMsg3yADpNyle6UTDR
@@ -229,8 +234,8 @@ X5XpIKos+Q==</DigestValue>
 </Reference>
 <Reference URI="home.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>j/VvLKv/Aybiz+NwUnCy84tf3T6HBrVx3qeck4kNRNQv+RgKHhYv0YsUuNCEFa3h6luK4sp8hrtn
-IyQgnAMarw==</DigestValue>
+<DigestValue>CDSXBZ0QNhsR5dwl/Hy2H/G8R+hAg/ekg3U4j7uHSmqhqSBzfOHXsK3NOCZutR0lUb8hN6OE1G4j
+BsG9HQTvhg==</DigestValue>
 </Reference>
 <Reference URI="icon.png">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -249,8 +254,8 @@ ySW2Pll/AQ==</DigestValue>
 </Reference>
 <Reference URI="js%2Fapi.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>x6cy1YNyzRaRnQDBaMhcc7+l0SEj+WsU1RkNWskbpteARk65qyS4GboN9fIqjYBjHzhPfeonXb82
-hW123ibxXA==</DigestValue>
+<DigestValue>IqzKnMIuAL3Q8ZGnvG+2TqPNSRTS0tS6TVfG9M9bZ+7Ith9O4uAhOIi9+adLTzOL+4UJpkij/KtX
+IIrxkHwLwQ==</DigestValue>
 </Reference>
 <Reference URI="js%2Fapi.js.backup">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -289,8 +294,8 @@ QUXlR7omMA==</DigestValue>
 </Reference>
 <Reference URI="js%2Fhome.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>BVp4ZZHvKqgGmspqRBug/rfqn994Sb5MtEY68PtdyINN+oNJJv8/6jHkxBlNQYW3jumHxU9uwxZO
-BRe7dAmH0g==</DigestValue>
+<DigestValue>3YTWQq6NmYePFItakE8B79uic1sybvqSEXfNHM4TnXndjywz0TDE1uSj4H5oZ3GRN77heK9XRy3e
+9mDUi6eB5Q==</DigestValue>
 </Reference>
 <Reference URI="js%2Flanguage-select.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -299,8 +304,8 @@ VG2k2IIbpQ==</DigestValue>
 </Reference>
 <Reference URI="js%2Fmain.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>SzGRL+Vz5cgVDPwHu3vnUuduOH4UAm1DLqo1fyZcBs/1Hve7ncr3dTYAYNcPLP69My6DVo6uZysF
-Yb3PRViQbw==</DigestValue>
+<DigestValue>5mmtFnNwjvJVSwaFEzgaUV1zfjb8PDOO/mr0ahMiEUvb8bKNLyVW2bVysLPKQVTpC9dJWtQlPRnz
+8YPM/apoHA==</DigestValue>
 </Reference>
 <Reference URI="js%2Fott-apps.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -309,13 +314,13 @@ n0aLmAJ+sg==</DigestValue>
 </Reference>
 <Reference URI="js%2Fplayer.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>SnvLDcRnlUbakDLtXEdKTCHeBi+5vlQJpX5MJd90pXckGHKWJSploSoKUUocDSQi6qZEIQIusafM
-eWxvkSWFGA==</DigestValue>
+<DigestValue>iRMpA2fqZtdP1UbRcp/LL8v/adpQGSh6uGXos1bkhXwmYqOCsgv7hHdwrsVGVN3+qRdiICD7X7y+
+pKYapzvd8w==</DigestValue>
 </Reference>
 <Reference URI="js%2Fsettings.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>pBale59FZ6N6OwQw135tTvJrvIwb1PWyCCaKcXvcWvny7prc8S8eBSrFdxoHO31isv7Da+pEQJ77
-CQMrMjfCLw==</DigestValue>
+<DigestValue>lY+QTggO4fPIE8S8r4qy2Q8UpvdlkWHNdPjKUWRXfg527LxS/QYn0xFVweV2Huyh9aDKj06FgxAE
+JIHOY8dJlw==</DigestValue>
 </Reference>
 <Reference URI="jsconfig.json">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -419,8 +424,8 @@ BZgmB3EkQA==</DigestValue>
 </Reference>
 <Reference URI="verify.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>tYJj4TzBodfj6xpXOws0t0Hhyly/NXmT4bGM8QNRb0HgjCEpw4BYimco/sHEjix/+jgWpgS37Suh
-oxjw107RnA==</DigestValue>
+<DigestValue>ZealDGXOFTOCkbHxHEPEGgkzm1A3uBX6egARsFZCDvnjO33w4ZKKRFJ+PL/l0eyclgsJSrQOqYj3
+vn6ghSwi7g==</DigestValue>
 </Reference>
 <Reference URI="#prop">
 <Transforms>
@@ -432,11 +437,11 @@ QY10fG1EWQ==</DigestValue>
 </Reference>
 </SignedInfo>
 <SignatureValue>
-QxbS3gG8NlFEItjBB0hCvQibWdQWVxgZl5rT3pXptbhlOi9gvhI3bm0/lC3HYtgj8tPtY4V4f3Ua
-4GQAQWzIBxA4EEWQGpVFA+zBhpcCAbvt3tTQLHyGOjMJn4ssSBP3M7+dORHJsvniTMxrljEbmeeP
-tELauVu0JGv9rCIyFxy2d7ugv+39duOwc9azpCOMavgF7xkP5OMt88WDZ9OMkOCsCFtd0uyATGOu
-e0oSBnR19dcWMVKrziS2uHcKeED+iqa3BnLvtgVOJRzZDBqdS1jviRRbBTdiDY9v30qHVFG84r91
-qBjaabdklEaaqtL/QniIFg32lCFGs9grUkVMyw==
+dYHW6YbYZai0MN344hdlRHK1xKqbA++kuiTjq7fUpZnTvtQybWoqmNXTzLFJgC47iVswrMK0ckup
+7N2tLsr7mnrQzsbI8UwAM3JbKu70n0zczJ/nOSqtwzEe56cowP6htO9lDZ44fAw4wBjxRJz6TQjc
+AfukftAVSbojFPK4ppY4ulJZH17l3wo90Rdu9pq3WpdV0csgwggJWec4ScXIAEBC4/POln2l+uf5
+kuZxiYzEhtbAhzhdz9ftN7wa0ZklV+R3Ub/VRgwwOJWo7hS8Ph6fpb13KRntVQur5bEswgEkfZt2
+o/ufNDHYMYxIru+UXS30uv9s7rOhTBr6ovKmVg==
 </SignatureValue>
 <KeyInfo>
 <X509Data>

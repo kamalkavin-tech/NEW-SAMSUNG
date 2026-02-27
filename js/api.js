@@ -84,13 +84,79 @@ console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
 console.log("[API CONFIG] Ads Endpoint: " + API_BASE_URL_PROD + "/iptvads");
 console.log("=".repeat(60));
 
-// Default headers for all API requests (devmac & devslno populated dynamically by DeviceInfo.initializeDeviceInfo)
+// Default headers for all API requests (devmac, devslno & deviceid populated dynamically by DeviceInfo.initializeDeviceInfo)
 const DEFAULT_HEADERS = {
     "Content-Type": "application/json",
     "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
     "devmac": "",
-    "devslno": ""
+    "devslno": "",
+    "deviceID": ""
 };
+
+// App package name & full app ID - read dynamically from config.xml / Tizen API
+var APP_PACKAGE = "";
+var APP_ID = "";
+
+/**
+ * Read app package name from config.xml or Tizen application API
+ * Sets the global APP_PACKAGE variable
+ */
+function _initAppPackage() {
+    // Method 1: Try Tizen application API (most reliable on real TV)
+    try {
+        if (typeof tizen !== 'undefined' && tizen.application) {
+            var appInfo = tizen.application.getCurrentApplication().appInfo;
+            if (appInfo) {
+                // appInfo.id = "ph3Ha7N8EQ.BBNLIPTV" -> extract package name after the dot
+                var appId = appInfo.id || "";
+                APP_ID = appId;
+                var dotIndex = appId.indexOf(".");
+                if (dotIndex !== -1 && dotIndex < appId.length - 1) {
+                    APP_PACKAGE = appId.substring(dotIndex + 1);
+                } else {
+                    APP_PACKAGE = appId;
+                }
+                console.log("[AppPackage] From Tizen API:", APP_PACKAGE, "| Full ID:", APP_ID);
+                return;
+            }
+        }
+    } catch (e) {
+        console.log("[AppPackage] Tizen API not available:", e.message);
+    }
+
+    // Method 2: Parse config.xml via XMLHttpRequest
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "config.xml", false); // synchronous for early init
+        xhr.send();
+        if (xhr.status === 200 || xhr.status === 0) {
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(xhr.responseText, "application/xml");
+            var tizenApp = doc.querySelector("application");
+            if (tizenApp) {
+                var appId = tizenApp.getAttribute("id") || "";
+                APP_ID = appId;
+                var dotIndex = appId.indexOf(".");
+                if (dotIndex !== -1 && dotIndex < appId.length - 1) {
+                    APP_PACKAGE = appId.substring(dotIndex + 1);
+                } else {
+                    APP_PACKAGE = appId;
+                }
+                console.log("[AppPackage] From config.xml:", APP_PACKAGE, "| Full ID:", APP_ID);
+                return;
+            }
+        }
+    } catch (e) {
+        console.log("[AppPackage] config.xml read failed:", e.message);
+    }
+
+    // Fallback
+    APP_PACKAGE = "BBNLIPTV";
+    APP_ID = "ph3Ha7N8EQ.BBNLIPTV";
+    console.log("[AppPackage] Using fallback:", APP_PACKAGE, "| Full ID:", APP_ID);
+}
+
+_initAppPackage();
 
 // Dynamic user fallback - reads from logged-in user session in localStorage
 // Returns empty strings if no user is logged in
@@ -127,19 +193,10 @@ function _getSessionUser() {
     return _sessionUserCache;
 }
 
-const DEFAULT_USER = {
-    get userid() { return _getSessionUser().userid; },
-    get mobile() { return _getSessionUser().mobile; }
-};
-
-// Default language ID (Kannada = 9, as per client API)
-const DEFAULT_LANG_ID = "9";
-
 // API Configuration Object
 const API_CONFIG = {
     BASE_URL: API_BASE_URL_PROD,
-    HEADERS: DEFAULT_HEADERS,
-    DEFAULT_USER: DEFAULT_USER
+    HEADERS: DEFAULT_HEADERS
 };
 
 // ==========================================
@@ -374,7 +431,17 @@ const DEVICE_INFO = {
     mac_address: "",
     device_name: "",
     device_type: "FOFI_SAMSUNG",
-    devslno: ""
+    devslno: "",
+    ipv6: "",
+    // devdets fields - detected dynamically from Samsung TV APIs
+    brand: "",
+    model: "",
+    softwareversion: "",
+    tizenversion: "",
+    connection_type: "",
+    dns: "",
+    gateway_ip: "",
+    screen_resolution: ""
 };
 
 // ==========================================
@@ -446,15 +513,31 @@ const DeviceInfo = {
                         console.warn("[DeviceInfo] MAC detection failed:", e);
                     }
 
-                    // 2. IP Address from active network connection
+                    // 2. IP Address + DNS + Connection Type from active network connection
                     try {
                         var networkType = webapis.network.getActiveConnectionType();
+                        // Connection type: 0=DISCONNECTED, 1=WIFI, 2=CELLULAR, 3=ETHERNET
+                        var connNames = { 0: "Disconnected", 1: "WiFi", 2: "Cellular", 3: "Ethernet" };
+                        DEVICE_INFO.connection_type = connNames[networkType] || "Unknown";
+
                         if (networkType > 0) {
                             var ip = webapis.network.getIp(networkType);
                             if (ip) {
                                 DEVICE_INFO.ip_address = ip;
                                 console.log("[DeviceInfo] IP Address:", ip);
                             }
+
+                            // DNS
+                            try {
+                                var dns = webapis.network.getDns(networkType);
+                                if (dns) DEVICE_INFO.dns = dns;
+                            } catch (e) {}
+
+                            // Gateway
+                            try {
+                                var gw = webapis.network.getGateway(networkType);
+                                if (gw) DEVICE_INFO.gateway_ip = gw;
+                            } catch (e) {}
                         }
                     } catch (e) {
                         console.warn("[DeviceInfo] IP detection failed:", e);
@@ -478,13 +561,33 @@ const DeviceInfo = {
                         var model = webapis.productinfo.getModel ? webapis.productinfo.getModel() : null;
                         if (model && model !== "NA") {
                             DEVICE_INFO.device_name = model;
+                            DEVICE_INFO.model = model;
                             console.log("[DeviceInfo] Model:", model);
                         }
                     } catch (e) {
                         console.warn("[DeviceInfo] Model detection failed:", e);
                     }
+
+                    // 5. Firmware / software version (for devdets)
+                    try {
+                        var firmware = webapis.productinfo.getFirmware ? webapis.productinfo.getFirmware() : null;
+                        if (firmware) {
+                            DEVICE_INFO.softwareversion = firmware;
+                            console.log("[DeviceInfo] Firmware:", firmware);
+                        }
+                    } catch (e) {
+                        console.warn("[DeviceInfo] Firmware detection failed:", e);
+                    }
                 }
+
+                // 6. Brand is always Samsung on Tizen TV
+                DEVICE_INFO.brand = "Samsung";
             }
+
+            // 7. Screen resolution (works on both TV and emulator)
+            try {
+                DEVICE_INFO.screen_resolution = screen.width + "x" + screen.height;
+            } catch (e) {}
 
             // Sync DEFAULT_HEADERS with detected device info
             if (DEVICE_INFO.mac_address) {
@@ -492,13 +595,72 @@ const DeviceInfo = {
             }
             if (DEVICE_INFO.devslno) {
                 DEFAULT_HEADERS["devslno"] = DEVICE_INFO.devslno;
+                DEFAULT_HEADERS["deviceID"] = DEVICE_INFO.devslno;
             }
 
             console.log("[DeviceInfo] Initialized:", JSON.stringify(DEVICE_INFO));
             console.log("[DeviceInfo] Headers - devmac:", DEFAULT_HEADERS["devmac"], "devslno:", DEFAULT_HEADERS["devslno"]);
+
+            // 8. Tizen version (async) - uses tizen.systeminfo BUILD property
+            if (typeof tizen !== 'undefined' && tizen.systeminfo) {
+                try {
+                    tizen.systeminfo.getPropertyValue("BUILD", function (build) {
+                        if (build && build.buildVersion) {
+                            DEVICE_INFO.tizenversion = build.buildVersion;
+                            // Also use as softwareversion fallback
+                            if (!DEVICE_INFO.softwareversion) {
+                                DEVICE_INFO.softwareversion = build.buildVersion;
+                            }
+                        }
+                    }, function () { });
+                } catch (e) { }
+            }
         } catch (e) {
-            console.warn("[DeviceInfo] Tizen WebAPIs not available, using defaults");
+            console.warn("[DeviceInfo] Tizen WebAPIs not available, using emulator defaults");
+            // Emulator/Browser defaults
+            DEVICE_INFO.brand = "Browser";
+            DEVICE_INFO.model = "Emulator";
+            DEVICE_INFO.connection_type = "Browser";
+            DEVICE_INFO.softwareversion = navigator.userAgent.match(/Chrome\/(\S+)/) ?
+                "Chrome " + navigator.userAgent.match(/Chrome\/(\S+)/)[1] : navigator.appVersion || "";
+            try {
+                DEVICE_INFO.screen_resolution = screen.width + "x" + screen.height;
+            } catch (e2) {}
         }
+
+        // If IP is still empty (browser/emulator), fetch from external API
+        if (!DEVICE_INFO.ip_address) {
+            this._detectPublicIP();
+        }
+    },
+
+    /**
+     * Detect public IP via external API (for browser/emulator where webapis is unavailable)
+     * Also used as fallback on real TV if webapis.network.getIp() fails
+     */
+    _detectPublicIP: function () {
+        var services = [
+            'https://api.ipify.org?format=json',
+            'https://api64.ipify.org?format=json'
+        ];
+        function tryService(i) {
+            if (i >= services.length) return;
+            fetch(services[i], { method: 'GET' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.ip) {
+                        if (!DEVICE_INFO.ip_address) {
+                            DEVICE_INFO.ip_address = data.ip;
+                        }
+                        if (!DEVICE_INFO.gateway_ip) {
+                            DEVICE_INFO.gateway_ip = data.ip;
+                        }
+                        console.log("[DeviceInfo] Public IP detected:", data.ip);
+                    }
+                })
+                .catch(function () { tryService(i + 1); });
+        }
+        tryService(0);
     },
 
     getDeviceInfo: function () {
@@ -506,36 +668,325 @@ const DeviceInfo = {
     },
 
     /**
+     * Get device details object for API payloads
+     * Passes ALL device info collected from Samsung TV APIs
+     */
+    getDevDets: function () {
+        return {
+            brand: DEVICE_INFO.brand || "",
+            model: DEVICE_INFO.model || DEVICE_INFO.device_name || "",
+            mac: DEVICE_INFO.mac_address || "",
+            softwareversion: DEVICE_INFO.softwareversion || "",
+            tizenversion: DEVICE_INFO.tizenversion || "",
+            connection_type: DEVICE_INFO.connection_type || "",
+            ip_address: DEVICE_INFO.ip_address || "",
+            ipv6: DEVICE_INFO.ipv6 || "",
+            dns: DEVICE_INFO.dns || "",
+            gateway_ip: DEVICE_INFO.gateway_ip || "",
+            screen_resolution: DEVICE_INFO.screen_resolution || "",
+            deviceID: DEVICE_INFO.devslno || ""
+        };
+    },
+
+    /**
      * Get IPv6 address from Samsung Tizen WebAPI
      * @returns {string} IPv6 address or empty string
      */
     getIPv6: function () {
-        try {
-            if (typeof webapis !== 'undefined' && webapis.network) {
-                var networkType = webapis.network.getActiveConnectionType();
+        // Return cached IPv6 from detectIPv6() — webapis.network has NO getIpv6() method
+        return DEVICE_INFO.ipv6 || "";
+    },
 
-                if (networkType === 0) {
-                    console.log("[DeviceInfo] Network disconnected - no IPv6");
-                    return "";
-                }
+    /**
+     * Helper: Validate IPv6 address string
+     */
+    _isValidIPv6: function (addr) {
+        if (!addr) return false;
+        var str = String(addr).trim();
+        if (str === '' || str === 'undefined' || str === 'null') return false;
+        if (str.indexOf(':') === -1) return false;
+        if (str === '::' || str === '::0' || str === '0::0' || str === '::1') return false;
+        var cleaned = str.replace(/:/g, '').replace(/0/g, '');
+        return cleaned !== '';
+    },
 
-                // Try to get IPv6 address
-                var ipv6 = webapis.network.getIpv6(networkType);
-                if (ipv6 && ipv6.length > 0) {
-                    console.log("[DeviceInfo] IPv6 detected:", ipv6);
-                    return ipv6;
-                } else {
-                    console.log("[DeviceInfo] IPv6 not available");
-                    return "";
+    /**
+     * Extract IPv6 from a Tizen network info object
+     */
+    _extractIPv6FromNetwork: function (network) {
+        if (!network) return null;
+        if (network.ipv6Address) {
+            var raw = network.ipv6Address;
+            if (typeof raw === 'object' && raw.length !== undefined) {
+                for (var i = 0; i < raw.length; i++) {
+                    if (this._isValidIPv6(raw[i])) return String(raw[i]).trim();
                 }
-            } else {
-                console.log("[DeviceInfo] WebAPIs not available - no IPv6");
-                return "";
+            } else if (this._isValidIPv6(raw)) {
+                return String(raw).trim();
             }
-        } catch (e) {
-            console.error("[DeviceInfo] IPv6 fetch error:", e);
-            return "";
         }
+        if (network.ipAddress && this._isValidIPv6(network.ipAddress)) {
+            return String(network.ipAddress).trim();
+        }
+        return null;
+    },
+
+    /**
+     * Full async IPv6 detection with caching.
+     * Tries: tizen.systeminfo -> webapis.network -> external APIs
+     * Caches result in DEVICE_INFO.ipv6
+     * @returns {Promise<string>} IPv6 address or "Not Available"
+     */
+    detectIPv6: function () {
+        var self = this;
+
+        // Return cached if already detected
+        if (DEVICE_INFO.ipv6 && self._isValidIPv6(DEVICE_INFO.ipv6)) {
+            return Promise.resolve(DEVICE_INFO.ipv6);
+        }
+
+        return new Promise(function (resolve) {
+            var found = false;
+
+            function done(addr) {
+                if (found) return;
+                found = true;
+                var result = self._isValidIPv6(addr) ? String(addr).trim() : "";
+                DEVICE_INFO.ipv6 = result;
+                console.log("[DeviceInfo] IPv6 detected:", result);
+                resolve(result);
+            }
+
+            // Safety timeout - resolve after 12s no matter what
+            setTimeout(function () { done(""); }, 12000);
+
+            // Step 1: Try tizen.systeminfo (most reliable on real TV)
+            // Samsung docs confirm: webapis.network has NO getIpv6() method.
+            // The ONLY way to get IPv6 on Samsung TV is via tizen.systeminfo
+            function trySystemInfo() {
+                if (typeof tizen === 'undefined' || !tizen.systeminfo) {
+                    console.error("[DeviceInfo] Step 1: tizen.systeminfo not available, skip to Step 2");
+                    tryWebRTC();
+                    return;
+                }
+                console.error("[DeviceInfo] Step 1: Trying tizen.systeminfo...");
+
+                var networkTypes = ["WIFI_NETWORK", "ETHERNET_NETWORK"];
+                try {
+                    if (typeof webapis !== 'undefined' && webapis.network) {
+                        var connType = webapis.network.getActiveConnectionType();
+                        if (connType === 3) networkTypes = ["ETHERNET_NETWORK", "WIFI_NETWORK"];
+                    }
+                } catch (e) { }
+
+                var idx = 0;
+                function nextProp() {
+                    if (found || idx >= networkTypes.length) {
+                        if (!found) tryWebRTC();
+                        return;
+                    }
+                    var prop = networkTypes[idx++];
+                    try {
+                        tizen.systeminfo.getPropertyValue(prop,
+                            function (network) {
+                                if (found) return;
+                                var addr = self._extractIPv6FromNetwork(network);
+                                if (addr) { done(addr); } else { nextProp(); }
+                            },
+                            function () { if (!found) nextProp(); }
+                        );
+                    } catch (e) { nextProp(); }
+                }
+                nextProp();
+            }
+
+            // Step 2: WebRTC-based local IPv6 detection (browser/emulator)
+            function tryWebRTC() {
+                if (found) return;
+                var RTCPeer = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+                if (!RTCPeer) {
+                    console.error("[DeviceInfo] WebRTC not available, trying external APIs");
+                    tryExternalAPIs();
+                    return;
+                }
+
+                try {
+                    var pc = new RTCPeer({
+                        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    });
+                    var bestIPv6 = null;
+
+                    var rtcDone = false;
+                    pc.createDataChannel('');
+                    pc.createOffer().then(function (offer) {
+                        return pc.setLocalDescription(offer);
+                    }).catch(function () {
+                        if (rtcDone) return;
+                        rtcDone = true;
+                        try { pc.close(); } catch (e) { }
+                        tryExternalAPIs();
+                    });
+
+                    // Timeout for WebRTC gathering
+                    var rtcTimeout = setTimeout(function () {
+                        if (rtcDone) return;
+                        rtcDone = true;
+                        try { pc.close(); } catch (e) { }
+                        if (bestIPv6 && self._isValidIPv6(bestIPv6)) {
+                            console.error("[DeviceInfo] WebRTC found IPv6:", bestIPv6);
+                            done(bestIPv6);
+                        } else {
+                            console.error("[DeviceInfo] WebRTC no IPv6 found, trying external APIs");
+                            tryExternalAPIs();
+                        }
+                    }, 3000);
+
+                    pc.onicecandidate = function (event) {
+                        if (found || rtcDone) return;
+
+                        if (!event.candidate) {
+                            // ICE gathering complete
+                            rtcDone = true;
+                            clearTimeout(rtcTimeout);
+                            try { pc.close(); } catch (e) { }
+                            if (bestIPv6 && self._isValidIPv6(bestIPv6)) {
+                                console.error("[DeviceInfo] WebRTC found IPv6:", bestIPv6);
+                                done(bestIPv6);
+                            } else {
+                                tryExternalAPIs();
+                            }
+                            return;
+                        }
+
+                        var candidate = event.candidate.candidate;
+                        if (!candidate) return;
+
+                        // Parse IP from ICE candidate string
+                        // Format: "candidate:... typ host/srflx/relay ..."
+                        var parts = candidate.split(' ');
+                        if (parts.length >= 5) {
+                            var addr = parts[4];
+                            if (self._isValidIPv6(addr)) {
+                                // Prefer: global unicast (2/3) > ULA (fd) > link-local (fe80)
+                                if (!bestIPv6 ||
+                                    (addr.charAt(0) >= '2' && addr.charAt(0) <= '3' && !(bestIPv6.charAt(0) >= '2' && bestIPv6.charAt(0) <= '3')) ||
+                                    (addr.substring(0, 2).toLowerCase() === 'fd' && bestIPv6.substring(0, 4).toLowerCase() === 'fe80')) {
+                                    bestIPv6 = addr;
+                                }
+                            }
+                        }
+                    };
+                } catch (e) {
+                    console.error("[DeviceInfo] WebRTC error:", e);
+                    tryExternalAPIs();
+                }
+            }
+
+            // Step 3: External API fallback (fetch + XHR + JSONP)
+            function tryExternalAPIs() {
+                if (found) return;
+                console.error("[DeviceInfo] Step 3: Trying external APIs for IPv6...");
+
+                var services = [
+                    { url: 'https://api64.ipify.org?format=json', type: 'json' },
+                    { url: 'https://api6.ipify.org?format=json', type: 'json' },
+                    { url: 'https://v6.ident.me/', type: 'text' },
+                    { url: 'https://ipv6.icanhazip.com', type: 'text' }
+                ];
+
+                function tryFetch(i) {
+                    if (found || i >= services.length) {
+                        if (!found) tryXHR(0);
+                        return;
+                    }
+                    var svc = services[i];
+                    var timeout = new Promise(function (_, rej) {
+                        setTimeout(function () { rej(new Error('Timeout')); }, 5000);
+                    });
+                    Promise.race([fetch(svc.url), timeout])
+                        .then(function (r) { return svc.type === 'json' ? r.json() : r.text(); })
+                        .then(function (data) {
+                            if (found) return;
+                            var ip = svc.type === 'json' ? (data.ip || data.IPv6 || data.IP || "") : String(data).trim();
+                            console.error("[DeviceInfo] fetch " + svc.url + " =>", ip);
+                            if (self._isValidIPv6(ip)) { done(ip); } else { tryFetch(i + 1); }
+                        })
+                        .catch(function (err) {
+                            console.error("[DeviceInfo] fetch " + svc.url + " failed:", err.message || err);
+                            if (!found) tryFetch(i + 1);
+                        });
+                }
+
+                // XHR fallback - some Tizen versions handle XHR differently than fetch
+                function tryXHR(i) {
+                    if (found || i >= services.length) {
+                        if (!found) tryJSONP();
+                        return;
+                    }
+                    var svc = services[i];
+                    try {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', svc.url, true);
+                        xhr.timeout = 5000;
+                        xhr.onload = function () {
+                            if (found) return;
+                            try {
+                                var ip = '';
+                                if (svc.type === 'json') {
+                                    var data = JSON.parse(xhr.responseText);
+                                    ip = data.ip || data.IPv6 || data.IP || '';
+                                } else {
+                                    ip = xhr.responseText.trim();
+                                }
+                                console.error("[DeviceInfo] XHR " + svc.url + " =>", ip);
+                                if (self._isValidIPv6(ip)) { done(ip); } else { tryXHR(i + 1); }
+                            } catch (e) { tryXHR(i + 1); }
+                        };
+                        xhr.onerror = function () { if (!found) tryXHR(i + 1); };
+                        xhr.ontimeout = function () { if (!found) tryXHR(i + 1); };
+                        xhr.send();
+                    } catch (e) { tryXHR(i + 1); }
+                }
+
+                // JSONP ultimate fallback - bypasses ALL CORS/fetch restrictions
+                function tryJSONP() {
+                    if (found) return;
+                    console.error("[DeviceInfo] Trying JSONP fallback for IPv6...");
+                    var cbName = '_ipv6cb_' + Date.now();
+                    var jpDone = false;
+                    window[cbName] = function (data) {
+                        if (jpDone || found) return;
+                        jpDone = true;
+                        try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+                        var ip = (data && (data.ip || data.IP)) || '';
+                        console.error("[DeviceInfo] JSONP returned:", ip);
+                        if (self._isValidIPv6(ip)) { done(ip); } else { done(""); }
+                    };
+                    var script = document.createElement('script');
+                    script.src = 'https://api64.ipify.org?format=jsonp&callback=' + cbName;
+                    script.onerror = function () {
+                        if (jpDone || found) return;
+                        jpDone = true;
+                        try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+                        console.error("[DeviceInfo] JSONP failed");
+                        done("");
+                    };
+                    setTimeout(function () {
+                        if (!jpDone && !found) {
+                            jpDone = true;
+                            try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+                            done("");
+                        }
+                    }, 5000);
+                    (document.head || document.documentElement).appendChild(script);
+                }
+
+                tryFetch(0);
+            }
+
+            // Start detection chain
+            trySystemInfo();
+        });
     }
 };
 
@@ -543,60 +994,49 @@ const DeviceInfo = {
 // AUTH API (UNCHANGED - DO NOT MODIFY)
 // ==========================================
 const AuthAPI = {
-    requestOTP: async function (userid, mobile) {
+    requestOTP: async function (mobile) {
         const device = DeviceInfo.getDeviceInfo();
         const ipv6 = DeviceInfo.getIPv6();
         const payload = {
-            userid: userid,
             mobile: mobile,
             mac_address: device.mac_address,
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
             devslno: device.devslno,
-            ipv6: ipv6,
-            getuserdet: ""
+            ipv6: ipv6 || "",
+            getuserdet: "",
+            devdets: DeviceInfo.getDevDets()
         };
         console.log("[AuthAPI] Requesting OTP Payload:", payload);
-        return await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
+        return await apiCall(API_ENDPOINTS.LOGIN, payload);
     },
 
-    addMacAddress: async function (userid, mobile) {
+    addMacAddress: async function (mobile) {
         const device = DeviceInfo.getDeviceInfo();
         const ipv6 = DeviceInfo.getIPv6();
         const payload = {
-            userid: userid,
             mobile: mobile,
             mac_address: device.mac_address,
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
             devslno: device.devslno,
-            ipv6: ipv6
+            ipv6: ipv6 || "",
+            devdets: DeviceInfo.getDevDets()
         };
         console.log("[AuthAPI] Adding MAC Address Payload:", payload);
         return await apiCall(API_ENDPOINTS.ADD_MACADDRESS, payload);
     },
 
-    verifyOTP: async function (userid, mobile, otpcode) {
-        const device = DeviceInfo.getDeviceInfo();
-        const ipv6 = DeviceInfo.getIPv6();
-
+    verifyOTP: async function (mobile, otpcode) {
         const payload = {
-            userid: userid,
             mobile: mobile,
-            otpcode: otpcode,
-            mac_address: device.mac_address,
-            device_name: device.device_name,
-            ip_address: device.ip_address,
-            device_type: device.device_type,
-            devslno: device.devslno,
-            ipv6: ipv6,
-            getuserdet: ""
+            otpcode: otpcode
         };
 
         console.log("[AuthAPI] Verifying OTP Payload:", payload);
-        const response = await apiCall(API_ENDPOINTS.LOGIN, payload);
+        const response = await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
 
         if (response && response.status && Number(response.status.err_code) === 0) {
             this.setSession(response);
@@ -604,24 +1044,13 @@ const AuthAPI = {
         return response;
     },
 
-    resendOTP: async function (userid, mobile, email, deviceData = {}) {
-        const device = DeviceInfo.getDeviceInfo();
-        const ipv6 = DeviceInfo.getIPv6();
-
+    resendOTP: async function (mobile) {
         const payload = {
-            userid: userid || DEFAULT_USER.userid,
-            mobile: mobile || DEFAULT_USER.mobile,
-            email: email || "",
-            mac_address: deviceData.mac_address || device.mac_address,
-            device_name: deviceData.device_name || device.device_name,
-            ip_address: deviceData.ip_address || device.ip_address,
-            device_type: deviceData.device_type || device.device_type,
-            devslno: deviceData.devslno || device.devslno,
-            ipv6: deviceData.ipv6 || ipv6
+            mobile: mobile
         };
 
         console.log("[AuthAPI] Resending OTP Payload:", payload);
-        return await apiCall(API_ENDPOINTS.RESEND_OTP, payload);
+        return await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
     },
 
     setSession: function (response) {
@@ -637,7 +1066,7 @@ const AuthAPI = {
             }
 
             // Flatten mobile/email from custdet to top level if not already present
-            // Login API returns: { userid: "xxx", custdet: [{ mobile: "9894170148", email: "..." }] }
+            // Login API returns: { userid: "xxx", custdet: [{ mobile: "...", email: "..." }] }
             if (!userData.mobile && userData.custdet && userData.custdet.length > 0) {
                 userData.mobile = userData.custdet[0].mobile || "";
                 userData.email = userData.email || userData.custdet[0].email || "";
@@ -749,8 +1178,8 @@ const ChannelsAPI = {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
+        var userid = _getSessionUser().userid;
+        var mobile = _getSessionUser().mobile;
 
         if (user) {
             if (user.userid) userid = user.userid;
@@ -816,8 +1245,8 @@ const ChannelsAPI = {
         const device = DeviceInfo.getDeviceInfo();
 
         // Extract userid and mobile with proper fallback
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
+        var userid = _getSessionUser().userid;
+        var mobile = _getSessionUser().mobile;
 
         if (user) {
             if (user.userid) userid = user.userid;
@@ -1145,8 +1574,8 @@ const ChannelsAPI = {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
+        var userid = _getSessionUser().userid;
+        var mobile = _getSessionUser().mobile;
 
         if (user) {
             if (user.userid) userid = user.userid;
@@ -1298,8 +1727,8 @@ const AdsAPI = {
 
         // Extract userid and mobile with robust field name detection
         // The API response might use different field names
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
+        var userid = _getSessionUser().userid;
+        var mobile = _getSessionUser().mobile;
 
         if (user) {
             // Try multiple possible field names for userid
@@ -1496,8 +1925,8 @@ const AdsAPI = {
      */
     getStreamAds: async function (chid, grid) {
         const user = AuthAPI.getUserData();
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
+        var userid = _getSessionUser().userid;
+        var mobile = _getSessionUser().mobile;
 
         if (user) {
             if (user.userid) userid = user.userid;
@@ -1570,8 +1999,8 @@ const FeedbackAPI = {
         // Backend expects this EXACT format (confirmed from API documentation):
         // Field: rate_count (STRING), NOT rating (NUMBER)
         const payload = {
-            userid: feedbackData.userid || DEFAULT_USER.userid,
-            mobile: feedbackData.mobile || DEFAULT_USER.mobile,
+            userid: feedbackData.userid || _getSessionUser().userid,
+            mobile: feedbackData.mobile || _getSessionUser().mobile,
             rate_count: String(feedbackData.rating || 0),  // IMPORTANT: Must be STRING!
             feedback: feedbackData.feedback,
             mac_address: device.mac_address,
@@ -1603,13 +2032,13 @@ const AppVersionAPI = {
 
         // Backend expects this exact format
         const payload = {
-            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             ip_address: device.ip_address,
             device_type: "",  // Empty string as per API format
             mac_address: "",  // Empty string as per API format
             device_name: "",  // Empty string as per API format
-            app_package: "com.fofi.fofiboxtv"
+            app_package: APP_ID
         };
 
         console.log("[AppVersionAPI] Getting app version:", payload);
@@ -1636,8 +2065,8 @@ const OTTAppsAPI = {
 
         // Backend expects this format
         const payload = {
-            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             ip_address: device.ip_address,
             mac: device.mac_address
         };
@@ -1666,8 +2095,8 @@ const AppLockAPI = {
 
         // Backend expects this format
         const payload = {
-            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             ip_address: device.ip_address,
             appversion: "1.0"
         };
@@ -1695,12 +2124,13 @@ const TRPDataAPI = {
      * @param {String} comment - Comment/tracking data (e.g. email)
      * @returns {Promise<Object>} API response
      */
-    sendTRPData: async function (comment) {
+    sendTRPData: async function (chid, comment) {
         const user = AuthAPI.getUserData();
 
         const payload = {
-            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
+            chid: chid || "",
             comment: comment || ""
         };
 
@@ -1730,8 +2160,8 @@ const RaiseTicketAPI = {
         const user = AuthAPI.getUserData();
 
         const payload = {
-            userid: user && user.userid ? user.userid : DEFAULT_USER.userid,
-            mobile: user && user.mobile ? user.mobile : DEFAULT_USER.mobile,
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             comment: comment || ""
         };
 
@@ -1762,8 +2192,8 @@ const ErrorImagesAPI = {
             // Error images are not user-specific - use session data if available, generic fallback otherwise
             var user = AuthAPI.getUserData();
             var response = await apiCall(API_ENDPOINTS.ERROR_IMAGES, {
-                userid: (user && user.userid) || DEFAULT_USER.userid || "app",
-                mobile: (user && user.mobile) || DEFAULT_USER.mobile || "0000000000"
+                userid: (user && user.userid) || _getSessionUser().userid || "app",
+                mobile: (user && user.mobile) || _getSessionUser().mobile || "0000000000"
             });
 
             if (response && response.status && Number(response.status.err_code) === 0 && response.errImgs) {

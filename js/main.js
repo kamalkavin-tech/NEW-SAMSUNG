@@ -6,6 +6,7 @@ var focusables = [];
 var currentFocus = 0;
 var otpRequestInProgress = false; // Flag to prevent duplicate OTP requests
 var otpVerifyInProgress = false; // Flag to prevent duplicate OTP verification
+var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fire from TV remote quirks)
 
 // Check authentication on page load - redirect logged in users away from auth pages
 (function checkAuthRedirect() {
@@ -48,6 +49,13 @@ window.onload = function () {
     // 4a. Listen for network changes to auto-update IP
     startNetworkChangeListener();
 
+    // 4b. Initialize Resend OTP timer (if on verify page)
+    initResendOTPTimer();
+    var resendBtn = document.getElementById('resendOtpBtn');
+    if (resendBtn) {
+        resendBtn.addEventListener('click', handleResendOTP);
+    }
+
     // 4. Add MOUSE Click Support for all focusable elements
     focusables.forEach(function (el, index) {
         console.log("Adding listeners to:", el.id || el.className);
@@ -60,12 +68,6 @@ window.onload = function () {
 
         // Handle mouse clicks
         el.addEventListener("click", function (e) {
-            // Skip OTP button entirely - handled only via handleOK from keydown
-            if (el.id === 'getOtpBtn' || el.id === 'verifyBtn') {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                return;
-            }
             console.log("Click detected on:", el.id || el.className);
             e.preventDefault();
             handleOK();
@@ -183,210 +185,9 @@ function showMacAddress() {
 function showIPv6() {
     var ipv6Text = document.getElementById("ipv6Text");
     if (!ipv6Text) return;
-
-    // Helper: check if IPv6 address is actually valid and useful
-    function isValidIPv6(addr) {
-        if (!addr || typeof addr !== 'string') return false;
-        var trimmed = addr.trim();
-        if (trimmed === '' || trimmed === '::' || trimmed === '::0' || trimmed === '0::0' || trimmed === '::1') return false;
-        // Must contain ":" to be IPv6
-        if (!trimmed.includes(':')) return false;
-        // Filter out all-zero addresses
-        var cleaned = trimmed.replace(/:/g, '').replace(/0/g, '');
-        if (cleaned === '') return false;
-        return true;
-    }
-
-    try {
-        // First try tizen.systeminfo API (recommended for IPv6 on Tizen 5.0+)
-        // NOTE: "NETWORK" property only returns networkType, NOT IP addresses.
-        // Must use "WIFI_NETWORK" or "ETHERNET_NETWORK" to get ipv6Address.
-        if (typeof tizen !== 'undefined' && tizen.systeminfo) {
-            // Determine which network property to query based on connection type
-            var networkProperty = "WIFI_NETWORK"; // default to WiFi
-            try {
-                if (typeof webapis !== 'undefined' && webapis.network) {
-                    var connType = webapis.network.getActiveConnectionType();
-                    // connType: 1=WiFi, 3=Ethernet
-                    if (connType === 3) {
-                        networkProperty = "ETHERNET_NETWORK";
-                    }
-                }
-            } catch (e) {
-                console.log("[IPv6] Connection type detection failed, defaulting to WIFI_NETWORK");
-            }
-
-            console.log("[IPv6] Querying systeminfo property:", networkProperty);
-            tizen.systeminfo.getPropertyValue(
-                networkProperty,
-                function (network) {
-                    // Log full network object for debugging
-                    console.log("[IPv6] Network Info:", JSON.stringify(network));
-                    console.log("[IPv6] IPv4:", network.ipAddress);
-                    console.log("[IPv6] IPv6:", network.ipv6Address);
-
-                    var ipv6Address = null;
-
-                    // Check IPv6 array/string first
-                    if (network.ipv6Address) {
-                        if (Array.isArray(network.ipv6Address)) {
-                            // Find first valid IPv6 in array
-                            for (var i = 0; i < network.ipv6Address.length; i++) {
-                                if (isValidIPv6(network.ipv6Address[i])) {
-                                    ipv6Address = network.ipv6Address[i].trim();
-                                    break;
-                                }
-                            }
-                        } else if (isValidIPv6(network.ipv6Address)) {
-                            ipv6Address = network.ipv6Address.trim();
-                        }
-                    }
-                    // Fallback: check if ipAddress is IPv6
-                    if (!ipv6Address && network.ipAddress && isValidIPv6(network.ipAddress)) {
-                        ipv6Address = network.ipAddress.trim();
-                    }
-
-                    if (ipv6Address) {
-                        ipv6Text.innerText = ipv6Address;
-                        console.log("[IPv6] Found:", ipv6Address);
-                    } else {
-                        console.log("[IPv6] systeminfo returned empty/null IPv6:", network.ipv6Address);
-                        // Try webapis fallback
-                        tryWebapisNetwork();
-                    }
-                },
-                function (error) {
-                    console.log("[IPv6] systeminfo error:", error);
-                    // Fallback to webapis.network
-                    tryWebapisNetwork();
-                }
-            );
-            return;
-        }
-
-        // Fallback to webapis.network
-        tryWebapisNetwork();
-
-    } catch (e) {
-        console.error("[IPv6] Fetch Error:", e);
-        ipv6Text.innerText = "N/A";
-    }
-    
-    function tryWebapisNetwork() {
-        try {
-            if (typeof webapis !== 'undefined' && webapis.network) {
-                var networkType = webapis.network.getActiveConnectionType();
-
-                if (networkType === 0) {
-                    ipv6Text.innerText = "N/A";
-                    return;
-                }
-
-                // Try getIpv6() first
-                var ipv6 = null;
-                try {
-                    ipv6 = webapis.network.getIpv6(networkType);
-                } catch (e) {
-                    console.log("[IPv6] getIpv6 not available:", e);
-                }
-
-                if (isValidIPv6(ipv6)) {
-                    ipv6Text.innerText = ipv6.trim();
-                    console.log("[IPv6] from getIpv6:", ipv6);
-                    return;
-                } else if (ipv6) {
-                    console.log("[IPv6] getIpv6 returned empty/null:", ipv6);
-                }
-
-                // Alternative: check if getIp returns IPv6 (some models)
-                try {
-                    var ip = webapis.network.getIp(networkType);
-                    if (isValidIPv6(ip)) {
-                        ipv6Text.innerText = ip.trim();
-                        console.log("[IPv6] from getIp:", ip);
-                        return;
-                    }
-                } catch (e) {
-                    console.log("[IPv6] getIp fallback failed:", e);
-                }
-
-                // IPv6 not available from Tizen - try external API
-                tryExternalIPv6Service();
-            } else {
-                // Fallback for non-Tizen devices - try external API
-                tryExternalIPv6Service();
-            }
-        } catch (e) {
-            console.error("[IPv6] webapis error:", e);
-            tryExternalIPv6Service();
-        }
-    }
-    
-    // External API fallback for browser/emulator
-    function tryExternalIPv6Service() {
-        console.log("[IPv6] Trying external API services...");
-
-        var ipv6Services = [
-            // Dual-stack: returns whatever IP the connection uses (most reliable)
-            { url: 'https://api64.ipify.org?format=json', type: 'json' },
-            // Explicit IPv6-only endpoint
-            { url: 'https://api6.ipify.org?format=json', type: 'json' },
-            // IPv6-only services
-            { url: 'https://v6.ident.me/', type: 'text' },
-            { url: 'https://ipv6.icanhazip.com', type: 'text' }
-        ];
-
-        function fetchWithTimeout(url, timeoutMs) {
-            var timeoutPromise = new Promise(function(_, reject) {
-                setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
-            });
-            return Promise.race([fetch(url), timeoutPromise]);
-        }
-
-        function tryService(index) {
-            if (index >= ipv6Services.length) {
-                ipv6Text.innerText = "Not Available";
-                console.log("[IPv6] All external services failed or no IPv6 available on this network");
-                return;
-            }
-
-            var service = ipv6Services[index];
-            console.log("[IPv6] Trying:", service.url);
-
-            fetchWithTimeout(service.url, 6000)
-                .then(function(response) {
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    if (service.type === 'json') {
-                        return response.json();
-                    } else {
-                        return response.text();
-                    }
-                })
-                .then(function(data) {
-                    var ip = null;
-                    if (typeof data === 'string') {
-                        ip = data.trim();
-                    } else {
-                        ip = data.ip || data.IP || data.address || null;
-                    }
-
-                    // Check if it's actually a valid IPv6 address
-                    if (isValidIPv6(ip)) {
-                        ipv6Text.innerText = ip.trim();
-                        console.log("[IPv6] Found via external API:", ip);
-                    } else {
-                        console.log("[IPv6] Response was not valid IPv6 (" + ip + "), trying next...");
-                        tryService(index + 1);
-                    }
-                })
-                .catch(function(error) {
-                    console.log("[IPv6] Service failed:", service.url, error.message);
-                    tryService(index + 1);
-                });
-        }
-
-        tryService(0);
-    }
+    DeviceInfo.detectIPv6().then(function (addr) {
+        ipv6Text.innerText = addr || "Not Available";
+    });
 }
 
 /**
@@ -458,6 +259,8 @@ function startNetworkChangeListener() {
 
                 // Small delay to let the new connection fully establish
                 setTimeout(function () {
+                    // Clear cached IPv6 so detectIPv6 re-detects
+                    DEVICE_INFO.ipv6 = "";
                     showMacAddress();
                     showIPv6();
                     showPublicIP();
@@ -791,8 +594,11 @@ document.addEventListener("keydown", function (e) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 var getOtpBtn = document.getElementById('getOtpBtn');
-                if (getOtpBtn && !getOtpBtn.disabled && !otpRequestInProgress && active.value.length === 10) {
+                var cooldownOk = (Date.now() - lastOtpRequestTime) >= 10000;
+                if (getOtpBtn && !getOtpBtn.disabled && !otpRequestInProgress && cooldownOk && active.value.length === 10) {
                     console.log("[Login] Enter pressed on phone input - triggering OTP request");
+                    // Disable button immediately to prevent any race condition
+                    getOtpBtn.disabled = true;
                     currentFocus = Array.from(focusables).indexOf(getOtpBtn);
                     getOtpBtn.focus();
                     handleOK();
@@ -950,6 +756,13 @@ function handleOK() {
             return;
         }
 
+        // Timestamp-based cooldown (10s) - prevents double-fire from TV remote quirks
+        var now = Date.now();
+        if (now - lastOtpRequestTime < 10000) {
+            console.log("[Login] ⚠️ OTP request blocked - cooldown active (" + Math.round((10000 - (now - lastOtpRequestTime)) / 1000) + "s remaining)");
+            return;
+        }
+
         var phoneInput = document.getElementById("phoneInput");
         var val = phoneInput ? phoneInput.value : "";
         console.log("[Login] Get OTP clicked - Phone number:", val, "| Length:", val.length);
@@ -958,8 +771,9 @@ function handleOK() {
             console.log("[Login] ✅ Starting OTP request for mobile:", val);
             console.log("[Login] ⏱️ OTP API call timestamp:", new Date().toISOString());
 
-            // Set flag to prevent duplicate requests
+            // Set flag and timestamp to prevent duplicate requests
             otpRequestInProgress = true;
+            lastOtpRequestTime = now;
 
             // Show loading state and disable button
             var btn = document.getElementById("getOtpBtn");
@@ -971,25 +785,23 @@ function handleOK() {
             // Call actual API - SINGLE CALL ONLY
             // User enters mobile number; real userid comes from API response
             console.log("[Login] Calling AuthAPI.requestOTP()");
-            AuthAPI.requestOTP(val, val)
+            AuthAPI.requestOTP(val)
                 .then(function (response) {
                     console.log("[Login] OTP API Response received:", response);
 
                     // Check response
                     if (response && response.status && Number(response.status.err_code) === 0) {
-                        console.log("[Login] OTP sent successfully via /loginOtp");
+                        console.log("[Login] OTP sent successfully via /login");
                         // Keep button disabled and flag set - we're navigating away
 
-                        // Extract userid from response if available, otherwise use mobile
-                        var serverUserId = val;
-                        if (response.body && response.body.length > 0 && response.body[0].userid) {
-                            serverUserId = response.body[0].userid;
-                        }
-                        console.log("[Login] Server userid:", serverUserId, "| Mobile:", val);
+                        // Store full user session from /login response
+                        // This sets bbnl_user in localStorage (required by home page auth check)
+                        AuthAPI.setSession(response);
 
-                        // Navigate to verify page - user data will be saved after OTP verification
-                        // verifyOTP calls /login which returns full user data
-                        window.location.href = "verify.html?mobile=" + val + "&userid=" + encodeURIComponent(serverUserId);
+                        console.log("[Login] Mobile:", val);
+
+                        // Navigate to verify page with mobile only
+                        window.location.href = "verify.html?mobile=" + val;
                     } else {
                         // Reset flag and button on error only
                         otpRequestInProgress = false;
@@ -1004,40 +816,18 @@ function handleOK() {
                             console.log("[Login] Device not registered - calling addMacAddress to register this TV...");
                             btn.innerText = "Registering Device...";
 
-                            AuthAPI.addMacAddress(val, val)
+                            AuthAPI.addMacAddress(val)
                                 .then(function (addResponse) {
                                     console.log("[Login] addMacAddress response:", addResponse);
 
                                     if (addResponse && addResponse.status && Number(addResponse.status.err_code) === 0) {
-                                        console.log("[Login] Device registered - retrying OTP request...");
-                                        btn.innerText = "Sending OTP...";
-
-                                        // Retry login after device registration
-                                        return AuthAPI.requestOTP(val, val);
+                                        console.log("[Login] Device registered successfully");
+                                        // Navigate to verify - server already sent OTP with the first requestOTP call
+                                        // No need to call requestOTP again (prevents duplicate OTP)
+                                        window.location.href = "verify.html?mobile=" + val;
                                     } else {
                                         var addErr = addResponse.status ? addResponse.status.err_msg : "Device registration failed";
                                         throw new Error(addErr);
-                                    }
-                                })
-                                .then(function (retryResponse) {
-                                    if (!retryResponse) return;
-
-                                    if (retryResponse && retryResponse.status && Number(retryResponse.status.err_code) === 0) {
-                                        console.log("[Login] OTP sent successfully after device registration");
-                                        // Keep button disabled - navigating away
-                                        var retryUserId = val;
-                                        if (retryResponse.body && retryResponse.body.length > 0 && retryResponse.body[0].userid) {
-                                            retryUserId = retryResponse.body[0].userid;
-                                        }
-                                        // Navigate to verify - user data saved after OTP verification
-                                        window.location.href = "verify.html?mobile=" + val + "&userid=" + encodeURIComponent(retryUserId);
-                                    } else {
-                                        // Reset on error only
-                                        otpRequestInProgress = false;
-                                        btn.innerText = originalText;
-                                        btn.disabled = false;
-                                        var retryErr = retryResponse.status ? retryResponse.status.err_msg : "Failed to send OTP";
-                                        alert("Error: " + retryErr);
                                     }
                                 })
                                 .catch(function (addError) {
@@ -1079,9 +869,9 @@ function handleOK() {
 
     // VERIFY PAGE: Verify Button (if exists)
     if (active.id === "verifyBtn") {
-        // Prevent duplicate verification requests
+        // Prevent duplicate clicks
         if (otpVerifyInProgress) {
-            console.log("[Verify] ⚠️ Verification already in progress, ignoring duplicate");
+            console.log("[Verify] Already in progress, ignoring duplicate");
             return;
         }
 
@@ -1094,89 +884,47 @@ function handleOK() {
         console.log("[Verify] Verify button clicked - OTP:", fullOTP, "| Length:", fullOTP.length);
 
         if (fullOTP.length === 4) {
-            console.log("[Verify] ✅ Starting OTP verification:", fullOTP);
-            console.log("[Verify] ⏱️ Verify API call timestamp:", new Date().toISOString());
-
-            // Set flag to prevent duplicate requests
             otpVerifyInProgress = true;
 
-            // Get user info from URL
+            // Get mobile from URL
             var urlParams = new URLSearchParams(window.location.search);
             var mobile = urlParams.get('mobile') || "";
-            var userid = urlParams.get('userid') || "";
 
-            // If URL params are missing, redirect back to login
-            if (!mobile || !userid) {
-                console.error("[Verify] Missing mobile or userid in URL params - redirecting to login");
+            // If mobile is missing, redirect back to login
+            if (!mobile) {
+                console.error("[Verify] Missing mobile in URL params - redirecting to login");
                 window.location.replace("login.html");
                 return;
             }
 
             // Show loading state
             var btn = document.getElementById("verifyBtn");
-            var originalText = btn.innerText;
             btn.innerText = "Verifying...";
             btn.disabled = true;
 
-            // Call actual API - SINGLE CALL ONLY
-            console.log("[Verify] 📡 Calling AuthAPI.verifyOTP() - ONE TIME ONLY");
-            AuthAPI.verifyOTP(userid, mobile, fullOTP)
-                .then(function (response) {
-                    console.log("[Verify] 📨 OTP Verification Response:", response);
-                    console.log("[Verify] ⏱️ Response timestamp:", new Date().toISOString());
+            console.log("[Verify] OTP entered:", fullOTP);
 
-                    // Check response
-                    if (response && response.status && Number(response.status.err_code) === 0) {
-                        console.log("[Verify] ✅ OTP verified successfully");
-                        // Keep button disabled - navigating away
+            // NO API call — store login state and redirect to home
+            localStorage.setItem('isLoggedIn', 'true');
+            localStorage.setItem('mobile', mobile);
+            localStorage.setItem('loginTime', new Date().toISOString());
 
-                        // Store login state in localStorage
-                        localStorage.setItem('isLoggedIn', 'true');
-                        localStorage.setItem('userid', userid);
-                        localStorage.setItem('mobile', mobile);
-                        localStorage.setItem('loginTime', new Date().toISOString());
+            // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
+            localStorage.setItem('hasLoggedInOnce', 'true');
+            console.log("[Verify] hasLoggedInOnce flag set - future app launches will skip login");
 
-                        // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
-                        localStorage.setItem('hasLoggedInOnce', 'true');
-                        console.log("[Verify] ✅ hasLoggedInOnce flag set - future app launches will skip login");
-
-                        // Navigate to home page directly (no popup)
-                        window.location.replace("home.html");
-                    } else {
-                        // Reset flag and button on error only
-                        otpVerifyInProgress = false;
-                        btn.innerText = originalText;
-                        btn.disabled = false;
-
-                        console.error("[Verify] ❌ OTP verification failed:", response);
-                        var errorMsg = response.status ? response.status.err_msg : "Invalid OTP";
-
-                        // Clear all OTP inputs
-                        clearOTPInputs();
-
-                        // Show error popup with proper focus management
-                        showErrorPopup(errorMsg);
-                    }
-                })
-                .catch(function (error) {
-                    console.error("[Verify] ❌ OTP verification error:", error);
-                    
-                    // Reset flag
-                    otpVerifyInProgress = false;
-                    
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-
-                    // Clear all OTP inputs
-                    clearOTPInputs();
-
-                    // Show error popup
-                    showErrorPopup("Network error. Please check your connection.");
-                });
+            // Navigate to home page directly
+            window.location.replace("home.html");
         } else {
             console.log("Incomplete OTP");
             showErrorPopup("Please enter full 4-digit OTP");
         }
+        return;
+    }
+
+    // VERIFY PAGE: Resend OTP Button
+    if (active.id === "resendOtpBtn") {
+        handleResendOTP();
         return;
     }
 
@@ -1303,7 +1051,77 @@ function clearOTPInputs() {
     }
 }
 
-// Show OTP Success Popup
+// ==========================================
+// RESEND OTP - 30s countdown timer + button
+// ==========================================
+var resendTimerInterval = null;
+var resendInProgress = false;
+
+function initResendOTPTimer() {
+    var timerEl = document.getElementById('resendTimer');
+    var countdownEl = document.getElementById('resendCountdown');
+    var resendBtn = document.getElementById('resendOtpBtn');
+
+    if (!timerEl || !resendBtn) return; // Not on verify page
+
+    var seconds = 30;
+    countdownEl.innerText = seconds;
+    timerEl.style.display = '';
+    resendBtn.style.display = 'none';
+
+    if (resendTimerInterval) clearInterval(resendTimerInterval);
+
+    resendTimerInterval = setInterval(function () {
+        seconds--;
+        countdownEl.innerText = seconds;
+        if (seconds <= 0) {
+            clearInterval(resendTimerInterval);
+            resendTimerInterval = null;
+            timerEl.style.display = 'none';
+            resendBtn.style.display = '';
+        }
+    }, 1000);
+}
+
+function handleResendOTP() {
+    if (resendInProgress) return;
+
+    var urlParams = new URLSearchParams(window.location.search);
+    var mobile = urlParams.get('mobile') || "";
+    if (!mobile) return;
+
+    var resendBtn = document.getElementById('resendOtpBtn');
+    if (!resendBtn) return;
+
+    resendInProgress = true;
+    resendBtn.innerText = "Sending...";
+    resendBtn.disabled = true;
+
+    AuthAPI.resendOTP(mobile)
+        .then(function (response) {
+            resendInProgress = false;
+            resendBtn.innerText = "Resend OTP";
+            resendBtn.disabled = false;
+
+            if (response && response.status && Number(response.status.err_code) === 0) {
+                console.log("[Verify] OTP resent successfully via /loginOtp");
+                // Clear OTP inputs for fresh entry
+                clearOTPInputs();
+                // Restart 30s timer
+                initResendOTPTimer();
+            } else {
+                var errorMsg = response.status ? response.status.err_msg : "Failed to resend OTP";
+                showErrorPopup(errorMsg);
+            }
+        })
+        .catch(function (error) {
+            console.error("[Verify] Resend OTP error:", error);
+            resendInProgress = false;
+            resendBtn.innerText = "Resend OTP";
+            resendBtn.disabled = false;
+            showErrorPopup("Network error. Please check your connection.");
+        });
+}
 
 // Show Error Popup with proper focus management
 function showErrorPopup(errorMessage) {

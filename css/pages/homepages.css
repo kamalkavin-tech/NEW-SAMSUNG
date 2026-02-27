@@ -450,43 +450,44 @@ body.channels-page {
 }
 
 .languages-section .section-title {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 700;
-    margin-bottom: 14px;
+    margin-bottom: 18px;
     padding-left: 40px;
 }
 
-/* Language grid - 7 per row compact design */
+/* Language grid - 7 per row TV-optimized design */
 .languages-section .channels-grid {
     display: grid !important;
-    grid-template-columns: repeat(7, 1fr) !important;
-    gap: 10px 14px !important;
-    padding: 10px 30px !important;
+    grid-template-columns: repeat(7, 200px) !important;
+    gap: 20px 28px !important;
+    padding: 16px 40px !important;
+    justify-content: center;
     justify-items: center;
     overflow: visible;
 }
 
-/* Language Item - Compact Design (No Circle) */
+/* Language Item - TV-Optimized Design (No Circle) */
 .language-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px;
+    gap: 12px;
+    padding: 18px;
     background: transparent;
     border: 3px solid transparent;
-    border-radius: 14px;
+    border-radius: 16px;
     cursor: pointer;
     transition: all 0.2s ease;
     width: 100%;
-    max-width: 160px;
+    max-width: 220px;
 }
 
 .language-item:hover,
 .language-item:focus {
     border: 3px solid #FFFFFF;
-    border-radius: 16px;
+    border-radius: 18px;
     transform: scale(1.05);
     background: transparent;
     box-shadow: none;
@@ -495,16 +496,16 @@ body.channels-page {
 
 /* Language Logo - Full visible, no circle */
 .language-logo {
-    width: 90px;
-    height: 90px;
+    width: 130px;
+    height: 130px;
     object-fit: contain;
     background: transparent;
 }
 
 /* Language Logo Container - No circle background */
 .language-logo-container {
-    width: 90px;
-    height: 90px;
+    width: 130px;
+    height: 130px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -513,37 +514,37 @@ body.channels-page {
 }
 
 .language-logo-container img {
-    width: 90px;
-    height: 90px;
+    width: 130px;
+    height: 130px;
     object-fit: contain;
     background: transparent;
 }
 
 /* Language fallback text (when no logo) */
 .language-logo-fallback {
-    width: 85px;
-    height: 85px;
-    border-radius: 14px;
+    width: 120px;
+    height: 120px;
+    border-radius: 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 32px;
+    font-size: 42px;
     font-weight: 700;
     color: #ffffff;
 }
 
-/* Language Name Label - Compact */
+/* Language Name Label - TV-Optimized */
 .language-name {
     color: #ffffff;
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 600;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 140px;
-    margin-top: 4px;
+    max-width: 190px;
+    margin-top: 6px;
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
 }
 
@@ -554,8 +555,8 @@ body.channels-page {
 
 .language-item.view-all .language-logo-fallback {
     background: linear-gradient(135deg, #3b5cff 0%, #1a3ccc 100%);
-    border-radius: 14px;
-    font-size: 36px;
+    border-radius: 16px;
+    font-size: 46px;
 }
 
 .app-card {

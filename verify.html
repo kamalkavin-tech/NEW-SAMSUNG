@@ -33,6 +33,10 @@
                         autocomplete="off" inputmode="numeric" pattern="[0-9]" tabindex="0">
                 </div>
                 <button type="button" id="verifyBtn" class="verify-btn focusable" tabindex="0">Verify</button>
+                <div class="resend-otp-row">
+                    <span class="resend-timer" id="resendTimer">Resend OTP in <span id="resendCountdown">30</span>s</span>
+                    <button type="button" id="resendOtpBtn" class="resend-otp-btn focusable" tabindex="0" style="display:none;">Resend OTP</button>
+                </div>
             </form>
         </div>
     </div>

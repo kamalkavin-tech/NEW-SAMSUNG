@@ -728,16 +728,31 @@ function handleClick(element) {
  * Fails silently if API returns no data or encounters errors
  */
 function loadHomeAds() {
-    console.log("[HOME] Loading ads asynchronously...");
+    console.log("[HOME] Loading ads...");
 
-    // Get ads without blocking page load
+    // Check sessionStorage cache first
+    try {
+        var cachedAds = sessionStorage.getItem('home_ads_cache');
+        if (cachedAds) {
+            var ads = JSON.parse(cachedAds);
+            if (ads && Array.isArray(ads) && ads.length > 0) {
+                console.log("[HOME] Ads loaded from cache:", ads.length);
+                renderAdsInHeroBanner(ads);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // Get ads from API
     AdsAPI.getHomeAds()
         .then(function (ads) {
             console.log("[HOME] Ads fetched:", ads);
 
             // Only proceed if we have valid ads
             if (ads && Array.isArray(ads) && ads.length > 0) {
-                console.log("[HOME] ✓ Displaying", ads.length, "ads");
+                console.log("[HOME] Displaying", ads.length, "ads");
+                // Cache in sessionStorage
+                try { sessionStorage.setItem('home_ads_cache', JSON.stringify(ads)); } catch (e) {}
                 renderAdsInHeroBanner(ads);
             } else {
                 console.log("[HOME] No ads to display - keeping clean UI");
@@ -771,21 +786,16 @@ function renderAdsInHeroBanner(ads) {
     var sliderContainer = document.createElement('div');
     sliderContainer.className = 'ad-slider';
 
-    // Create slides
+    // Build all slides in a fragment first (single DOM insert = single reflow)
+    var fragment = document.createDocumentFragment();
     ads.forEach(function (ad, index) {
         var slide = document.createElement('div');
         slide.className = 'ad-slide';
-        slide.style.opacity = index === 0 ? '1' : '0';
-        slide.style.zIndex = index === 0 ? '1' : '0';
+        slide.style.cssText = index === 0 ? 'opacity:1;z-index:1' : 'opacity:0;z-index:0';
 
         var img = document.createElement('img');
         img.src = ad.adpath;
         img.alt = 'Advertisement ' + (index + 1);
-
-        // Handle image load success
-        img.onload = function () {
-            console.log("[HOME] Ad image loaded successfully:", ad.adpath);
-        };
 
         // Handle image load errors gracefully
         img.onerror = function () {
@@ -794,9 +804,9 @@ function renderAdsInHeroBanner(ads) {
         };
 
         slide.appendChild(img);
-        sliderContainer.appendChild(slide);
+        fragment.appendChild(slide);
     });
-
+    sliderContainer.appendChild(fragment);
     container.appendChild(sliderContainer);
 
     // Add navigation dots if multiple ads
@@ -872,18 +882,34 @@ function renderAdsInHeroBanner(ads) {
  * Fails silently if API returns no data or encounters errors
  */
 function loadHomeChannels() {
-    console.log("[HOME] Loading channels asynchronously...");
+    console.log("[HOME] Loading channels...");
 
-    // Get channels without blocking page load
+    // Check sessionStorage cache first
+    try {
+        var cachedChannels = sessionStorage.getItem('home_channels_cache');
+        if (cachedChannels) {
+            var channels = JSON.parse(cachedChannels);
+            if (channels && Array.isArray(channels) && channels.length > 0) {
+                var firstThreeChannels = channels.slice(0, 3);
+                console.log("[HOME] Channels loaded from cache:", channels.length);
+                renderChannelsInHomeGrid(firstThreeChannels);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // Get channels from API
     BBNL_API.getChannelList()
         .then(function (channels) {
             console.log("[HOME] Channels fetched:", channels ? channels.length : 0);
 
             // Only proceed if we have valid channels
             if (channels && Array.isArray(channels) && channels.length > 0) {
+                // Cache in sessionStorage
+                try { sessionStorage.setItem('home_channels_cache', JSON.stringify(channels)); } catch (e) {}
                 // Take first 3 channels (+ View All = 4 cards total)
                 var firstThreeChannels = channels.slice(0, 3);
-                console.log("[HOME] ✓ Displaying first", firstThreeChannels.length, "channels");
+                console.log("[HOME] Displaying first", firstThreeChannels.length, "channels");
                 renderChannelsInHomeGrid(firstThreeChannels);
             } else {
                 console.log("[HOME] No channels to display");
@@ -914,112 +940,74 @@ function renderChannelsInHomeGrid(channels) {
 
     console.log("[HOME] Rendering", channels.length, "channels in home grid");
 
-    // Clear any existing content
+    // Build all cards in a DocumentFragment (single DOM insert = single reflow)
+    // This is critical on Samsung TV where each appendChild triggers expensive layout
     container.innerHTML = '';
+    var fragment = document.createDocumentFragment();
 
-    // Create channel cards
     channels.forEach(function (channel) {
         var channelName = channel.chtitle || channel.channel_name || "Channel";
         var channelLogo = channel.chlogo || channel.logo_url || "";
         var channelNo = channel.channelno || channel.channel_no || "";
         var streamLink = channel.streamlink || channel.channel_url || "";
 
-        // Create channel card
         var card = document.createElement('div');
         card.className = 'channel-card focusable';
         card.tabIndex = 0;
         card.setAttribute('data-channel', channelName);
-
-        // Store full channel data for playback
         card.dataset.streamlink = streamLink;
         card.dataset.logo = channelLogo;
         card.dataset.channelno = channelNo;
 
-        // Channel icon container
+        // Channel icon - use cssText for single style update instead of many
         var iconDiv = document.createElement('div');
         iconDiv.className = 'channel-icon';
-        iconDiv.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        iconDiv.style.display = 'flex';
-        iconDiv.style.flexDirection = 'column';
-        iconDiv.style.alignItems = 'center';
-        iconDiv.style.justifyContent = 'center';
-        iconDiv.style.padding = '20px';
-        iconDiv.style.borderRadius = '12px';
+        iconDiv.style.cssText = 'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;border-radius:12px';
 
-        // Display logo if available
         if (channelLogo && !channelLogo.includes('chnlnoimage')) {
             var img = document.createElement('img');
             img.src = channelLogo;
             img.alt = channelName;
-            img.style.maxWidth = '80%';
-            img.style.maxHeight = '80%';
-            img.style.objectFit = 'contain';
-
-            // Fallback to text if image fails to load
+            img.style.cssText = 'max-width:80%;max-height:80%;object-fit:contain';
             img.onerror = function () {
-                iconDiv.innerHTML = '<span class="channel-name" style="color: white; font-weight: bold; font-size: 16px;">' +
+                iconDiv.innerHTML = '<span class="channel-name" style="color:white;font-weight:bold;font-size:16px">' +
                     channelName.substring(0, 10) + '</span>';
             };
-
             iconDiv.appendChild(img);
         } else {
-            // Text fallback
-            var nameSpan = document.createElement('span');
-            nameSpan.className = 'channel-name';
-            nameSpan.style.color = 'white';
-            nameSpan.style.fontWeight = 'bold';
-            nameSpan.style.fontSize = '16px';
-            nameSpan.style.textAlign = 'center';
-            nameSpan.innerText = channelName.substring(0, 15);
-            iconDiv.appendChild(nameSpan);
+            iconDiv.innerHTML = '<span class="channel-name" style="color:white;font-weight:bold;font-size:16px;text-align:center">' +
+                channelName.substring(0, 15) + '</span>';
         }
 
         card.appendChild(iconDiv);
 
-        // Channel label container
-        var labelContainer = document.createElement('div');
-        labelContainer.className = 'card-info';
-        labelContainer.style.padding = '12px 16px';
+        // Card info label
+        var labelDiv = document.createElement('div');
+        labelDiv.className = 'card-info';
+        labelDiv.style.cssText = 'padding:12px 16px';
+        labelDiv.innerHTML = '<div class="card-title-bottom">' + channelName +
+            '</div><div class="card-subtitle-bottom">Live Channels</div>';
+        card.appendChild(labelDiv);
 
-        // Channel name
-        var titleEl = document.createElement('div');
-        titleEl.className = 'card-title-bottom';
-        titleEl.innerText = channelName;
-        labelContainer.appendChild(titleEl);
-
-        // Subtitle
-        var subtitleEl = document.createElement('div');
-        subtitleEl.className = 'card-subtitle-bottom';
-        subtitleEl.innerText = 'Live Channels';
-        labelContainer.appendChild(subtitleEl);
-
-        card.appendChild(labelContainer);
-
-        // Click handler - navigate to player
         card.addEventListener('click', function () {
             handleChannelCardClick(channel);
         });
 
-        container.appendChild(card);
+        fragment.appendChild(card);
     });
 
     // Add "View All" button
     var viewAllCard = document.createElement('div');
     viewAllCard.className = 'channel-card view-all focusable';
     viewAllCard.tabIndex = 0;
-    viewAllCard.innerHTML = `
-        <div class="channel-icon view-all-icon" style="background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);">
-            <span class="arrow" style="font-size: 48px; color: #3b5cff;">→</span>
-        </div>
-        <div class="card-info" style="padding: 12px 16px;">
-            <div class="card-title-bottom">View All</div>
-            <div class="card-subtitle-bottom">Channels</div>
-        </div>
-    `;
+    viewAllCard.innerHTML = '<div class="channel-icon view-all-icon" style="background:linear-gradient(135deg,#1a1a2e 0%,#0f0f1e 100%)"><span class="arrow" style="font-size:48px;color:#3b5cff">\u2192</span></div><div class="card-info" style="padding:12px 16px"><div class="card-title-bottom">View All</div><div class="card-subtitle-bottom">Channels</div></div>';
     viewAllCard.addEventListener('click', function () {
         window.location.href = 'channels.html';
     });
-    container.appendChild(viewAllCard);
+    fragment.appendChild(viewAllCard);
+
+    // Single DOM insert - triggers only ONE reflow
+    container.appendChild(fragment);
 
     console.log("[HOME] ✓ Channels grid rendered successfully");
 
@@ -1057,16 +1045,31 @@ function renderEmptyChannelsState() {
  * Fails silently if API returns no data or encounters errors
  */
 function loadHomeLanguages() {
-    console.log("[HOME] Loading languages asynchronously...");
+    console.log("[HOME] Loading languages...");
 
-    // Get languages without blocking page load
+    // Check sessionStorage cache first
+    try {
+        var cachedLangs = sessionStorage.getItem('home_languages_cache');
+        if (cachedLangs) {
+            var languages = JSON.parse(cachedLangs);
+            if (languages && Array.isArray(languages) && languages.length > 0) {
+                console.log("[HOME] Languages loaded from cache:", languages.length);
+                renderLanguagesInHomeGrid(languages);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // Get languages from API
     BBNL_API.getLanguageList()
         .then(function (languages) {
             console.log("[HOME] Languages response:", languages);
 
             // Check if response is an array with languages
             if (languages && Array.isArray(languages) && languages.length > 0) {
-                console.log("[HOME] ✓ Displaying", languages.length, "languages");
+                console.log("[HOME] Displaying", languages.length, "languages");
+                // Cache in sessionStorage
+                try { sessionStorage.setItem('home_languages_cache', JSON.stringify(languages)); } catch (e) {}
                 renderLanguagesInHomeGrid(languages);
             } else {
                 console.log("[HOME] No languages to display");
@@ -1106,19 +1109,19 @@ function renderLanguagesInHomeGrid(languages) {
         return nameA.localeCompare(nameB);
     });
 
-    // Clear any existing content
+    // Build all items in a DocumentFragment (single DOM insert = single reflow)
+    // Critical on Samsung TV where each appendChild triggers expensive layout
     container.innerHTML = '';
+    var fragment = document.createDocumentFragment();
 
     // Take first 13 languages (+ View All = 14 items = 2 rows of 7)
     var displayLanguages = languages.slice(0, 13);
 
-    // Create minimal language items (logo + name only - NO CIRCLE)
     displayLanguages.forEach(function (lang, index) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
         var langLogo = lang.langlogo || "";
 
-        // Create language item (no circle design)
         var item = document.createElement('div');
         item.className = 'language-item focusable';
         item.tabIndex = 0;
@@ -1126,14 +1129,12 @@ function renderLanguagesInHomeGrid(languages) {
         item.setAttribute('data-langname', langName);
         item.setAttribute('data-index', index.toString());
 
-        // Display logo directly (no container wrapper)
         if (langLogo && !langLogo.includes('noimage')) {
             var img = document.createElement('img');
             img.className = 'language-logo';
             img.src = langLogo;
             img.alt = langName;
             img.onerror = function () {
-                // Fallback to text if image fails
                 var fallback = document.createElement('div');
                 fallback.className = 'language-logo-fallback';
                 fallback.innerText = langName.substring(0, 2).toUpperCase();
@@ -1142,52 +1143,39 @@ function renderLanguagesInHomeGrid(languages) {
             };
             item.appendChild(img);
         } else {
-            // Text fallback - show first 2 letters
             var fallback = document.createElement('div');
             fallback.className = 'language-logo-fallback';
             fallback.innerText = langName.substring(0, 2).toUpperCase();
             item.appendChild(fallback);
         }
 
-        // Language name label
         var nameLabel = document.createElement('div');
         nameLabel.className = 'language-name';
         nameLabel.innerText = langName;
         item.appendChild(nameLabel);
 
-        // Click handler - navigate to channels with language filter
         item.addEventListener('click', function () {
-            console.log("[HOME] Language clicked:", langName, "ID:", langId);
-            // Store selected language in sessionStorage for channels page
             sessionStorage.setItem('selectedLanguageId', langId);
             sessionStorage.setItem('selectedLanguageName', langName);
-            // Store focused index for state preservation when returning
             sessionStorage.setItem('homeFocusedLanguageIndex', index.toString());
             window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
         });
 
-        container.appendChild(item);
+        fragment.appendChild(item);
     });
 
-    // Add "View All" button (no circle style)
+    // Add "View All" button
     var viewAllItem = document.createElement('div');
     viewAllItem.className = 'language-item view-all focusable';
     viewAllItem.tabIndex = 0;
-
-    var viewAllFallback = document.createElement('div');
-    viewAllFallback.className = 'language-logo-fallback';
-    viewAllFallback.innerHTML = '→';
-    viewAllItem.appendChild(viewAllFallback);
-
-    var viewAllLabel = document.createElement('div');
-    viewAllLabel.className = 'language-name';
-    viewAllLabel.innerText = 'View All';
-    viewAllItem.appendChild(viewAllLabel);
-
+    viewAllItem.innerHTML = '<div class="language-logo-fallback">\u2192</div><div class="language-name">View All</div>';
     viewAllItem.addEventListener('click', function () {
         window.location.href = 'language-select.html';
     });
-    container.appendChild(viewAllItem);
+    fragment.appendChild(viewAllItem);
+
+    // Single DOM insert - triggers only ONE reflow
+    container.appendChild(fragment);
 
     console.log("[HOME] ✓ Languages grid rendered successfully (minimal design)");
 
@@ -1749,7 +1737,7 @@ function sendTRPDataOnLoad() {
         return;
     }
 
-    TRPDataAPI.sendTRPData("home_page_view")
+    TRPDataAPI.sendTRPData("", "home_page_view")
         .then(function (response) {
             console.log("[HOME] TRP data sent successfully:", response);
         })
@@ -1842,14 +1830,38 @@ function hideHomeErrorPopups() {
     homeErrorPopupOpen = false;
 }
 
-// Initialize error popup retry buttons
+// Initialize everything at DOMContentLoaded (fires BEFORE window.load)
+// On Samsung TV, window.load can be delayed by seconds waiting for images/CSS.
+// DOMContentLoaded fires as soon as HTML is parsed and scripts executed - much faster.
 document.addEventListener('DOMContentLoaded', function () {
-    // Pre-warm channel cache as early as possible (before images/CSS finish loading)
-    // This fires before 'load' event, giving the API call a head start
-    if (typeof BBNL_API !== 'undefined') {
-        BBNL_API.getChannelList().catch(function () {});
-        console.log("[HOME] Pre-warming channel cache at DOMContentLoaded");
+    console.log("[HOME] DOMContentLoaded - starting early initialization");
+
+    // Initialize UI features immediately
+    initDarkMode();
+    initNetworkStatus();
+
+    // Check app lock status
+    setTimeout(checkAppLockStatus, 50);
+
+    // Call AppVersion API on every app launch
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.getAppVersion) {
+        BBNL_API.getAppVersion().then(function (res) {
+            console.log("[HOME] AppVersion response:", res);
+        }).catch(function (err) {
+            console.warn("[HOME] AppVersion error:", err);
+        });
     }
+
+    // Send TRP data for analytics (non-critical, delay slightly)
+    setTimeout(sendTRPDataOnLoad, 500);
+
+    // Load ALL data in PARALLEL immediately - don't wait for window.load
+    // sessionStorage cache makes repeat visits instant (no API calls)
+    loadHomeAds();
+    loadHomeLanguages();
+    loadHomeChannels();
+
+    console.log("[HOME] All data loading started at DOMContentLoaded (parallel)");
 
     // Failed to Load - Retry
     var retryLoadBtn = document.getElementById('retryLoadBtn');
@@ -2035,25 +2047,8 @@ function playFoFiChannel() {
 // ==========================================
 
 // Load ads, languages, and channels after page is ready (non-blocking)
+// NOTE: Actual data loading moved to DOMContentLoaded for faster start on Samsung TV.
+// window.load fires AFTER all images/CSS finish, which delays data loading unnecessarily.
 window.addEventListener('load', function () {
-    // Initialize dark mode
-    initDarkMode();
-
-    // Initialize network status
-    initNetworkStatus();
-
-    // Check app lock status first
-    setTimeout(checkAppLockStatus, 50);
-
-    // Send TRP data for analytics (non-critical, delay slightly)
-    setTimeout(sendTRPDataOnLoad, 500);
-
-    // Load all data in PARALLEL immediately - no artificial delays
-    // All three are independent API calls and should fire concurrently
-    loadHomeAds();
-    loadHomeLanguages();
-    loadHomeChannels();
-
-    console.log("[HOME] Home page loaded - all data loading in parallel");
-
+    console.log("[HOME] window.load fired (all resources complete)");
 });

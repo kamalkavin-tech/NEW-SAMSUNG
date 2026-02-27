@@ -229,6 +229,12 @@ window.onload = function () {
                         clearTimeout(window._streamTimeoutTimer);
                         window._streamTimeoutTimer = null;
                     }
+                    // Load stream ads on successful playback
+                    var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
+                    if (ch) {
+                        var adChid = ch.chid || ch.channelno || ch.urno || "";
+                        if (adChid) loadStreamAds(String(adChid));
+                    }
                 },
                 onError: (e) => {
                     console.error("Player Error:", e);
@@ -331,17 +337,26 @@ window.onload = function () {
         });
     }
 
-    // Player error popup retry button - retry current channel
+    // Player error popup retry button - call channel data API then retry
     var playerRetryBtn = document.getElementById('playerRetryBtn');
     if (playerRetryBtn) {
         playerRetryBtn.addEventListener('click', function () {
             hidePlayerErrorPopup();
-            // Retry the current channel instead of navigating away
-            if (currentIndex >= 0 && allChannels[currentIndex]) {
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
+                BBNL_API.getChannelData().then(function (channels) {
+                    if (channels && channels.length > 0) {
+                        allChannels = channels;
+                    }
+                    if (currentIndex >= 0 && allChannels[currentIndex]) {
+                        setupPlayer(allChannels[currentIndex]);
+                    }
+                }).catch(function () {
+                    if (currentIndex >= 0 && allChannels[currentIndex]) {
+                        setupPlayer(allChannels[currentIndex]);
+                    }
+                });
+            } else if (currentIndex >= 0 && allChannels[currentIndex]) {
                 setupPlayer(allChannels[currentIndex]);
-            } else {
-                // No channel to retry — go back to channels page
-                window.location.href = 'channels.html';
             }
         });
     }
@@ -726,6 +741,14 @@ function setupPlayer(channel) {
         console.log("========================");
     }
 
+    // PRE-PLAY subscription check — block only when explicitly "no"
+    if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
+        channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
+        console.warn("[Player] Channel not subscribed, blocking playback:", chName, "subscribed:", channel.subscribed);
+        showPlayerErrorPopup('Channel Not Subscribed', 'Channel is not subscribed. Please subscribe channel to watch.');
+        return;
+    }
+
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
         console.log("Using AVPlayer (Tizen mode)");
         if (isDVBChannel) {
@@ -786,13 +809,6 @@ function setupPlayer(channel) {
         }
     }
 
-    // Load stream ads for this channel (non-blocking)
-    var chid = channel.chid || channel.channelno || channel.urno || "";
-    if (chid) {
-        setTimeout(function () {
-            loadStreamAds(String(chid));
-        }, 3000); // Delay 3 seconds to let stream start first
-    }
 }
 
 // ==========================================

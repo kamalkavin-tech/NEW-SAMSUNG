@@ -236,3 +236,35 @@
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
     outline: none;
 }
+
+.resend-otp-row {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.resend-timer {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+}
+
+.resend-otp-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #6b8aff;
+    font-size: 18px;
+    padding: 10px 30px;
+    border-radius: 20px;
+    cursor: pointer;
+}
+
+.resend-otp-btn:focus {
+    background: rgba(43, 76, 255, 0.15);
+    border-color: #2b4cff;
+    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.4);
+    outline: none;
+}
+
+.resend-otp-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}

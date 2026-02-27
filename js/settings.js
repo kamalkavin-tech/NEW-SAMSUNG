@@ -655,8 +655,8 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 // Load Public IP and show it in Gateway IP field
                 loadPublicIPForGateway();
 
-                // Load IPv6 Address - use tizen.systeminfo first (more reliable)
-                loadIPv6Address(networkType);
+                // Load IPv6 Address - uses centralized detection from api.js
+                loadIPv6Display();
             } else {
                 setElementText('device-ipv4', 'Disconnected');
                 setElementText('device-gateway', 'Disconnected');
@@ -685,7 +685,7 @@ function loadNetworkInfo(deviceInfo, isTizen) {
             // Load IP addresses from external APIs
             loadIPv4FromExternalAPI();
             loadPublicIPForGateway();
-            loadIPv6FromExternalAPI(document.getElementById('device-ipv6'));
+            loadIPv6Display();
         }
     } catch (e) {
         console.error("[Settings] Network info error:", e);
@@ -893,216 +893,14 @@ function loadPublicIPForGateway() {
 }
 
 /**
- * Load IPv6 Address using tizen.systeminfo first, then fallback to webapis.network
- * Implements reliable detection for Tizen 5.0+
- * @param {number} networkType - The active network type
+ * Load IPv6 Address using centralized DeviceInfo.detectIPv6() from api.js
  */
-function loadIPv6Address(networkType) {
+function loadIPv6Display() {
     var ipv6El = document.getElementById('device-ipv6');
     if (!ipv6El) return;
-
-    // Helper: check if IPv6 address is actually valid and useful
-    function isValidIPv6(addr) {
-        if (!addr || typeof addr !== 'string') return false;
-        var trimmed = addr.trim();
-        if (trimmed === '' || trimmed === '::' || trimmed === '::0' || trimmed === '0::0' || trimmed === '::1') return false;
-        if (!trimmed.includes(':')) return false;
-        var cleaned = trimmed.replace(/:/g, '').replace(/0/g, '');
-        if (cleaned === '') return false;
-        return true;
-    }
-
-    try {
-        // First try tizen.systeminfo API (more reliable for IPv6 on Tizen 5.0+)
-        // NOTE: "NETWORK" property only returns networkType, NOT IP addresses.
-        // Must use "WIFI_NETWORK" or "ETHERNET_NETWORK" to get ipv6Address.
-        if (typeof tizen !== 'undefined' && tizen.systeminfo) {
-            // networkType: 1=WiFi, 3=Ethernet
-            var sysinfoProperty = (networkType === 3) ? "ETHERNET_NETWORK" : "WIFI_NETWORK";
-            console.log("[Settings] Querying systeminfo property:", sysinfoProperty);
-
-            tizen.systeminfo.getPropertyValue(
-                sysinfoProperty,
-                function (network) {
-                    // Log full network object for debugging
-                    console.log("[Settings] Network Info:", JSON.stringify(network));
-                    console.log("[Settings] IPv6 from systeminfo:", network.ipv6Address);
-
-                    var ipv6Address = null;
-
-                    // Check IPv6 array/string first
-                    if (network.ipv6Address) {
-                        if (Array.isArray(network.ipv6Address)) {
-                            for (var i = 0; i < network.ipv6Address.length; i++) {
-                                if (isValidIPv6(network.ipv6Address[i])) {
-                                    ipv6Address = network.ipv6Address[i].trim();
-                                    break;
-                                }
-                            }
-                        } else if (isValidIPv6(network.ipv6Address)) {
-                            ipv6Address = network.ipv6Address.trim();
-                        }
-                    }
-                    // Fallback: check if ipAddress is IPv6
-                    if (!ipv6Address && network.ipAddress && isValidIPv6(network.ipAddress)) {
-                        ipv6Address = network.ipAddress.trim();
-                    }
-
-                    if (ipv6Address) {
-                        ipv6El.innerText = ipv6Address;
-                        console.log("[Settings] IPv6 found:", ipv6Address);
-                    } else {
-                        console.log("[Settings] systeminfo returned empty/null IPv6:", network.ipv6Address);
-                        // Fallback to webapis
-                        loadIPv6FromWebapis(networkType, ipv6El);
-                    }
-                },
-                function (error) {
-                    console.log("[Settings] systeminfo IPv6 error:", error);
-                    // Fallback to webapis
-                    loadIPv6FromWebapis(networkType, ipv6El);
-                }
-            );
-            return;
-        }
-
-        // Direct fallback to webapis
-        loadIPv6FromWebapis(networkType, ipv6El);
-
-    } catch (e) {
-        console.error("[Settings] IPv6 fetch error:", e);
-        ipv6El.innerText = 'N/A';
-    }
-}
-
-/**
- * Fallback IPv6 loader using webapis.network
- * Tries multiple methods for compatibility with different TV models
- */
-function loadIPv6FromWebapis(networkType, ipv6El) {
-    function isValidIPv6(addr) {
-        if (!addr || typeof addr !== 'string') return false;
-        var trimmed = addr.trim();
-        if (trimmed === '' || trimmed === '::' || trimmed === '::0' || trimmed === '0::0' || trimmed === '::1') return false;
-        if (!trimmed.includes(':')) return false;
-        var cleaned = trimmed.replace(/:/g, '').replace(/0/g, '');
-        if (cleaned === '') return false;
-        return true;
-    }
-
-    try {
-        if (typeof webapis !== 'undefined' && webapis.network) {
-            // Try getIpv6() first
-            var ipv6 = null;
-            try {
-                ipv6 = webapis.network.getIpv6(networkType);
-            } catch (e) {
-                console.log("[Settings] getIpv6 not available:", e);
-            }
-
-            if (isValidIPv6(ipv6)) {
-                ipv6El.innerText = ipv6.trim();
-                console.log("[Settings] IPv6 from getIpv6:", ipv6);
-                return;
-            } else if (ipv6) {
-                console.log("[Settings] getIpv6 returned empty/null:", ipv6);
-            }
-
-            // Alternative: check if getIp returns IPv6 (some models)
-            try {
-                var ip = webapis.network.getIp(networkType);
-                if (isValidIPv6(ip)) {
-                    ipv6El.innerText = ip.trim();
-                    console.log("[Settings] IPv6 from getIp:", ip);
-                    return;
-                }
-            } catch (e) {
-                console.log("[Settings] getIp fallback failed:", e);
-            }
-
-            // IPv6 not available from Tizen - try external API
-            loadIPv6FromExternalAPI(ipv6El);
-        } else {
-            // No Tizen API - try external API
-            loadIPv6FromExternalAPI(ipv6El);
-        }
-    } catch (e) {
-        console.error("[Settings] webapis IPv6 error:", e);
-        loadIPv6FromExternalAPI(ipv6El);
-    }
-}
-
-/**
- * Load IPv6 from external API services (for browser/emulator)
- */
-function loadIPv6FromExternalAPI(ipv6El) {
-    console.log("[Settings] Trying external IPv6 API services...");
-
-    function isValidIPv6(addr) {
-        if (!addr || typeof addr !== 'string') return false;
-        var trimmed = addr.trim();
-        if (trimmed === '' || trimmed === '::' || trimmed === '::0' || trimmed === '0::0' || trimmed === '::1') return false;
-        if (!trimmed.includes(':')) return false;
-        var cleaned = trimmed.replace(/:/g, '').replace(/0/g, '');
-        if (cleaned === '') return false;
-        return true;
-    }
-
-    var ipv6Services = [
-        { url: 'https://api64.ipify.org?format=json', type: 'json' },
-        { url: 'https://api6.ipify.org?format=json', type: 'json' },
-        { url: 'https://v6.ident.me/', type: 'text' },
-        { url: 'https://ipv6.icanhazip.com', type: 'text' }
-    ];
-
-    function fetchWithTimeout(url, timeoutMs) {
-        var timeoutPromise = new Promise(function(_, reject) {
-            setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
-        });
-        return Promise.race([fetch(url), timeoutPromise]);
-    }
-
-    function tryService(index) {
-        if (index >= ipv6Services.length) {
-            ipv6El.innerText = 'Not Available';
-            console.log("[Settings] All external IPv6 services failed or no IPv6 available on this network");
-            return;
-        }
-
-        var service = ipv6Services[index];
-        console.log("[Settings] Trying IPv6 service:", service.url);
-
-        fetchWithTimeout(service.url, 6000)
-            .then(function(response) {
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                if (service.type === 'json') {
-                    return response.json();
-                } else {
-                    return response.text();
-                }
-            })
-            .then(function(data) {
-                var ip = null;
-                if (typeof data === 'string') {
-                    ip = data.trim();
-                } else {
-                    ip = data.ip || data.IP || data.address || null;
-                }
-
-                // Check if it's actually a valid IPv6 address
-                if (isValidIPv6(ip)) {
-                    ipv6El.innerText = ip.trim();
-                    console.log("[Settings] IPv6 found via external API:", ip);
-                } else {
-                    console.log("[Settings] Response was not valid IPv6 (" + ip + "), trying next...");
-                    tryService(index + 1);
-                }
-            })
-            .catch(function(error) {
-                console.log("[Settings] IPv6 service failed:", service.url, error.message);
-                tryService(index + 1);
-            });
-    }
-
-    tryService(0);
+    // Clear cache so detection runs fresh
+    DEVICE_INFO.ipv6 = "";
+    DeviceInfo.detectIPv6().then(function (addr) {
+        ipv6El.innerText = addr || "Not Available";
+    });
 }
