@@ -96,6 +96,7 @@ const DEFAULT_HEADERS = {
 // App package name & full app ID - read dynamically from config.xml / Tizen API
 var APP_PACKAGE = "";
 var APP_ID = "";
+var APP_CURRENT_VERSION = "1.0.0"; // Current app version - read from config.xml
 
 /**
  * Read app package name from config.xml or Tizen application API
@@ -116,7 +117,11 @@ function _initAppPackage() {
                 } else {
                     APP_PACKAGE = appId;
                 }
-                console.log("[AppPackage] From Tizen API:", APP_PACKAGE, "| Full ID:", APP_ID);
+                // Also read version from Tizen API if available
+                if (appInfo.version) {
+                    APP_CURRENT_VERSION = appInfo.version;
+                }
+                console.log("[AppPackage] From Tizen API:", APP_PACKAGE, "| Full ID:", APP_ID, "| Version:", APP_CURRENT_VERSION);
                 return;
             }
         }
@@ -142,7 +147,12 @@ function _initAppPackage() {
                 } else {
                     APP_PACKAGE = appId;
                 }
-                console.log("[AppPackage] From config.xml:", APP_PACKAGE, "| Full ID:", APP_ID);
+                // Read version from widget element
+                var widgetEl = doc.querySelector("widget");
+                if (widgetEl && widgetEl.getAttribute("version")) {
+                    APP_CURRENT_VERSION = widgetEl.getAttribute("version");
+                }
+                console.log("[AppPackage] From config.xml:", APP_PACKAGE, "| Full ID:", APP_ID, "| Version:", APP_CURRENT_VERSION);
                 return;
             }
         }
@@ -499,6 +509,15 @@ function mapBBNLError(msg) {
 // ==========================================
 const DeviceInfo = {
     initializeDeviceInfo: function () {
+        // Load cached public IP from sessionStorage FIRST (instant, synchronous)
+        try {
+            var cachedPublicIP = sessionStorage.getItem('_publicIP');
+            if (cachedPublicIP && !this._isPrivateIP(cachedPublicIP)) {
+                DEVICE_INFO.ip_address = cachedPublicIP;
+                console.log("[DeviceInfo] Loaded cached public IP:", cachedPublicIP);
+            }
+        } catch (e) {}
+
         try {
             if (typeof webapis !== 'undefined') {
                 // 1. MAC Address from network API
@@ -522,9 +541,11 @@ const DeviceInfo = {
 
                         if (networkType > 0) {
                             var ip = webapis.network.getIp(networkType);
-                            if (ip) {
+                            // Only use webapis IP if we don't already have a public IP
+                            if (ip && this._isPrivateIP(DEVICE_INFO.ip_address)) {
+                                // Store private IP as fallback only — will be overridden by public IP
                                 DEVICE_INFO.ip_address = ip;
-                                console.log("[DeviceInfo] IP Address:", ip);
+                                console.log("[DeviceInfo] Local IP (fallback):", ip);
                             }
 
                             // DNS
@@ -628,42 +649,95 @@ const DeviceInfo = {
             } catch (e2) {}
         }
 
-        // If IP is still empty (browser/emulator), fetch from external API
-        if (!DEVICE_INFO.ip_address) {
-            this._detectPublicIP();
-        }
+        // Always detect public IP (webapis returns private 192.168.x.x)
+        this._detectPublicIP();
     },
 
     /**
-     * Detect public IP via external API (for browser/emulator where webapis is unavailable)
-     * Also used as fallback on real TV if webapis.network.getIp() fails
+     * Check if an IP address is private/local (not routable on internet)
+     */
+    _isPrivateIP: function (ip) {
+        if (!ip) return true;
+        // RFC 1918 private ranges, loopback, link-local, CGNAT
+        return /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[0-2]\d)\.|0\.)/.test(ip);
+    },
+
+    // Promise that resolves when public IP is available
+    _publicIPPromise: null,
+
+    /**
+     * Detect public IP via external API
+     * Always overrides private IP from webapis.network.getIp()
+     * Caches result in sessionStorage for instant use on subsequent pages
      */
     _detectPublicIP: function () {
+        var self = this;
         var services = [
             'https://api.ipify.org?format=json',
             'https://api64.ipify.org?format=json'
         ];
-        function tryService(i) {
-            if (i >= services.length) return;
-            fetch(services[i], { method: 'GET' })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data && data.ip) {
-                        if (!DEVICE_INFO.ip_address) {
+
+        this._publicIPPromise = new Promise(function (resolve) {
+            function tryService(i) {
+                if (i >= services.length) {
+                    console.warn("[DeviceInfo] All public IP services failed");
+                    resolve(false);
+                    return;
+                }
+                fetch(services[i], { method: 'GET' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data && data.ip && !self._isPrivateIP(data.ip)) {
                             DEVICE_INFO.ip_address = data.ip;
+                            try { sessionStorage.setItem('_publicIP', data.ip); } catch (e) {}
+                            console.log("[DeviceInfo] Public IP detected:", data.ip);
+                            resolve(true);
+                        } else {
+                            tryService(i + 1);
                         }
-                        if (!DEVICE_INFO.gateway_ip) {
-                            DEVICE_INFO.gateway_ip = data.ip;
-                        }
-                        console.log("[DeviceInfo] Public IP detected:", data.ip);
-                    }
-                })
-                .catch(function () { tryService(i + 1); });
+                    })
+                    .catch(function () { tryService(i + 1); });
+            }
+            tryService(0);
+        });
+    },
+
+    /**
+     * Wait for public IP to be available (use before first API call)
+     * Resolves immediately if public IP is already set
+     * @param {number} timeoutMs - Max wait time (default 3000ms)
+     */
+    ensurePublicIP: function (timeoutMs) {
+        var self = this;
+        if (!this._isPrivateIP(DEVICE_INFO.ip_address)) {
+            return Promise.resolve(true);
         }
-        tryService(0);
+        if (!this._publicIPPromise) {
+            return Promise.resolve(false);
+        }
+        // Race: IP detection vs timeout
+        return Promise.race([
+            this._publicIPPromise,
+            new Promise(function (resolve) {
+                setTimeout(function () {
+                    console.warn("[DeviceInfo] Public IP detection timed out after", timeoutMs || 3000, "ms");
+                    resolve(false);
+                }, timeoutMs || 3000);
+            })
+        ]);
     },
 
     getDeviceInfo: function () {
+        // Guard: if IP is still private, try sessionStorage cache
+        if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
+            try {
+                var cached = sessionStorage.getItem('_publicIP');
+                if (cached && !this._isPrivateIP(cached)) {
+                    DEVICE_INFO.ip_address = cached;
+                    console.log("[DeviceInfo] Using cached public IP:", cached);
+                }
+            } catch (e) {}
+        }
         return DEVICE_INFO;
     },
 
@@ -672,6 +746,15 @@ const DeviceInfo = {
      * Passes ALL device info collected from Samsung TV APIs
      */
     getDevDets: function () {
+        // Ensure public IP is used (same guard as getDeviceInfo)
+        if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
+            try {
+                var cached = sessionStorage.getItem('_publicIP');
+                if (cached && !this._isPrivateIP(cached)) {
+                    DEVICE_INFO.ip_address = cached;
+                }
+            } catch (e) {}
+        }
         return {
             brand: DEVICE_INFO.brand || "",
             model: DEVICE_INFO.model || DEVICE_INFO.device_name || "",
@@ -1161,12 +1244,15 @@ const ChannelsAPI = {
         // Check cache first
         var cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES);
         if (cachedCategories && cachedCategories.length > 0) {
-            console.log("[ChannelsAPI] 📦 Using cached categories (" + cachedCategories.length + ")");
+            console.log("[ChannelsAPI] Using cached categories (" + cachedCategories.length + ")");
 
-            // Refresh in background
-            this._fetchAndCacheCategories().catch(function (e) {
-                console.warn("[ChannelsAPI] Background categories refresh failed:", e);
-            });
+            // Background refresh only if cache is older than 5 minutes
+            var catAge = CacheManager.getAge(CacheManager.KEYS.CATEGORIES);
+            if (catAge !== null && catAge >= 5) {
+                this._fetchAndCacheCategories().catch(function (e) {
+                    console.warn("[ChannelsAPI] Background categories refresh failed:", e);
+                });
+            }
 
             return cachedCategories;
         }
@@ -1267,11 +1353,13 @@ const ChannelsAPI = {
 
         // ── CACHE HIT: Return cached data immediately ──
         if (cachedChannels && cachedChannels.length > 0) {
-            // Background expiry merge (non-blocking, deduped)
+            var cacheAgeMinutes = CacheManager.getAge(CacheManager.KEYS.CHANNEL_LIST);
+
+            // Background expiry merge (non-blocking, deduped) — only on fresh cache without expiry data
             var hasExpiry = cachedChannels.some(function (ch) {
                 return ch.expirydate && String(ch.expirydate).trim() !== "";
             });
-            if (!hasExpiry && !this._expiryMergeInProgress) {
+            if (!hasExpiry && !this._expiryMergeInProgress && (cacheAgeMinutes === null || cacheAgeMinutes < 2)) {
                 this._expiryMergeInProgress = true;
                 var self = this;
                 this._mergeExpiryData(cachedChannels, userid, mobile, device).then(function (merged) {
@@ -1284,15 +1372,18 @@ const ChannelsAPI = {
 
             var filteredCached = this._applyFilters(cachedChannels, options);
 
-            // Background refresh — only ONE at a time (dedup)
-            if (!this._backgroundRefreshInProgress) {
+            // Background refresh — only if cache is older than 5 minutes AND not already in progress
+            if (!this._backgroundRefreshInProgress && cacheAgeMinutes !== null && cacheAgeMinutes >= 5) {
                 this._backgroundRefreshInProgress = true;
                 var self = this;
+                console.log("[ChannelsAPI] Cache age:", cacheAgeMinutes, "min — triggering background refresh");
                 this._fetchAndCacheChannels(userid, mobile, device).then(function () {
                     self._backgroundRefreshInProgress = false;
                 }).catch(function () {
                     self._backgroundRefreshInProgress = false;
                 });
+            } else if (cacheAgeMinutes !== null && cacheAgeMinutes < 5) {
+                console.log("[ChannelsAPI] Cache age:", cacheAgeMinutes, "min — skipping background refresh (< 5 min)");
             }
 
             return filteredCached;
@@ -1557,12 +1648,15 @@ const ChannelsAPI = {
         // Check cache first
         var cachedLanguages = CacheManager.get(CacheManager.KEYS.LANGUAGES);
         if (cachedLanguages && cachedLanguages.length > 0) {
-            console.log("[ChannelsAPI] 📦 Using cached languages (" + cachedLanguages.length + ")");
+            console.log("[ChannelsAPI] Using cached languages (" + cachedLanguages.length + ")");
 
-            // Refresh in background
-            this._fetchAndCacheLanguages().catch(function (e) {
-                console.warn("[ChannelsAPI] Background languages refresh failed:", e);
-            });
+            // Background refresh only if cache is older than 5 minutes
+            var langAge = CacheManager.getAge(CacheManager.KEYS.LANGUAGES);
+            if (langAge !== null && langAge >= 5) {
+                this._fetchAndCacheLanguages().catch(function (e) {
+                    console.warn("[ChannelsAPI] Background languages refresh failed:", e);
+                });
+            }
 
             return cachedLanguages;
         }
@@ -2021,12 +2115,31 @@ const FeedbackAPI = {
 // APP VERSION API
 // ==========================================
 const AppVersionAPI = {
+    _cachedResponse: null, // Session-level cache — API called once per app session
+
     /**
      * Get app version from BBNL server
+     * Cached per session to avoid repeated calls across pages
      *
      * @returns {Promise<Object>} API response with app version
      */
     getAppVersion: async function () {
+        // Return cached response if already fetched this session
+        if (this._cachedResponse) {
+            console.log("[AppVersionAPI] Returning cached version response");
+            return this._cachedResponse;
+        }
+
+        // Check sessionStorage for cross-page session cache
+        try {
+            var cached = sessionStorage.getItem('_appVersionResponse');
+            if (cached) {
+                this._cachedResponse = JSON.parse(cached);
+                console.log("[AppVersionAPI] Returning session-cached version response");
+                return this._cachedResponse;
+            }
+        } catch (e) {}
+
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -2043,10 +2156,18 @@ const AppVersionAPI = {
 
         console.log("[AppVersionAPI] Getting app version:", payload);
 
-        return await apiCall(API_ENDPOINTS.APP_VERSION, payload, {
+        var response = await apiCall(API_ENDPOINTS.APP_VERSION, payload, {
             "devmac": device.mac_address,
             "devslno": device.devslno
         });
+
+        // Cache the response for this session
+        if (response && response.status && Number(response.status.err_code) === 0) {
+            this._cachedResponse = response;
+            try { sessionStorage.setItem('_appVersionResponse', JSON.stringify(response)); } catch (e) {}
+        }
+
+        return response;
     }
 };
 
@@ -2098,7 +2219,7 @@ const AppLockAPI = {
             userid: user && user.userid ? user.userid : _getSessionUser().userid,
             mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             ip_address: device.ip_address,
-            appversion: "1.0"
+            appversion: APP_CURRENT_VERSION
         };
 
         console.log("[AppLockAPI] Checking app lock:", payload);
@@ -2308,7 +2429,27 @@ const BBNL_API = {
     getLastChannel: CacheManager.getLastChannel.bind(CacheManager),
 
     // Configuration
-    API_CONFIG: API_CONFIG
+    API_CONFIG: API_CONFIG,
+
+    // App current version (from config.xml)
+    getCurrentVersion: function () { return APP_CURRENT_VERSION; },
+
+    /**
+     * Compare two version strings (e.g. "1.0" vs "1.1", "1.0.0" vs "1.1.0")
+     * Returns: 1 if serverVersion > appVersion, -1 if less, 0 if equal
+     */
+    compareVersions: function (serverVersion, appVersion) {
+        var sv = String(serverVersion || "0").split(".").map(Number);
+        var av = String(appVersion || "0").split(".").map(Number);
+        var len = Math.max(sv.length, av.length);
+        for (var i = 0; i < len; i++) {
+            var s = sv[i] || 0;
+            var a = av[i] || 0;
+            if (s > a) return 1;
+            if (s < a) return -1;
+        }
+        return 0;
+    }
 };
 
 // Make it available globally

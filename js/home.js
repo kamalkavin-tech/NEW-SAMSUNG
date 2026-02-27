@@ -150,9 +150,10 @@ window.onload = function () {
     // Initialize numeric-only search input
     var searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        // Filter out non-numeric characters on input
+        // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
+            if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
                 searchInput.value = cleaned;
             }
@@ -214,6 +215,16 @@ document.addEventListener('keydown', function (e) {
             if (activeBtn && activeBtn.classList.contains('error-popup-btn')) {
                 activeBtn.click();
             }
+        }
+        return;
+    }
+
+    // Check if update popup is open - ENTER/BACK to dismiss
+    var updatePopup = document.getElementById('appUpdatePopup');
+    if (updatePopup && updatePopup.style.display === 'flex') {
+        e.preventDefault();
+        if (e.keyCode === 13 || e.keyCode === 10009) {
+            updatePopup.style.display = 'none';
         }
         return;
     }
@@ -283,9 +294,12 @@ document.addEventListener('keydown', function (e) {
     if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
         var searchInput = document.getElementById('searchInput');
         if (searchInput) {
+            // Enforce max 4 digits
+            if (searchInput.value.length >= 4) return;
+
             // Get the typed number
             var num = (code >= 96) ? (code - 96) : (code - 48);
-            
+
             // Focus search input and append number
             searchInput.focus();
             searchInput.value += num.toString();
@@ -1625,6 +1639,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (appLockRetryBtn) {
         appLockRetryBtn.addEventListener('click', retryAppLockCheck);
     }
+
+    // App update popup OK button - just dismiss the popup
+    var appUpdateOkBtn = document.getElementById('appUpdateOkBtn');
+    if (appUpdateOkBtn) {
+        appUpdateOkBtn.addEventListener('click', function () {
+            var popup = document.getElementById('appUpdatePopup');
+            if (popup) popup.style.display = 'none';
+        });
+    }
 });
 
 // ==========================================
@@ -1840,28 +1863,63 @@ document.addEventListener('DOMContentLoaded', function () {
     initDarkMode();
     initNetworkStatus();
 
-    // Check app lock status
-    setTimeout(checkAppLockStatus, 50);
+    // Ensure public IP is ready before making any API calls
+    // On subsequent pages, cached public IP is available instantly (resolves immediately)
+    // On first launch, waits up to 3 seconds for ipify.org response
+    var ipReady = (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP)
+        ? DeviceInfo.ensurePublicIP(3000)
+        : Promise.resolve(false);
 
-    // Call AppVersion API on every app launch
-    if (typeof BBNL_API !== 'undefined' && BBNL_API.getAppVersion) {
-        BBNL_API.getAppVersion().then(function (res) {
-            console.log("[HOME] AppVersion response:", res);
-        }).catch(function (err) {
-            console.warn("[HOME] AppVersion error:", err);
-        });
-    }
+    ipReady.then(function () {
+        console.log("[HOME] Public IP ready, starting API calls. IP:", DeviceInfo.getDeviceInfo().ip_address);
 
-    // Send TRP data for analytics (non-critical, delay slightly)
-    setTimeout(sendTRPDataOnLoad, 500);
+        // Check app lock status
+        setTimeout(checkAppLockStatus, 50);
 
-    // Load ALL data in PARALLEL immediately - don't wait for window.load
-    // sessionStorage cache makes repeat visits instant (no API calls)
-    loadHomeAds();
-    loadHomeLanguages();
-    loadHomeChannels();
+        // Check app version - show update popup only if server version > app version
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.getAppVersion) {
+            BBNL_API.getAppVersion().then(function (res) {
+                console.log("[HOME] AppVersion response:", res);
+                if (res && res.status && Number(res.status.err_code) === 0 && res.body) {
+                    var serverVersion = res.body.appversion || "";
+                    var currentVersion = BBNL_API.getCurrentVersion();
+                    var comparison = BBNL_API.compareVersions(serverVersion, currentVersion);
+                    console.log("[HOME] Version check - Server:", serverVersion, "| App:", currentVersion, "| Result:", comparison);
 
-    console.log("[HOME] All data loading started at DOMContentLoaded (parallel)");
+                    if (comparison > 0) {
+                        // Server version is HIGHER - show update popup
+                        var msg = document.getElementById('appUpdateMessage');
+                        if (msg) {
+                            msg.innerText = "A new version (" + serverVersion + ") is available. Please update the application.";
+                        }
+                        var popup = document.getElementById('appUpdatePopup');
+                        if (popup) {
+                            popup.style.display = 'flex';
+                            var okBtn = document.getElementById('appUpdateOkBtn');
+                            if (okBtn) {
+                                setTimeout(function () { okBtn.focus(); }, 100);
+                            }
+                        }
+                    } else {
+                        console.log("[HOME] App is up to date - no update popup needed");
+                    }
+                }
+            }).catch(function (err) {
+                console.warn("[HOME] AppVersion error:", err);
+            });
+        }
+
+        // Send TRP data for analytics (non-critical, delay slightly)
+        setTimeout(sendTRPDataOnLoad, 500);
+
+        // Load ALL data in PARALLEL immediately
+        // sessionStorage cache makes repeat visits instant (no API calls)
+        loadHomeAds();
+        loadHomeLanguages();
+        loadHomeChannels();
+
+        console.log("[HOME] All data loading started (parallel)");
+    });
 
     // Failed to Load - Retry
     var retryLoadBtn = document.getElementById('retryLoadBtn');
@@ -1899,13 +1957,34 @@ document.addEventListener('DOMContentLoaded', function () {
  * Play a channel directly by its LCN number from the home page search
  * @param {Number} lcn - The LCN number to play
  */
+function showSearchNotFound(msg) {
+    var searchInput = document.getElementById('searchInput');
+    if (!searchInput) return;
+    var bar = searchInput.closest('.search-bar');
+    if (!bar) return;
+    // Remove any existing message
+    var existing = bar.querySelector('.search-not-found');
+    if (existing) existing.remove();
+    // Show message below search bar
+    var msgEl = document.createElement('div');
+    msgEl.className = 'search-not-found';
+    msgEl.textContent = msg;
+    msgEl.style.cssText = 'position:absolute;top:100%;left:0;right:0;text-align:center;color:#ff4444;font-size:14px;font-weight:600;padding:8px 0;white-space:nowrap;';
+    bar.style.position = 'relative';
+    bar.appendChild(msgEl);
+    // Auto-remove after 3 seconds
+    setTimeout(function () {
+        if (msgEl.parentNode) msgEl.remove();
+    }, 3000);
+}
+
 function playChannelByLCNFromHome(lcn) {
     console.log("[HOME] Playing channel by LCN:", lcn);
 
     BBNL_API.getChannelList()
         .then(function (channels) {
             if (!channels || !Array.isArray(channels)) {
-                alert("Channel " + lcn + " not found");
+                showSearchNotFound("Channel Not Found");
                 return;
             }
 
@@ -1919,12 +1998,12 @@ function playChannelByLCNFromHome(lcn) {
                 BBNL_API.playChannel(channel);
             } else {
                 console.warn("[HOME] LCN", lcn, "not found");
-                alert("Channel " + lcn + " not found");
+                showSearchNotFound("Channel Not Found");
             }
         })
         .catch(function (error) {
             console.error("[HOME] LCN lookup failed:", error);
-            alert("Channel " + lcn + " not found");
+            showSearchNotFound("Channel Not Found");
         });
 }
 

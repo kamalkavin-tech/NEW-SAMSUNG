@@ -263,7 +263,14 @@ video {
     white-space: nowrap;
 }
 
-/* Device ID item should not shrink */
+/* User ID value */
+.user-value {
+    color: #60a5fa;
+    font-size: 18px;
+    white-space: nowrap;
+}
+
+/* Last info item should not shrink */
 .info-item:last-child {
     flex-shrink: 0;
 }

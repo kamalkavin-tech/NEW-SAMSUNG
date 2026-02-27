@@ -59,7 +59,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="tel" class="search-input focusable" tabindex="0" placeholder="Enter Channel Number..." id="searchInput" inputmode="numeric" pattern="[0-9]*">
+                <input type="tel" class="search-input focusable" tabindex="0" placeholder="Enter Channel Number..." id="searchInput" inputmode="numeric" pattern="[0-9]*" maxlength="4">
             </div>
         </div>
         <div class="header-right">
@@ -202,6 +202,22 @@
                     <img id="errorImg_serviceLocked" src="about:blank" alt="Service locked" style="max-width: 280px; max-height: 280px;">
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- App Update Popup -->
+    <div class="error-popup-overlay" id="appUpdatePopup" style="display: none;">
+        <div class="error-popup">
+            <div class="error-popup-image">
+                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </div>
+            <h2 class="error-popup-title">Update Available</h2>
+            <p class="error-popup-message" id="appUpdateMessage">A new version is available. Please update the application.</p>
+            <button class="error-popup-btn focusable" id="appUpdateOkBtn" tabindex="0">OK</button>
         </div>
     </div>
 

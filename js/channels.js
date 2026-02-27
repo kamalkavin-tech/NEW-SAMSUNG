@@ -139,6 +139,11 @@ function addZoneTrackingListeners() {
 
 async function initPage() {
     try {
+        // Ensure public IP is ready before API calls
+        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP) {
+            await DeviceInfo.ensurePublicIP(3000);
+        }
+
         // Load master channel list + categories IN PARALLEL for faster loading
         var [masterResult, categoryResponse] = await Promise.all([
             loadMasterChannelList(),
@@ -699,10 +704,10 @@ function initLanguageDropdown() {
 function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        // Filter out non-numeric characters on input
+        // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
-            // Strip any non-digit characters
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
+            if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
                 searchInput.value = cleaned;
             }
@@ -819,8 +824,15 @@ async function loadChannels(options = {}) {
 
         let response = await BBNL_API.getChannelList(apiOptions);
 
+        // Retry once if response is empty (race condition with session/IP init)
+        if ((!Array.isArray(response) || response.length === 0) && !isNetworkDisconnected()) {
+            console.log("[Channels Page] Empty response, retrying after 1s...");
+            await new Promise(function (r) { setTimeout(r, 1000); });
+            response = await BBNL_API.getChannelList(apiOptions);
+        }
+
         if (Array.isArray(response)) {
-            console.log(`[Channels Page] Loaded ${response.length} channels`);
+            console.log("[Channels Page] Loaded " + response.length + " channels");
 
             allChannels = response;
 
@@ -963,17 +975,8 @@ function createChannelCard(ch) {
         img.className = "lazy-logo";
         img.onerror = function() {
             this.style.display = 'none';
-            const fallback = document.createElement("div");
-            fallback.className = "no-logo-text";
-            fallback.textContent = chName.charAt(0).toUpperCase();
-            this.parentElement.appendChild(fallback);
         };
         logoDiv.appendChild(img);
-    } else {
-        const fallback = document.createElement("div");
-        fallback.className = "no-logo-text";
-        fallback.textContent = chName.charAt(0).toUpperCase();
-        logoDiv.appendChild(fallback);
     }
     card.appendChild(logoDiv);
 
@@ -1094,9 +1097,12 @@ document.addEventListener("keydown", function (e) {
     if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
         var searchInput = document.getElementById('searchInput');
         if (searchInput) {
+            // Enforce max 4 digits
+            if (searchInput.value.length >= 4) return;
+
             // Get the typed number
             var num = (code >= 96) ? (code - 96) : (code - 48);
-            
+
             // Focus search input and append number
             searchInput.focus();
             searchInput.value += num.toString();
@@ -1576,11 +1582,32 @@ function playChannelByLCN(lcn) {
     findAndPlayLCN(lcn);
 }
 
+function showSearchNotFound(msg) {
+    var searchInput = document.getElementById('searchInput');
+    if (!searchInput) return;
+    var bar = searchInput.closest('.search-bar');
+    if (!bar) return;
+    // Remove any existing message
+    var existing = bar.querySelector('.search-not-found');
+    if (existing) existing.remove();
+    // Show message below search bar
+    var msgEl = document.createElement('div');
+    msgEl.className = 'search-not-found';
+    msgEl.textContent = msg;
+    msgEl.style.cssText = 'position:absolute;top:100%;left:0;right:0;text-align:center;color:#ff4444;font-size:14px;font-weight:600;padding:8px 0;white-space:nowrap;';
+    bar.style.position = 'relative';
+    bar.appendChild(msgEl);
+    // Auto-remove after 3 seconds
+    setTimeout(function () {
+        if (msgEl.parentNode) msgEl.remove();
+    }, 3000);
+}
+
 function findAndPlayLCN(lcn) {
     // ALWAYS search in MASTER channel list (ALL channels, NEVER filtered)
     // This ensures LCN search works regardless of active filter
     console.log("[Channels] Searching LCN", lcn, "in MASTER channel list (total:", masterChannelList.length, "channels)");
-    
+
     var channel = masterChannelList.find(function (ch) {
         var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
         return chNo === lcn;
@@ -1588,18 +1615,18 @@ function findAndPlayLCN(lcn) {
 
     if (channel) {
         console.log("[Channels] Found LCN", lcn, ":", channel.chtitle || channel.channel_name);
-        
+
         // Clear search input
         var searchInput = document.getElementById('searchInput');
         if (searchInput) {
             searchInput.value = '';
         }
-        
+
         // Play the channel immediately
         BBNL_API.playChannel(channel);
     } else {
         console.warn("[Channels] LCN", lcn, "not found in master list");
-        alert("Channel " + lcn + " not found");
+        showSearchNotFound("Channel Not Found");
     }
 }
 

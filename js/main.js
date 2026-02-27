@@ -784,8 +784,13 @@ function handleOK() {
 
             // Call actual API - SINGLE CALL ONLY
             // User enters mobile number; real userid comes from API response
+            // Ensure public IP is ready before login API call
+            var ipWait = (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP)
+                ? DeviceInfo.ensurePublicIP(3000)
+                : Promise.resolve();
+
             console.log("[Login] Calling AuthAPI.requestOTP()");
-            AuthAPI.requestOTP(val)
+            ipWait.then(function () { return AuthAPI.requestOTP(val); })
                 .then(function (response) {
                     console.log("[Login] OTP API Response received:", response);
 
@@ -798,6 +803,15 @@ function handleOK() {
                         // This sets bbnl_user in localStorage (required by home page auth check)
                         AuthAPI.setSession(response);
 
+                        // Store OTP code from API response for client-side verification
+                        // /login returns OTP in response.body[0].otpcode
+                        var serverOTP = "";
+                        if (response.body && response.body.length > 0 && response.body[0].otpcode) {
+                            serverOTP = String(response.body[0].otpcode);
+                        }
+                        sessionStorage.setItem('_pendingOTP', serverOTP);
+                        console.log("[Login] OTP stored for verification");
+
                         console.log("[Login] Mobile:", val);
 
                         // Navigate to verify page with mobile only
@@ -809,44 +823,11 @@ function handleOK() {
                         btn.disabled = false;
 
                         console.error("[Login] OTP request failed:", response);
-                        var errorMsg = response.status ? response.status.err_msg : "Failed to send OTP";
-
-                        // Handle "already registered with another device" - register this device first
-                        if (errorMsg.toLowerCase().includes("another device") || errorMsg.toLowerCase().includes("already registered")) {
-                            console.log("[Login] Device not registered - calling addMacAddress to register this TV...");
-                            btn.innerText = "Registering Device...";
-
-                            AuthAPI.addMacAddress(val)
-                                .then(function (addResponse) {
-                                    console.log("[Login] addMacAddress response:", addResponse);
-
-                                    if (addResponse && addResponse.status && Number(addResponse.status.err_code) === 0) {
-                                        console.log("[Login] Device registered successfully");
-                                        // Navigate to verify - server already sent OTP with the first requestOTP call
-                                        // No need to call requestOTP again (prevents duplicate OTP)
-                                        window.location.href = "verify.html?mobile=" + val;
-                                    } else {
-                                        var addErr = addResponse.status ? addResponse.status.err_msg : "Device registration failed";
-                                        throw new Error(addErr);
-                                    }
-                                })
-                                .catch(function (addError) {
-                                    console.error("[Login] ❌ Device registration failed:", addError);
-                                    otpRequestInProgress = false;
-                                    btn.innerText = originalText;
-                                    btn.disabled = false;
-                                    alert("Error: " + addError.message);
-                                });
-                            return;
-                        }
-
-                        // Check if error is related to invalid mobile number
-                        if (errorMsg.toLowerCase().includes("mobile") ||
-                            errorMsg.toLowerCase().includes("phone") ||
-                            errorMsg.toLowerCase().includes("number")) {
-                            showErrorModal();
-                        } else {
-                            alert("Error: " + errorMsg);
+                        // Show error message from API response dynamically
+                        var errorMsg = (response && response.status && response.status.err_msg)
+                            ? response.status.err_msg : "";
+                        if (errorMsg) {
+                            showErrorPopup(errorMsg);
                         }
                     }
                 })
@@ -856,7 +837,7 @@ function handleOK() {
                     otpRequestInProgress = false;
                     btn.innerText = originalText;
                     btn.disabled = false;
-                    alert("Network error. Please check your connection.");
+                    showErrorPopup(error.message || "");
                 });
         } else {
             // Show error modal for invalid phone number length
@@ -904,17 +885,42 @@ function handleOK() {
 
             console.log("[Verify] OTP entered:", fullOTP);
 
-            // NO API call — store login state and redirect to home
-            localStorage.setItem('isLoggedIn', 'true');
-            localStorage.setItem('mobile', mobile);
-            localStorage.setItem('loginTime', new Date().toISOString());
+            // CLIENT-SIDE OTP VERIFICATION
+            // Compare entered OTP against the stored OTP from API response
+            // This avoids calling /loginOtp which generates a NEW OTP instead of verifying
+            var storedOTP = sessionStorage.getItem('_pendingOTP') || "";
+            console.log("[Verify] Comparing entered OTP against stored OTP");
 
-            // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
-            localStorage.setItem('hasLoggedInOnce', 'true');
-            console.log("[Verify] hasLoggedInOnce flag set - future app launches will skip login");
+            if (storedOTP && fullOTP === storedOTP) {
+                // OTP matches - login successful
+                // Session already saved by requestOTP (/login response)
+                sessionStorage.removeItem('_pendingOTP');
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('mobile', mobile);
+                localStorage.setItem('loginTime', new Date().toISOString());
 
-            // Navigate to home page directly
-            window.location.replace("home.html");
+                // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
+                localStorage.setItem('hasLoggedInOnce', 'true');
+                console.log("[Verify] OTP verified successfully - navigating to home");
+
+                // Navigate to home page
+                window.location.replace("home.html");
+            } else {
+                // OTP does not match - reject login
+                console.log("[Verify] OTP mismatch - rejecting");
+                otpVerifyInProgress = false;
+                btn.innerText = "Verify";
+                btn.disabled = false;
+
+                showErrorPopup("Invalid OTP");
+
+                // Clear OTP inputs for re-entry
+                for (var j = 1; j <= 4; j++) {
+                    document.getElementById('otp' + j).value = '';
+                }
+                var otp1 = document.getElementById('otp1');
+                if (otp1) otp1.focus();
+            }
         } else {
             console.log("Incomplete OTP");
             showErrorPopup("Please enter full 4-digit OTP");
@@ -1105,6 +1111,14 @@ function handleResendOTP() {
 
             if (response && response.status && Number(response.status.err_code) === 0) {
                 console.log("[Verify] OTP resent successfully via /loginOtp");
+
+                // Store the NEW OTP code from resend response
+                // /loginOtp returns {otpcode, msg} in response.body[0]
+                if (response.body && response.body.length > 0 && response.body[0].otpcode) {
+                    sessionStorage.setItem('_pendingOTP', String(response.body[0].otpcode));
+                    console.log("[Verify] New OTP stored after resend");
+                }
+
                 // Clear OTP inputs for fresh entry
                 clearOTPInputs();
                 // Restart 30s timer

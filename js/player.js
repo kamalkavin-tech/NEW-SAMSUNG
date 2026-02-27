@@ -122,7 +122,7 @@ function showPlayerErrorPopup(title, message) {
         var img = document.getElementById('errorImg_player');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
             var key = 'NO_INTERNET_CONNECTION';
-            if (title && (title.toLowerCase().includes('not available') || title.toLowerCase().includes('subscription'))) {
+            if (title && (title.toLowerCase().includes('not available') || title.toLowerCase().includes('subscription') || title.toLowerCase().includes('not subscribed'))) {
                 key = 'NO_CHANNELS_AVAILABLE';
             } else if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
                 key = 'SIGNAL_UNAVAILABLE';
@@ -337,26 +337,39 @@ window.onload = function () {
         });
     }
 
-    // Player error popup retry button - call channel data API then retry
+    // Player error popup retry button - retry the SAME current channel
     var playerRetryBtn = document.getElementById('playerRetryBtn');
     if (playerRetryBtn) {
         playerRetryBtn.addEventListener('click', function () {
             hidePlayerErrorPopup();
+            if (!_lastAttemptedChannel) return;
+
+            var channelToRetry = _lastAttemptedChannel;
+            var chId = channelToRetry.channelno || channelToRetry.urno || channelToRetry.chid || "";
+
+            // Refresh channel data to get updated info, then retry same channel
             if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
                 BBNL_API.getChannelData().then(function (channels) {
                     if (channels && channels.length > 0) {
                         allChannels = channels;
+                        // Find the same channel in refreshed list by ID
+                        if (chId) {
+                            var updated = channels.find(function (ch) {
+                                return (ch.channelno || ch.urno || ch.chid || "") === chId;
+                            });
+                            if (updated) {
+                                setupPlayer(updated);
+                                return;
+                            }
+                        }
                     }
-                    if (currentIndex >= 0 && allChannels[currentIndex]) {
-                        setupPlayer(allChannels[currentIndex]);
-                    }
+                    // Fallback: retry with the stored channel object
+                    setupPlayer(channelToRetry);
                 }).catch(function () {
-                    if (currentIndex >= 0 && allChannels[currentIndex]) {
-                        setupPlayer(allChannels[currentIndex]);
-                    }
+                    setupPlayer(channelToRetry);
                 });
-            } else if (currentIndex >= 0 && allChannels[currentIndex]) {
-                setupPlayer(allChannels[currentIndex]);
+            } else {
+                setupPlayer(channelToRetry);
             }
         });
     }
@@ -367,9 +380,15 @@ window.onload = function () {
 
 var allChannels = [];
 var currentIndex = -1;
+var _lastAttemptedChannel = null; // Tracks the current channel for retry
 
 async function loadChannelList(lookupName = null) {
     try {
+        // Ensure public IP is ready before API calls
+        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP) {
+            await DeviceInfo.ensurePublicIP(3000);
+        }
+
         // We reuse the API used in channels page
         let response = await BBNL_API.getChannelList();
 
@@ -396,17 +415,28 @@ async function loadChannelList(lookupName = null) {
                 }
             }
 
-            // Find current index based on what was already setup (if any)
-            const currentName = document.getElementById("ui-channel-name").innerText;
-            if (currentName) {
-                currentIndex = allChannels.findIndex(ch =>
-                    (ch.chtitle || ch.channel_name) === currentName
-                );
-
-                // Update expiry info from merged data (URL params don't have expirydate)
-                if (currentIndex >= 0 && allChannels[currentIndex]) {
-                    updateExpiryDisplay(allChannels[currentIndex]);
+            // Find current index — use channel ID for reliable lookup
+            if (_lastAttemptedChannel) {
+                var chId = _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || "";
+                if (chId) {
+                    currentIndex = allChannels.findIndex(function (ch) {
+                        return (ch.channelno || ch.urno || ch.chid || "") === chId;
+                    });
                 }
+            }
+            // Fallback to name match if ID lookup failed
+            if (currentIndex < 0) {
+                var currentName = document.getElementById("ui-channel-name").innerText;
+                if (currentName) {
+                    currentIndex = allChannels.findIndex(function (ch) {
+                        return (ch.channel_name || ch.chtitle || "") === currentName;
+                    });
+                }
+            }
+
+            // Update expiry info from merged data (URL params don't have expirydate)
+            if (currentIndex >= 0 && allChannels[currentIndex]) {
+                updateExpiryDisplay(allChannels[currentIndex]);
             }
 
             // Check if channels have expiry data — if not, refresh after background merge
@@ -501,12 +531,16 @@ function updateExpiryDisplay(channel) {
 function setupPlayer(channel) {
     console.log("=== Setting up player for channel ===", channel);
 
+    // Track current channel for retry
+    _lastAttemptedChannel = channel;
+
     // ==========================================
-    // POPULATE ALL UI ELEMENTS DYNAMICALLY
+    // UPDATE UI FIRST - Show selected channel context
     // ==========================================
 
-    // Channel Name
     const chName = channel.channel_name || channel.chtitle || "Unknown Channel";
+
+    // Channel Name
     const uiName = document.getElementById("ui-channel-name");
     if (uiName) uiName.innerText = chName;
 
@@ -515,27 +549,20 @@ function setupPlayer(channel) {
     const uiNum = document.getElementById("ui-channel-number");
     if (uiNum) uiNum.innerText = channelNum;
 
-    // Channel Logo - immediately clear old logo to prevent stale display
-    var LOGO_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
-    const logo = channel.logo_url || channel.chlogo || channel.logo;
+    // Channel Logo - show only API logo, no fallbacks
+    const logo = channel.logo_url || channel.chlogo || channel.logo || "";
     const uiLogo = document.getElementById("ui-channel-logo");
     if (uiLogo) {
-        // Immediately show placeholder to clear previous channel's logo
-        uiLogo.src = LOGO_PLACEHOLDER;
         uiLogo.onerror = null;
-
-        if (logo && logo.trim() !== "" && !logo.includes('chnlnoimage')) {
-            console.log("Setting channel logo:", logo);
-            // Preload the new logo off-screen, then swap once ready
-            var preloader = new Image();
-            preloader.onload = function () {
-                uiLogo.src = logo;
+        if (logo && logo.trim() !== "") {
+            uiLogo.src = logo;
+            uiLogo.style.display = '';
+            uiLogo.onerror = function () {
+                uiLogo.style.display = 'none';
             };
-            preloader.onerror = function () {
-                console.warn("Logo failed to load:", logo);
-                uiLogo.src = LOGO_PLACEHOLDER;
-            };
-            preloader.src = logo;
+        } else {
+            uiLogo.src = '';
+            uiLogo.style.display = 'none';
         }
     }
 
@@ -574,7 +601,7 @@ function setupPlayer(channel) {
     // Status (Subscription status and price)
     const uiStatus = document.getElementById("ui-status");
     const uiSubscription = document.getElementById("ui-subscription");
-    
+
     const isSubscribed = channel.subscribed === "yes" || channel.subscribed === "1" ||
         channel.subscribed === true || channel.subscribed === 1;
     const price = channel.chprice || channel.chPrice || channel.price || "0.00";
@@ -599,7 +626,7 @@ function setupPlayer(channel) {
     if (uiSubscription) {
         // Remove existing classes
         uiSubscription.classList.remove('subscribed-yes', 'subscribed-no');
-        
+
         if (isSubscribed) {
             uiSubscription.innerText = "Yes";
             uiSubscription.classList.add('subscribed-yes');
@@ -608,7 +635,7 @@ function setupPlayer(channel) {
             // subscribed-no is default styling (red)
         }
     }
-    
+
     // Update Price display
     const uiPrice = document.getElementById("ui-price");
     if (uiPrice) {
@@ -679,75 +706,85 @@ function setupPlayer(channel) {
 
     // Current Date and Time (live updating)
     updateDateTime();
-    // Update time every second
-    playerDateTimeInterval = setInterval(updateDateTime, 1000);
+    // Update time every second — only start if not already running
+    if (!playerDateTimeInterval) {
+        playerDateTimeInterval = setInterval(updateDateTime, 1000);
+    }
 
     // Update Index if list loaded
+    // Use channel ID (channelno) for reliable lookup — names can have duplicates
     if (allChannels.length > 0) {
-        currentIndex = allChannels.findIndex(ch => (ch.chtitle || ch.channel_name) === chName);
+        var chId = channel.channelno || channel.urno || channel.chid || "";
+        if (chId) {
+            var foundIdx = allChannels.findIndex(function (ch) {
+                return (ch.channelno || ch.urno || ch.chid || "") === chId;
+            });
+            if (foundIdx >= 0) {
+                currentIndex = foundIdx;
+            }
+        } else {
+            // Fallback to name match only if no ID available
+            var nameIdx = allChannels.findIndex(function (ch) {
+                return (ch.channel_name || ch.chtitle || "") === chName;
+            });
+            if (nameIdx >= 0) {
+                currentIndex = nameIdx;
+            }
+        }
     }
+
+    // ==========================================
+    // VALIDATION PHASE - Check stream before playback
+    // UI already shows selected channel context
+    // ==========================================
 
     const streamUrl = channel.streamlink || channel.channel_url;
     const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
 
-    console.log("=== 🔍 STREAM URL DEBUG ===");
+    console.log("=== STREAM URL DEBUG ===");
     console.log("Channel:", chName);
     console.log("Raw stream URL:", streamUrl);
-    console.log("Stream URL type:", typeof streamUrl);
-    console.log("Stream URL length:", streamUrl ? streamUrl.length : 0);
-    console.log("Is DVB/FTA channel:", isDVBChannel);
     if (streamUrl) {
-        console.log("First 100 chars:", streamUrl.substring(0, 100));
-        console.log("Starts with http:", streamUrl.startsWith('http'));
-        console.log("Starts with dvb:", streamUrl.toLowerCase().startsWith('dvb://'));
-        console.log("Contains localhost:", streamUrl.includes('127.0.0.1') || streamUrl.includes('localhost'));
-        console.log("Contains m3u8:", streamUrl.includes('m3u8'));
-        console.log("Contains mpd:", streamUrl.includes('mpd'));
+        console.log("Is DVB/FTA channel:", isDVBChannel);
     }
     console.log("========================");
 
-
+    // Check stream URL exists
     if (!streamUrl) {
-        const errorMsg = "No Stream URL found for channel: " + chName;
-        console.warn(errorMsg);
+        console.warn("No Stream URL found for channel:", chName);
+        // Stop any background playback
+        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
         showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
         return;
     }
 
-    // For DVB/FTA channels, use the URL as-is
+    // Fix and validate stream URL
     var fixedStreamUrl = streamUrl;
-
     if (!isDVBChannel) {
-        // ⚠️ FIX LOCALHOST URLs - Replace 127.0.0.1 with server IP (only for IPTV streams)
         fixedStreamUrl = fixLocalhostUrl(streamUrl);
-
-        // Update debug logging with fixed URL
-        console.log("=== ✅ FINAL STREAM URL ===");
         console.log("Stream URL (after fix):", fixedStreamUrl);
-        console.log("Contains localhost:", fixedStreamUrl.includes('127.0.0.1') || fixedStreamUrl.includes('localhost'));
-        console.log("========================");
 
-        // Validate stream URL format (using fixed URL) - only for IPTV streams
         if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
-            const errorMsg = "Invalid stream URL format: " + streamUrl;
-            console.error(errorMsg);
+            console.error("Invalid stream URL format:", streamUrl);
+            try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
             showPlayerErrorPopup('Invalid Stream', 'Invalid stream URL format. Please try another channel.');
             return;
         }
-    } else {
-        console.log("=== 📡 DVB/FTA CHANNEL ===");
-        console.log("DVB URL:", fixedStreamUrl);
-        console.log("Full screen playback will be handled by TV tuner");
-        console.log("========================");
     }
 
     // PRE-PLAY subscription check — block only when explicitly "no"
     if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
         channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
         console.warn("[Player] Channel not subscribed, blocking playback:", chName, "subscribed:", channel.subscribed);
-        showPlayerErrorPopup('Channel Not Subscribed', 'Channel is not subscribed. Please subscribe channel to watch.');
+        // Stop any background playback
+        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
+        showPlayerErrorPopup(chName + ' - Subscription not available', 'Please subscribe to watch this channel.');
         return;
     }
+
+    // ==========================================
+    // VALIDATION PASSED - Start playback
+    // ==========================================
 
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
         console.log("Using AVPlayer (Tizen mode)");
@@ -818,16 +855,27 @@ var streamAdTimer = null;
 var streamAdRotateTimer = null;
 var streamAdAds = [];
 var streamAdCurrentIndex = 0;
+var _streamAdLastChid = ""; // Track last loaded channel ID for ads caching
 
 /**
  * Load and display stream ads for the current channel
+ * Skips API call if ads are already loaded for the same channel
  * @param {String} chid - Channel ID
  */
 function loadStreamAds(chid) {
+    // Skip if already loaded for this channel
+    if (chid && chid === _streamAdLastChid && streamAdAds.length > 0) {
+        console.log("[StreamAd] Reusing cached ads for chid:", chid);
+        streamAdCurrentIndex = 0;
+        showStreamAd();
+        return;
+    }
+
     // Clear any existing timers
     clearStreamAdTimers();
 
     console.log("[StreamAd] Loading ads for chid:", chid);
+    _streamAdLastChid = chid || "";
 
     AdsAPI.getStreamAds(chid)
         .then(function (ads) {
@@ -838,6 +886,7 @@ function loadStreamAds(chid) {
                 showStreamAd();
             } else {
                 console.log("[StreamAd] No stream ads available");
+                streamAdAds = [];
                 hideStreamAd();
             }
         })
@@ -934,6 +983,9 @@ function changeChannel(step) {
     // Wrap around
     if (nextIndex >= allChannels.length) nextIndex = 0;
     if (nextIndex < 0) nextIndex = allChannels.length - 1;
+
+    // Set currentIndex BEFORE calling setupPlayer — this is the authoritative index
+    currentIndex = nextIndex;
 
     var nextCh = allChannels[nextIndex];
     var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
@@ -1438,10 +1490,6 @@ function renderChannelsList() {
             logoImg.alt = ch.chtitle || 'Channel';
             logoImg.onerror = function() {
                 this.style.display = 'none';
-                var placeholder = document.createElement('span');
-                placeholder.className = 'logo-placeholder';
-                placeholder.textContent = (ch.chtitle || 'CH').substring(0, 2).toUpperCase();
-                this.parentNode.appendChild(placeholder);
             };
             // If already cached in memory, load immediately (browser HTTP cache serves it)
             if (_logoCache[logoUrl]) {
@@ -1452,11 +1500,6 @@ function renderChannelsList() {
                 logoImg.className = 'sidebar-lazy-logo';
             }
             logoDiv.appendChild(logoImg);
-        } else {
-            var placeholder = document.createElement('span');
-            placeholder.className = 'logo-placeholder';
-            placeholder.textContent = (ch.chtitle || 'CH').substring(0, 2).toUpperCase();
-            logoDiv.appendChild(placeholder);
         }
 
         // Channel Info (name + price)
@@ -2056,6 +2099,11 @@ function playChannelFromSidebar(channel) {
 
     console.log("[Sidebar] Playing channel:", channel.chtitle || channel.channel_name);
 
+    // Dismiss error popup if open before trying new channel
+    if (playerErrorPopupOpen) {
+        hidePlayerErrorPopup();
+    }
+
     // Play the selected channel
     setupPlayer(channel);
 
@@ -2102,8 +2150,51 @@ function handleKeydown(e) {
     console.log("Player Key:", code);
 
     // Handle sidebar navigation first if sidebar is open
+    // Sidebar remains accessible even when error popup is visible
     if (sidebarState.isOpen && handleSidebarKeydown(e)) {
-        // Sidebar handles its own info bar visibility via shared timer
+        return;
+    }
+
+    // Handle error popup - sidebar and UP/DOWN accessible
+    if (playerErrorPopupOpen) {
+        e.preventDefault();
+        if (code === 10009 || code === 27) {
+            // BACK
+            if (sidebarState.isOpen) {
+                closeSidebar();
+                console.log('[Player] RETURN pressed - closing sidebar (popup open)');
+            } else {
+                hidePlayerErrorPopup();
+                window.location.href = 'channels.html';
+            }
+        } else if (code === 13) {
+            // ENTER - click Try Again button
+            var btn = document.getElementById('playerRetryBtn');
+            if (btn) btn.click();
+        } else if (code === 38) {
+            // UP - switch to previous channel
+            hidePlayerErrorPopup();
+            changeChannel(-1);
+        } else if (code === 40) {
+            // DOWN - switch to next channel
+            hidePlayerErrorPopup();
+            changeChannel(1);
+        } else if (code === 37) {
+            // LEFT - open sidebar for channel browsing
+            if (!sidebarState.isOpen) {
+                openSidebar();
+                console.log('[Player] LEFT pressed - opening sidebar (popup open)');
+            }
+        } else if (code === 10253 || code === 77) {
+            // Menu - toggle sidebar
+            toggleSidebar();
+        } else if (code === 39) {
+            // RIGHT - close sidebar if open
+            if (sidebarState.isOpen) {
+                closeSidebar();
+                console.log('[Player] RIGHT pressed - closing sidebar (popup open)');
+            }
+        }
         return;
     }
 
@@ -2111,33 +2202,6 @@ function handleKeydown(e) {
     if (code === 10253 || code === 77) { // Menu or 'M'
         e.preventDefault();
         toggleSidebar();
-        return;
-    }
-
-    // Rest of the player keydown handler
-    // Handle error popup navigation
-    if (playerErrorPopupOpen) {
-        e.preventDefault();
-        if (code === 10009 || code === 27) {
-            // BACK - go back to channels/home
-            hidePlayerErrorPopup();
-            window.location.href = 'channels.html';
-
-        } else if (code === 13) {
-            // ENTER - retry current channel
-            var btn = document.getElementById('playerRetryBtn');
-            if (btn) btn.click();
-
-        } else if (code === 38 || code === 427 || code === 33) {
-            // UP / CH+ / PageUp - switch to next channel
-            hidePlayerErrorPopup();
-            changeChannel(1);
-
-        } else if (code === 40 || code === 428 || code === 34) {
-            // DOWN / CH- / PageDown - switch to previous channel
-            hidePlayerErrorPopup();
-            changeChannel(-1);
-        }
         return;
     }
 
@@ -2693,10 +2757,10 @@ var handleOKButton = function () {
     }
 };
 
-// Show overlay on any user interaction (but not when sidebar is open)
+// Show overlay on any user interaction (but not when sidebar or popup is open)
 document.addEventListener('keydown', function (e) {
-    // Don't show overlay if sidebar is open
-    if (!sidebarState.isOpen) {
+    // Don't show overlay if sidebar or error popup is open
+    if (!sidebarState.isOpen && !playerErrorPopupOpen) {
         showOverlay();
     }
 });
