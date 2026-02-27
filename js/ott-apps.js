@@ -33,8 +33,8 @@ window.onload = function () {
     // Initialize Dark Mode from localStorage
     initDarkMode();
 
-    // Load OTT Apps from API
-    loadOTTApps();
+    // Show Coming Soon popup immediately (same as favorites page)
+    showComingSoonPopup();
 
     // Get all focusable elements and add click handlers
     focusables = document.querySelectorAll('.focusable');
@@ -51,16 +51,10 @@ window.onload = function () {
         });
     });
 
-    // Set initial focus on back button
-    var backBtn = document.querySelector('.back-btn');
-    if (backBtn) {
-        backBtn.focus();
-        currentZone = 'header';
-    }
-
-    // Setup Go Back button
+    // Set initial focus on Go Back button in popup
     var retryBtn = document.getElementById('retryAppsBtn');
     if (retryBtn) {
+        retryBtn.focus();
         retryBtn.addEventListener('click', function() {
             window.location.href = 'home.html';
         });
@@ -304,9 +298,9 @@ function handleClick(element) {
         return;
     }
 
-    // Back button clicked
-    if (element.classList.contains('back-btn')) {
-        console.log("Back button clicked - navigating to home");
+    // Back button or Go Back button clicked
+    if (element.classList.contains('back-btn') || element.id === 'retryAppsBtn') {
+        console.log("Back/Go Back button clicked - navigating to home");
         window.location.href = 'home.html';
         return;
     }
@@ -356,17 +350,21 @@ function loadOTTApps() {
                     renderApps(response.apps);
                 } else {
                     console.warn("[OTT Apps] No apps found in response");
-                    showError("No OTT apps available");
+                    showError("No OTT apps available at the moment.", 'no_apps');
                 }
             } else {
                 var errorMsg = response && response.status ? response.status.err_msg : "Unknown error";
                 console.error("[OTT Apps] API Error:", errorMsg);
-                showError(errorMsg);
+                showError(errorMsg, 'coming_soon');
             }
         })
         .catch(function (error) {
             console.error("[OTT Apps] Failed to load apps:", error);
-            showError("Failed to load OTT apps");
+            if (isNetworkDisconnected()) {
+                showError("Please check your network and try again.", 'network');
+            } else {
+                showError("Failed to load OTT apps. Please try again later.", 'network');
+            }
         });
 }
 
@@ -430,24 +428,51 @@ function renderApps(apps) {
 }
 
 /**
- * Show error popup
+ * Show error popup with proper title and image based on error type
+ * @param {string} message - Error message to display
+ * @param {string} [type] - Error type: 'network', 'no_apps', or 'coming_soon' (default)
  */
-function showError(message) {
+function showError(message, type) {
     var popup = document.getElementById("noAppsPopup");
     var appsGrid = document.getElementById("appsGrid");
 
     if (popup) {
-        // Set error image from API
+        var titleEl = popup.querySelector(".error-popup-title");
+        var msgEl = popup.querySelector(".error-popup-message");
         var img = document.getElementById("errorImg_comingSoonOtt");
-        if (img && typeof ErrorImagesAPI !== 'undefined') {
-            img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+        var btn = document.getElementById("retryAppsBtn");
+
+        // Set title, image, and button based on error type
+        if (type === 'network') {
+            if (titleEl) titleEl.innerText = "Failed to Load";
+            if (img && typeof ErrorImagesAPI !== 'undefined') {
+                img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+            }
+            if (btn) btn.innerText = "Try Again";
+        } else if (type === 'no_apps') {
+            if (titleEl) titleEl.innerText = "No Apps Available";
+            if (img && typeof ErrorImagesAPI !== 'undefined') {
+                img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+            }
+            if (btn) btn.innerText = "Go Back";
+        } else {
+            if (titleEl) titleEl.innerText = "Coming Soon";
+            if (img && typeof ErrorImagesAPI !== 'undefined') {
+                img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+            }
+            if (btn) btn.innerText = "Go Back";
         }
 
-        popup.style.display = "flex";
-        var msgEl = popup.querySelector(".error-popup-message");
         if (msgEl) {
             msgEl.innerText = message;
         }
+
+        popup.style.display = "flex";
+
+        // Focus the button
+        setTimeout(function() {
+            if (btn) btn.focus();
+        }, 100);
     }
 
     if (appsGrid) {
@@ -504,6 +529,65 @@ function initializeFocusables() {
             currentZone = 'apps';
         });
     });
+}
+
+// ==========================================
+// NETWORK CHECK HELPER
+// ==========================================
+
+function isNetworkDisconnected() {
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            return webapis.network.getActiveConnectionType() === 0;
+        }
+    } catch (e) {}
+    return !navigator.onLine;
+}
+
+// ==========================================
+// COMING SOON POPUP (shown immediately on load)
+// ==========================================
+
+/**
+ * Show Coming Soon popup immediately - same approach as favorites page
+ */
+function showComingSoonPopup() {
+    var popup = document.getElementById("noAppsPopup");
+    var appsGrid = document.getElementById("appsGrid");
+
+    if (popup) {
+        var titleEl = popup.querySelector(".error-popup-title");
+        var msgEl = popup.querySelector(".error-popup-message");
+        var img = document.getElementById("errorImg_comingSoonOtt");
+        var btn = document.getElementById("retryAppsBtn");
+
+        // Set Coming Soon content
+        if (titleEl) titleEl.innerText = "Coming Soon";
+        if (msgEl) msgEl.innerText = "OTT Apps feature is coming soon. Stay tuned!";
+        if (btn) btn.innerText = "Go Back";
+
+        // Load error image if available
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            var imgUrl = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+            if (imgUrl) {
+                img.src = imgUrl;
+            }
+        }
+
+        popup.style.display = "flex";
+
+        // Focus the Go Back button
+        setTimeout(function() {
+            if (btn) btn.focus();
+        }, 100);
+    }
+
+    // Clear the apps grid
+    if (appsGrid) {
+        appsGrid.innerHTML = "";
+    }
+
+    console.log("[OTT Apps] Showing Coming Soon popup");
 }
 
 // ==========================================

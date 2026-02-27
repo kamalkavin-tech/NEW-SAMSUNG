@@ -118,14 +118,19 @@ function showPlayerErrorPopup(title, message) {
         if (titleEl) titleEl.textContent = title || 'Playback Error';
         if (msgEl) msgEl.textContent = message || 'Please Check your network and try again';
 
-        // Set error image from API
+        // Set error image from API based on error type
         var img = document.getElementById('errorImg_player');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
             var key = 'NO_INTERNET_CONNECTION';
-            if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
+            if (title && (title.toLowerCase().includes('not available') || title.toLowerCase().includes('subscription'))) {
+                key = 'NO_CHANNELS_AVAILABLE';
+            } else if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
                 key = 'SIGNAL_UNAVAILABLE';
             }
-            img.src = ErrorImagesAPI.getImageUrl(key);
+            var imgUrl = ErrorImagesAPI.getImageUrl(key);
+            if (imgUrl) {
+                img.src = imgUrl;
+            }
         }
 
         popup.style.display = 'flex';
@@ -219,13 +224,40 @@ window.onload = function () {
                     console.log("Buffering Done");
                     hideBufferingIndicator();
                     hasHiddenLoadingIndicator = true;
+                    // Clear stream timeout - buffering complete means stream works
+                    if (window._streamTimeoutTimer) {
+                        clearTimeout(window._streamTimeoutTimer);
+                        window._streamTimeoutTimer = null;
+                    }
                 },
                 onError: (e) => {
                     console.error("Player Error:", e);
                     hideBufferingIndicator(); // Hide on error
                     hasHiddenLoadingIndicator = true;
+                    // Clear stream timeout to prevent double error popup
+                    if (window._streamTimeoutTimer) {
+                        clearTimeout(window._streamTimeoutTimer);
+                        window._streamTimeoutTimer = null;
+                    }
+
                     if (isNetworkDisconnected()) {
                         showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
+                    } else {
+                        // Check if current channel is unsubscribed/paid
+                        var currentChannel = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
+                        var isSubs = currentChannel && (currentChannel.subscribed === "yes" || currentChannel.subscribed === "1" || currentChannel.subscribed === true || currentChannel.subscribed === 1);
+                        var chPrice = currentChannel ? parseFloat(currentChannel.chprice || currentChannel.price || 0) : 0;
+
+                        if (currentChannel && !isSubs && chPrice > 0) {
+                            // Paid channel that user is not subscribed to
+                            showPlayerErrorPopup('Channel Not Available', 'This is a paid channel (₹' + chPrice.toFixed(2) + '). Please subscribe to watch this channel.');
+                        } else if (currentChannel && !isSubs) {
+                            // Unsubscribed channel (free or unknown price)
+                            showPlayerErrorPopup('Channel Not Available', 'This channel is not available. Please check your subscription or try another channel.');
+                        } else {
+                            // General playback error (subscribed but stream failed)
+                            showPlayerErrorPopup('Playback Error', 'Unable to play this channel. Please try again or switch to another channel.');
+                        }
                     }
                 },
                 onStreamCompleted: () => {
@@ -240,6 +272,11 @@ window.onload = function () {
                         console.log("✓ Playback started (time > 0), hiding loading indicator");
                         hideBufferingIndicator();
                         hasHiddenLoadingIndicator = true;
+                        // Clear stream timeout - playback started successfully
+                        if (window._streamTimeoutTimer) {
+                            clearTimeout(window._streamTimeoutTimer);
+                            window._streamTimeoutTimer = null;
+                        }
                     }
                 }
             }
@@ -294,12 +331,18 @@ window.onload = function () {
         });
     }
 
-    // Player error popup retry button
+    // Player error popup retry button - retry current channel
     var playerRetryBtn = document.getElementById('playerRetryBtn');
     if (playerRetryBtn) {
         playerRetryBtn.addEventListener('click', function () {
             hidePlayerErrorPopup();
-            window.location.href = 'channels.html';
+            // Retry the current channel instead of navigating away
+            if (currentIndex >= 0 && allChannels[currentIndex]) {
+                setupPlayer(allChannels[currentIndex]);
+            } else {
+                // No channel to retry — go back to channels page
+                window.location.href = 'channels.html';
+            }
         });
     }
 
@@ -692,12 +735,34 @@ function setupPlayer(channel) {
         // Show loading indicator immediately
         showBufferingIndicator();
 
+        // Stream timeout: if playback doesn't start within 15 seconds, show error
+        if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
+        window._streamTimeoutTimer = setTimeout(function () {
+            if (!hasHiddenLoadingIndicator) {
+                console.warn("[Player] Stream timeout - playback did not start within 15s");
+                hideBufferingIndicator();
+
+                var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
+                var isSubs = ch && (ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1);
+                var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
+
+                if (ch && !isSubs && price > 0) {
+                    showPlayerErrorPopup('Channel Not Available', 'This is a paid channel (\u20B9' + price.toFixed(2) + '). Please subscribe to watch this channel.');
+                } else if (isNetworkDisconnected()) {
+                    showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
+                } else {
+                    showPlayerErrorPopup('Channel Not Available', 'Unable to play this channel. The stream may not be available.');
+                }
+            }
+        }, 15000);
+
         try {
             // Use the FIXED stream URL (with localhost replaced for IPTV, or DVB URL for FTA)
             AVPlayer.changeStream(fixedStreamUrl);
             console.log("AVPlayer.changeStream called successfully with URL:", fixedStreamUrl);
         } catch (error) {
             console.error("Error calling AVPlayer.changeStream:", error);
+            if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
             hideBufferingIndicator();
             showPlayerErrorPopup('Playback Error', 'Error starting playback. Please try another channel.');
         }
@@ -2043,9 +2108,19 @@ function handleKeydown(e) {
             window.location.href = 'channels.html';
 
         } else if (code === 13) {
-            // ENTER - retry
+            // ENTER - retry current channel
             var btn = document.getElementById('playerRetryBtn');
             if (btn) btn.click();
+
+        } else if (code === 38 || code === 427 || code === 33) {
+            // UP / CH+ / PageUp - switch to next channel
+            hidePlayerErrorPopup();
+            changeChannel(1);
+
+        } else if (code === 40 || code === 428 || code === 34) {
+            // DOWN / CH- / PageDown - switch to previous channel
+            hidePlayerErrorPopup();
+            changeChannel(-1);
         }
         return;
     }
@@ -2121,20 +2196,14 @@ function handleKeydown(e) {
         return;
     }
 
-    // Channel Up / Down (Tizen codes: 427, 428)
-    // Also mapping Up/Down arrows for easier testing
-    if (code === 427 || code === 33) { // CH+ or PageUp
+    // Channel Up / Down — UP arrow and CH+ go to next channel, DOWN and CH- go to previous
+    if (code === 38 || code === 427 || code === 33) { // UP Arrow, CH+, PageUp
         changeChannel(1);
+        return;
     }
-    else if (code === 428 || code === 34) { // CH- or PageDown
+    if (code === 40 || code === 428 || code === 34) { // DOWN Arrow, CH-, PageDown
         changeChannel(-1);
-    }
-    // Optional: Arrow Keys for Zapping if requested, usually Up/Down controls volume or UI
-    else if (code === 38) { // Up Arrow -> Next Channel
-        changeChannel(1);
-    }
-    else if (code === 40) { // Down Arrow -> Prev Channel
-        changeChannel(-1);
+        return;
     }
 
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {

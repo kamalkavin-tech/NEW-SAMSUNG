@@ -184,6 +184,19 @@ function showIPv6() {
     var ipv6Text = document.getElementById("ipv6Text");
     if (!ipv6Text) return;
 
+    // Helper: check if IPv6 address is actually valid and useful
+    function isValidIPv6(addr) {
+        if (!addr || typeof addr !== 'string') return false;
+        var trimmed = addr.trim();
+        if (trimmed === '' || trimmed === '::' || trimmed === '::0' || trimmed === '0::0' || trimmed === '::1') return false;
+        // Must contain ":" to be IPv6
+        if (!trimmed.includes(':')) return false;
+        // Filter out all-zero addresses
+        var cleaned = trimmed.replace(/:/g, '').replace(/0/g, '');
+        if (cleaned === '') return false;
+        return true;
+    }
+
     try {
         // First try tizen.systeminfo API (recommended for IPv6 on Tizen 5.0+)
         // NOTE: "NETWORK" property only returns networkType, NOT IP addresses.
@@ -212,26 +225,32 @@ function showIPv6() {
                     console.log("[IPv6] IPv4:", network.ipAddress);
                     console.log("[IPv6] IPv6:", network.ipv6Address);
 
-                    var ipv6Address = "N/A";
+                    var ipv6Address = null;
 
                     // Check IPv6 array/string first
-                    if (network.ipv6Address && network.ipv6Address.length > 0) {
-                        // May be array or string depending on firmware
+                    if (network.ipv6Address) {
                         if (Array.isArray(network.ipv6Address)) {
-                            ipv6Address = network.ipv6Address[0] || "N/A";
-                        } else {
-                            ipv6Address = network.ipv6Address;
+                            // Find first valid IPv6 in array
+                            for (var i = 0; i < network.ipv6Address.length; i++) {
+                                if (isValidIPv6(network.ipv6Address[i])) {
+                                    ipv6Address = network.ipv6Address[i].trim();
+                                    break;
+                                }
+                            }
+                        } else if (isValidIPv6(network.ipv6Address)) {
+                            ipv6Address = network.ipv6Address.trim();
                         }
                     }
-                    // Fallback: check if ipAddress contains ":" (IPv6 format)
-                    else if (network.ipAddress && network.ipAddress.includes(":")) {
-                        ipv6Address = network.ipAddress;
+                    // Fallback: check if ipAddress is IPv6
+                    if (!ipv6Address && network.ipAddress && isValidIPv6(network.ipAddress)) {
+                        ipv6Address = network.ipAddress.trim();
                     }
 
-                    if (ipv6Address && ipv6Address !== "N/A") {
+                    if (ipv6Address) {
                         ipv6Text.innerText = ipv6Address;
                         console.log("[IPv6] Found:", ipv6Address);
                     } else {
+                        console.log("[IPv6] systeminfo returned empty/null IPv6:", network.ipv6Address);
                         // Try webapis fallback
                         tryWebapisNetwork();
                     }
@@ -270,25 +289,27 @@ function showIPv6() {
                 } catch (e) {
                     console.log("[IPv6] getIpv6 not available:", e);
                 }
-                
-                if (ipv6 && ipv6.length > 0) {
-                    ipv6Text.innerText = ipv6;
+
+                if (isValidIPv6(ipv6)) {
+                    ipv6Text.innerText = ipv6.trim();
                     console.log("[IPv6] from getIpv6:", ipv6);
                     return;
+                } else if (ipv6) {
+                    console.log("[IPv6] getIpv6 returned empty/null:", ipv6);
                 }
-                
+
                 // Alternative: check if getIp returns IPv6 (some models)
                 try {
                     var ip = webapis.network.getIp(networkType);
-                    if (ip && ip.includes(":")) {
-                        ipv6Text.innerText = ip;
+                    if (isValidIPv6(ip)) {
+                        ipv6Text.innerText = ip.trim();
                         console.log("[IPv6] from getIp:", ip);
                         return;
                     }
                 } catch (e) {
                     console.log("[IPv6] getIp fallback failed:", e);
                 }
-                
+
                 // IPv6 not available from Tizen - try external API
                 tryExternalIPv6Service();
             } else {
@@ -306,7 +327,11 @@ function showIPv6() {
         console.log("[IPv6] Trying external API services...");
 
         var ipv6Services = [
+            // Dual-stack: returns whatever IP the connection uses (most reliable)
             { url: 'https://api64.ipify.org?format=json', type: 'json' },
+            // Explicit IPv6-only endpoint
+            { url: 'https://api6.ipify.org?format=json', type: 'json' },
+            // IPv6-only services
             { url: 'https://v6.ident.me/', type: 'text' },
             { url: 'https://ipv6.icanhazip.com', type: 'text' }
         ];
@@ -328,7 +353,7 @@ function showIPv6() {
             var service = ipv6Services[index];
             console.log("[IPv6] Trying:", service.url);
 
-            fetchWithTimeout(service.url, 4000)
+            fetchWithTimeout(service.url, 6000)
                 .then(function(response) {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     if (service.type === 'json') {
@@ -345,12 +370,12 @@ function showIPv6() {
                         ip = data.ip || data.IP || data.address || null;
                     }
 
-                    // Check if it's actually an IPv6 address (contains :)
-                    if (ip && ip.includes(":")) {
-                        ipv6Text.innerText = ip;
+                    // Check if it's actually a valid IPv6 address
+                    if (isValidIPv6(ip)) {
+                        ipv6Text.innerText = ip.trim();
                         console.log("[IPv6] Found via external API:", ip);
                     } else {
-                        console.log("[IPv6] Response was IPv4 (" + ip + "), trying next...");
+                        console.log("[IPv6] Response was not valid IPv6 (" + ip + "), trying next...");
                         tryService(index + 1);
                     }
                 })
@@ -664,7 +689,30 @@ document.addEventListener("keydown", function (e) {
                 }
                 return;
             } else if (e.keyCode === 13) {
-                // Enter - allow
+                // Enter on OTP input - prevent form submit and trigger verification
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                // Check if all 4 OTP digits are filled, then auto-verify
+                var allFilled = true;
+                var fullOTP = "";
+                for (var oi = 1; oi <= 4; oi++) {
+                    var otpVal = document.getElementById('otp' + oi);
+                    if (otpVal && otpVal.value) {
+                        fullOTP += otpVal.value;
+                    } else {
+                        allFilled = false;
+                    }
+                }
+                if (allFilled && fullOTP.length === 4) {
+                    // Focus verify button and trigger verification
+                    var vBtn = document.getElementById('verifyBtn');
+                    if (vBtn) {
+                        vBtn.focus();
+                        var vIdx = Array.from(focusables).indexOf(vBtn);
+                        if (vIdx >= 0) currentFocus = vIdx;
+                        handleOK();
+                    }
+                }
                 return;
             } else if (e.keyCode === 37) {
                 // LEFT arrow - move to previous OTP input
@@ -927,32 +975,27 @@ function handleOK() {
                 .then(function (response) {
                     console.log("[Login] OTP API Response received:", response);
 
-                    // Reset flag
-                    otpRequestInProgress = false;
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-
                     // Check response
                     if (response && response.status && Number(response.status.err_code) === 0) {
-                        console.log("[Login] OTP sent successfully");
+                        console.log("[Login] OTP sent successfully via /loginOtp");
+                        // Keep button disabled and flag set - we're navigating away
 
-                        // Extract real userid from API response (server userid != mobile number)
+                        // Extract userid from response if available, otherwise use mobile
                         var serverUserId = val;
                         if (response.body && response.body.length > 0 && response.body[0].userid) {
                             serverUserId = response.body[0].userid;
                         }
                         console.log("[Login] Server userid:", serverUserId, "| Mobile:", val);
 
-                        // CRITICAL: Save user data from login response NOW
-                        // The verify OTP response does NOT contain user data (only otpcode/msg)
-                        // So we must save from the login response which has userid + custdet
-                        if (response.body && response.body.length > 0 && response.body[0].userid) {
-                            AuthAPI.setSession(response);
-                        }
-
-                        // Navigate to verify page with real userid
+                        // Navigate to verify page - user data will be saved after OTP verification
+                        // verifyOTP calls /login which returns full user data
                         window.location.href = "verify.html?mobile=" + val + "&userid=" + encodeURIComponent(serverUserId);
                     } else {
+                        // Reset flag and button on error only
+                        otpRequestInProgress = false;
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+
                         console.error("[Login] OTP request failed:", response);
                         var errorMsg = response.status ? response.status.err_msg : "Failed to send OTP";
 
@@ -978,21 +1021,21 @@ function handleOK() {
                                 })
                                 .then(function (retryResponse) {
                                     if (!retryResponse) return;
-                                    otpRequestInProgress = false;
-                                    btn.innerText = originalText;
-                                    btn.disabled = false;
 
                                     if (retryResponse && retryResponse.status && Number(retryResponse.status.err_code) === 0) {
                                         console.log("[Login] OTP sent successfully after device registration");
-                                        // Extract real userid from retry response
+                                        // Keep button disabled - navigating away
                                         var retryUserId = val;
                                         if (retryResponse.body && retryResponse.body.length > 0 && retryResponse.body[0].userid) {
                                             retryUserId = retryResponse.body[0].userid;
-                                            // Save user data from login response
-                                            AuthAPI.setSession(retryResponse);
                                         }
+                                        // Navigate to verify - user data saved after OTP verification
                                         window.location.href = "verify.html?mobile=" + val + "&userid=" + encodeURIComponent(retryUserId);
                                     } else {
+                                        // Reset on error only
+                                        otpRequestInProgress = false;
+                                        btn.innerText = originalText;
+                                        btn.disabled = false;
                                         var retryErr = retryResponse.status ? retryResponse.status.err_msg : "Failed to send OTP";
                                         alert("Error: " + retryErr);
                                     }
@@ -1082,23 +1125,17 @@ function handleOK() {
                     console.log("[Verify] 📨 OTP Verification Response:", response);
                     console.log("[Verify] ⏱️ Response timestamp:", new Date().toISOString());
 
-                    // Reset flag
-                    otpVerifyInProgress = false;
-
-                    // Restore button
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-
                     // Check response
                     if (response && response.status && Number(response.status.err_code) === 0) {
                         console.log("[Verify] ✅ OTP verified successfully");
+                        // Keep button disabled - navigating away
 
                         // Store login state in localStorage
                         localStorage.setItem('isLoggedIn', 'true');
                         localStorage.setItem('userid', userid);
                         localStorage.setItem('mobile', mobile);
                         localStorage.setItem('loginTime', new Date().toISOString());
-                        
+
                         // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
                         localStorage.setItem('hasLoggedInOnce', 'true');
                         console.log("[Verify] ✅ hasLoggedInOnce flag set - future app launches will skip login");
@@ -1106,6 +1143,11 @@ function handleOK() {
                         // Navigate to home page directly (no popup)
                         window.location.replace("home.html");
                     } else {
+                        // Reset flag and button on error only
+                        otpVerifyInProgress = false;
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+
                         console.error("[Verify] ❌ OTP verification failed:", response);
                         var errorMsg = response.status ? response.status.err_msg : "Invalid OTP";
 
@@ -1189,9 +1231,6 @@ function handleNumberPadInput(value) {
 
 var otpCode = ["", "", "", ""];  // Changed from 6 to 4
 var currentOtpIndex = 0;
-var countdownTimer = 59;
-var timerInterval = null;
-var resendInProgress = false; // Flag to prevent duplicate resend requests
 
 // Initialize OTP page if we're on verify.html
 window.addEventListener('load', function () {
@@ -1206,9 +1245,6 @@ window.addEventListener('load', function () {
 });
 
 function initOTPPage() {
-    // Start countdown timer
-    startCountdown();
-
     // Initialize popup handlers
     initPopupHandlers();
 
@@ -1243,131 +1279,9 @@ function initOTPPage() {
         });
     });
 
-    // Add resend link handler
-    var resendLink = document.getElementById('resendLink');
-    if (resendLink) {
-        resendLink.addEventListener('click', function () {
-            if (!resendLink.classList.contains('disabled')) {
-                resendOTP();
-            }
-        });
-    }
 }
 
-function startCountdown() {
-    countdownTimer = 59;
-    var timerElement = document.getElementById('timer');
-    var resendLink = document.getElementById('resendLink');
 
-    if (resendLink) {
-        resendLink.classList.add('disabled');
-    }
-
-    if (timerInterval) {
-        clearInterval(timerInterval);
-    }
-
-    timerInterval = setInterval(function () {
-        countdownTimer--;
-
-        if (timerElement) {
-            var minutes = Math.floor(countdownTimer / 60);
-            var seconds = countdownTimer % 60;
-            timerElement.innerText = '0' + minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-        }
-
-        if (countdownTimer <= 0) {
-            clearInterval(timerInterval);
-            if (resendLink) {
-                resendLink.classList.remove('disabled');
-            }
-            if (timerElement) {
-                timerElement.innerText = '00:00';
-            }
-        }
-    }, 1000);
-}
-
-function resendOTP() {
-    // Prevent duplicate resend requests
-    if (resendInProgress) {
-        console.log("[Resend OTP] Request already in progress, ignoring duplicate");
-        return;
-    }
-
-    console.log("Resending OTP...");
-    resendInProgress = true;
-
-    // Get User Context from URL or Storage
-    const urlParams = new URLSearchParams(window.location.search);
-    const mobile = urlParams.get('mobile') || "";
-    const userid = urlParams.get('userid') || "";
-    const email = urlParams.get('email') || "";
-
-    // If URL params are missing, redirect back to login
-    if (!mobile || !userid) {
-        console.error("[Resend OTP] Missing mobile or userid - redirecting to login");
-        window.location.replace("login.html");
-        return;
-    }
-
-    const resendLink = document.getElementById('resendLink');
-    if (resendLink) {
-        resendLink.innerText = "Sending...";
-        resendLink.classList.add('disabled');
-    }
-
-    // Get device info for the API call
-    const device = DeviceInfo.getDeviceInfo();
-    const deviceData = {
-        mac_address: device.mac_address,
-        device_name: device.device_name,
-        ip_address: device.ip_address,
-        device_type: device.device_type
-    };
-
-    console.log("[Resend OTP] Payload:", {
-        userid: userid,
-        mobile: mobile,
-        email: email,
-        ...deviceData
-    });
-
-    // Call API with all required parameters
-    AuthAPI.resendOTP(userid, mobile, email, deviceData).then(response => {
-        console.log("Resend Response:", response);
-        resendInProgress = false; // Reset flag
-        if (resendLink) resendLink.innerText = "Resend OTP";
-
-        // Check if response is successful
-        if (response && response.status && Number(response.status.err_code) === 0) {
-            // Restart timer on success
-            startCountdown();
-
-            // Clear Inputs
-            otpCode = ["", "", "", "", "", ""];
-            for (var i = 1; i <= 6; i++) {
-                var digitEl = document.getElementById('otp' + i);
-                if (digitEl) digitEl.value = '';
-            }
-            currentOtpIndex = 0;
-            if (focusables.length > 0) focusables[0].focus();
-
-            // Show success popup instead of alert
-            showOtpPopup(mobile, email);
-        } else {
-            var errorMsg = response && response.status ? response.status.err_msg : "Unknown error";
-            console.error("[Resend OTP] API Error:", errorMsg);
-            showErrorPopup(errorMsg);
-        }
-
-    }).catch(e => {
-        console.error("Resend Failed", e);
-        resendInProgress = false; // Reset flag
-        if (resendLink) resendLink.innerText = "Resend OTP";
-        showErrorPopup("Failed to resend OTP: " + e.message);
-    });
-}
 
 // Clear all OTP inputs and reset focus to first input
 function clearOTPInputs() {
@@ -1390,77 +1304,27 @@ function clearOTPInputs() {
 }
 
 // Show OTP Success Popup
-function showOtpPopup(mobile, email) {
-    var popup = document.getElementById('otpPopup');
-    var message = document.getElementById('otpPopupMessage');
-    var closeBtn = document.getElementById('otpPopupCloseBtn');
-    var authCard = document.querySelector('.auth-card');
-
-    if (popup && message) {
-        message.textContent = 'A new OTP has been sent to your registered mobile number.';
-        popup.style.display = 'flex';
-
-        // Disable background interaction
-        if (authCard) {
-            authCard.style.pointerEvents = 'none';
-            authCard.style.opacity = '0.5';
-        }
-
-        // Lock focus on popup - disable all other focusables
-        disableBackgroundFocusables();
-
-        // Focus on close button for TV remote navigation
-        if (closeBtn) {
-            setTimeout(function () {
-                closeBtn.focus();
-                console.log("[Popup] Focus locked on OTP popup OK button");
-            }, 150);
-        }
-
-        // Auto close after 5 seconds
-        setTimeout(function () {
-            hideOtpPopup();
-        }, 5000);
-    }
-}
-
-// Hide OTP Popup
-function hideOtpPopup() {
-    var popup = document.getElementById('otpPopup');
-    var authCard = document.querySelector('.auth-card');
-
-    if (popup) {
-        popup.style.display = 'none';
-
-        // Re-enable background interaction
-        if (authCard) {
-            authCard.style.pointerEvents = 'auto';
-            authCard.style.opacity = '1';
-        }
-
-        // Re-enable background focusables
-        enableBackgroundFocusables();
-
-        // Return focus to first OTP input
-        var firstInput = document.getElementById('otp1');
-        if (firstInput) {
-            setTimeout(function () {
-                firstInput.focus();
-                console.log("[Popup] Focus restored to first OTP input");
-            }, 100);
-        }
-    }
-}
 
 // Show Error Popup with proper focus management
 function showErrorPopup(errorMessage) {
     var popup = document.getElementById('errorPopup');
     var message = document.getElementById('errorPopupMessage');
+    var title = document.getElementById('errorPopupTitle');
     var closeBtn = document.getElementById('errorPopupCloseBtn');
     var authCard = document.querySelector('.auth-card');
 
     if (popup && message) {
-        message.textContent = errorMessage || 'Failed to send OTP. Please try again.';
+        // Set appropriate title based on error type
+        if (title) {
+            if (errorMessage && errorMessage.toLowerCase().indexOf('network') !== -1) {
+                title.textContent = 'Network Error';
+            } else if (errorMessage && errorMessage.toLowerCase().indexOf('incomplete') !== -1) {
+                title.textContent = 'Incomplete OTP';
+            } else {
+                title.textContent = 'Invalid OTP';
+            }
+        }
+        message.textContent = errorMessage || 'The OTP you entered is incorrect. Please try again.';
         popup.style.display = 'flex';
 
         // Disable background interaction
@@ -1508,7 +1372,6 @@ function hideErrorPopup() {
 function disableBackgroundFocusables() {
     var otpInputs = document.querySelectorAll('.otp-input');
     var verifyBtn = document.getElementById('verifyBtn');
-    var resendLink = document.getElementById('resendLink');
 
     otpInputs.forEach(function (input) {
         input.setAttribute('data-was-focusable', 'true');
@@ -1522,11 +1385,6 @@ function disableBackgroundFocusables() {
         verifyBtn.disabled = true;
     }
 
-    if (resendLink) {
-        resendLink.setAttribute('data-was-focusable', 'true');
-        resendLink.tabIndex = -1;
-    }
-
     console.log("[Focus] Background focusables disabled");
 }
 
@@ -1534,7 +1392,6 @@ function disableBackgroundFocusables() {
 function enableBackgroundFocusables() {
     var otpInputs = document.querySelectorAll('.otp-input');
     var verifyBtn = document.getElementById('verifyBtn');
-    var resendLink = document.getElementById('resendLink');
 
     otpInputs.forEach(function (input) {
         if (input.getAttribute('data-was-focusable')) {
@@ -1550,31 +1407,12 @@ function enableBackgroundFocusables() {
         verifyBtn.removeAttribute('data-was-focusable');
     }
 
-    if (resendLink && resendLink.getAttribute('data-was-focusable')) {
-        resendLink.tabIndex = 0;
-        resendLink.removeAttribute('data-was-focusable');
-    }
-
     console.log("[Focus] Background focusables re-enabled");
 }
 
 // Initialize popup close handlers
 function initPopupHandlers() {
-    var otpCloseBtn = document.getElementById('otpPopupCloseBtn');
     var errorCloseBtn = document.getElementById('errorPopupCloseBtn');
-
-    if (otpCloseBtn) {
-        otpCloseBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            hideOtpPopup();
-        });
-        otpCloseBtn.addEventListener('keydown', function (e) {
-            if (e.keyCode === 13 || e.keyCode === 10009) { // Enter or Back key
-                e.preventDefault();
-                hideOtpPopup();
-            }
-        });
-    }
 
     if (errorCloseBtn) {
         errorCloseBtn.addEventListener('click', function (e) {
@@ -1590,17 +1428,7 @@ function initPopupHandlers() {
     }
 
     // Close popup on overlay click (but not on container click)
-    var otpPopup = document.getElementById('otpPopup');
     var errorPopup = document.getElementById('errorPopup');
-
-    if (otpPopup) {
-        otpPopup.addEventListener('click', function (e) {
-            if (e.target === otpPopup) {
-                e.preventDefault();
-                hideOtpPopup();
-            }
-        });
-    }
 
     if (errorPopup) {
         errorPopup.addEventListener('click', function (e) {

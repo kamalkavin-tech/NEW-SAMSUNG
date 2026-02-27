@@ -341,6 +341,7 @@ window.CacheManager = CacheManager;
 const API_ENDPOINTS = {
     // Auth endpoints (old base URL)
     LOGIN: `${API_BASE_URL_PROD}/login`,
+    LOGIN_OTP: `${API_BASE_URL_PROD}/loginOtp`,
     RESEND_OTP: `${API_BASE_URL_PROD}/loginOtp`,
     ADD_MACADDRESS: `${API_BASE_URL_PROD}/addmacnew`,
     USER_LOGOUT: `${API_BASE_URL_PROD}/userLogout`,
@@ -557,7 +558,7 @@ const AuthAPI = {
             getuserdet: ""
         };
         console.log("[AuthAPI] Requesting OTP Payload:", payload);
-        return await apiCall(API_ENDPOINTS.LOGIN, payload);
+        return await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
     },
 
     addMacAddress: async function (userid, mobile) {

@@ -1109,8 +1109,8 @@ function renderLanguagesInHomeGrid(languages) {
     // Clear any existing content
     container.innerHTML = '';
 
-    // Take first 9 languages (+ View All = 10 items = 2 rows of 5)
-    var displayLanguages = languages.slice(0, 9);
+    // Take first 13 languages (+ View All = 14 items = 2 rows of 7)
+    var displayLanguages = languages.slice(0, 13);
 
     // Create minimal language items (logo + name only - NO CIRCLE)
     displayLanguages.forEach(function (lang, index) {
