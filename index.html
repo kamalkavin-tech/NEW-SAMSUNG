@@ -3,11 +3,23 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=login.html">
+    <!-- Fallback redirect if JS disabled (JS redirect above is faster and smarter) -->
+    <meta http-equiv="refresh" content="1; url=login.html">
     <title>Redirecting...</title>
     <script>
-        // Immediate redirect to login page
-        window.location.replace('login.html');
+        // If already logged in, skip login page entirely — go straight to home
+        (function () {
+            try {
+                if (localStorage.getItem("hasLoggedInOnce") === "true") {
+                    var ud = localStorage.getItem("bbnl_user");
+                    if (ud && JSON.parse(ud).userid) {
+                        window.location.replace("home.html");
+                        return;
+                    }
+                }
+            } catch (e) {}
+            window.location.replace('login.html');
+        })();
     </script>
 </head>
 

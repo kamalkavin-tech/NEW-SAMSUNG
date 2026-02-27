@@ -7,6 +7,19 @@
     <title>BBNLIPTV</title>
     <link rel="stylesheet" href="css/style.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+    <!-- Early auth redirect — runs BEFORE body renders to prevent login page flash -->
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem("hasLoggedInOnce") === "true") {
+                    var ud = localStorage.getItem("bbnl_user");
+                    if (ud && JSON.parse(ud).userid) {
+                        window.location.replace("home.html");
+                    }
+                }
+            } catch (e) {}
+        })();
+    </script>
 </head>
 
 <body class="login-page">

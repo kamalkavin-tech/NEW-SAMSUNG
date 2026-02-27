@@ -48,20 +48,20 @@ var fofiShouldAutoPlay = false;
     }
 
     // Validate bbnl_user has actual user data (not just OTP response)
+    // NOTE: Never remove hasLoggedInOnce — it must persist even if bbnl_user is invalid.
+    // The login page's checkAuthRedirect validates both before redirecting to home,
+    // so keeping hasLoggedInOnce is safe and prevents session loss on HOME relaunch.
     try {
         var userData = localStorage.getItem("bbnl_user");
         if (userData) {
             var user = JSON.parse(userData);
             if (!user.userid) {
-                console.log("[Auth] bbnl_user has no userid - invalid session, forcing re-login");
-                localStorage.removeItem("hasLoggedInOnce");
-                localStorage.removeItem("bbnl_user");
+                console.log("[Auth] bbnl_user has no userid - redirecting to login for re-auth");
                 window.location.replace("login.html");
                 return;
             }
         } else {
-            console.log("[Auth] No bbnl_user found - forcing re-login");
-            localStorage.removeItem("hasLoggedInOnce");
+            console.log("[Auth] No bbnl_user found - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -1863,63 +1863,96 @@ document.addEventListener('DOMContentLoaded', function () {
     initDarkMode();
     initNetworkStatus();
 
-    // Ensure public IP is ready before making any API calls
-    // On subsequent pages, cached public IP is available instantly (resolves immediately)
-    // On first launch, waits up to 3 seconds for ipify.org response
-    var ipReady = (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP)
-        ? DeviceInfo.ensurePublicIP(3000)
-        : Promise.resolve(false);
-
-    ipReady.then(function () {
-        console.log("[HOME] Public IP ready, starting API calls. IP:", DeviceInfo.getDeviceInfo().ip_address);
-
-        // Check app lock status
-        setTimeout(checkAppLockStatus, 50);
-
-        // Check app version - show update popup only if server version > app version
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.getAppVersion) {
-            BBNL_API.getAppVersion().then(function (res) {
-                console.log("[HOME] AppVersion response:", res);
-                if (res && res.status && Number(res.status.err_code) === 0 && res.body) {
-                    var serverVersion = res.body.appversion || "";
-                    var currentVersion = BBNL_API.getCurrentVersion();
-                    var comparison = BBNL_API.compareVersions(serverVersion, currentVersion);
-                    console.log("[HOME] Version check - Server:", serverVersion, "| App:", currentVersion, "| Result:", comparison);
-
-                    if (comparison > 0) {
-                        // Server version is HIGHER - show update popup
-                        var msg = document.getElementById('appUpdateMessage');
-                        if (msg) {
-                            msg.innerText = "A new version (" + serverVersion + ") is available. Please update the application.";
-                        }
-                        var popup = document.getElementById('appUpdatePopup');
-                        if (popup) {
-                            popup.style.display = 'flex';
-                            var okBtn = document.getElementById('appUpdateOkBtn');
-                            if (okBtn) {
-                                setTimeout(function () { okBtn.focus(); }, 100);
-                            }
-                        }
-                    } else {
-                        console.log("[HOME] App is up to date - no update popup needed");
-                    }
-                }
-            }).catch(function (err) {
-                console.warn("[HOME] AppVersion error:", err);
-            });
+    // Fast-path: detect return visit within same session
+    // On return visits, sessionStorage cache is warm → skip IP wait and startup API calls
+    var initTimestamp = sessionStorage.getItem('home_init_done');
+    var isReturnVisit = false;
+    if (initTimestamp) {
+        var elapsed = Date.now() - Number(initTimestamp);
+        // Cache valid for 30 minutes
+        if (elapsed < 30 * 60 * 1000) {
+            isReturnVisit = true;
         }
+    }
 
-        // Send TRP data for analytics (non-critical, delay slightly)
-        setTimeout(sendTRPDataOnLoad, 500);
+    if (isReturnVisit) {
+        // === FAST PATH: Return visit - render from cache instantly ===
+        console.log("[HOME] Return visit detected - using fast path (cached data)");
 
-        // Load ALL data in PARALLEL immediately
-        // sessionStorage cache makes repeat visits instant (no API calls)
+        // Load data immediately from sessionStorage cache (no IP wait needed)
         loadHomeAds();
         loadHomeLanguages();
         loadHomeChannels();
 
-        console.log("[HOME] All data loading started (parallel)");
-    });
+        // Defer app lock check to background (still important for security)
+        setTimeout(checkAppLockStatus, 2000);
+
+        console.log("[HOME] Fast path complete - UI rendered from cache");
+    } else {
+        // === FULL PATH: First visit - wait for IP, run all startup checks ===
+        console.log("[HOME] First visit - running full initialization");
+
+        // Ensure public IP is ready before making any API calls
+        // On subsequent pages, cached public IP is available instantly (resolves immediately)
+        // On first launch, waits up to 3 seconds for ipify.org response
+        var ipReady = (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP)
+            ? DeviceInfo.ensurePublicIP(3000)
+            : Promise.resolve(false);
+
+        ipReady.then(function () {
+            console.log("[HOME] Public IP ready, starting API calls. IP:", DeviceInfo.getDeviceInfo().ip_address);
+
+            // Check app lock status
+            setTimeout(checkAppLockStatus, 50);
+
+            // Check app version - show update popup only if server version > app version
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.getAppVersion) {
+                BBNL_API.getAppVersion().then(function (res) {
+                    console.log("[HOME] AppVersion response:", res);
+                    if (res && res.status && Number(res.status.err_code) === 0 && res.body) {
+                        var serverVersion = res.body.appversion || "";
+                        var currentVersion = BBNL_API.getCurrentVersion();
+                        var comparison = BBNL_API.compareVersions(serverVersion, currentVersion);
+                        console.log("[HOME] Version check - Server:", serverVersion, "| App:", currentVersion, "| Result:", comparison);
+
+                        if (comparison > 0) {
+                            // Server version is HIGHER - show update popup
+                            var msg = document.getElementById('appUpdateMessage');
+                            if (msg) {
+                                msg.innerText = "A new version (" + serverVersion + ") is available. Please update the application.";
+                            }
+                            var popup = document.getElementById('appUpdatePopup');
+                            if (popup) {
+                                popup.style.display = 'flex';
+                                var okBtn = document.getElementById('appUpdateOkBtn');
+                                if (okBtn) {
+                                    setTimeout(function () { okBtn.focus(); }, 100);
+                                }
+                            }
+                        } else {
+                            console.log("[HOME] App is up to date - no update popup needed");
+                        }
+                    }
+                }).catch(function (err) {
+                    console.warn("[HOME] AppVersion error:", err);
+                });
+            }
+
+            // Send TRP data for analytics (non-critical, delay slightly)
+            setTimeout(sendTRPDataOnLoad, 500);
+
+            // Load ALL data in PARALLEL immediately
+            // sessionStorage cache makes repeat visits instant (no API calls)
+            loadHomeAds();
+            loadHomeLanguages();
+            loadHomeChannels();
+
+            // Mark first init done - enables fast path for return visits
+            try { sessionStorage.setItem('home_init_done', String(Date.now())); } catch (e) {}
+
+            console.log("[HOME] All data loading started (parallel)");
+        });
+    }
 
     // Failed to Load - Retry
     var retryLoadBtn = document.getElementById('retryLoadBtn');

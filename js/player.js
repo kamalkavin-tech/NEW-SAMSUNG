@@ -3,6 +3,7 @@
  */
 
 // Check authentication - redirect to login if never logged in
+// NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -13,8 +14,7 @@
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            localStorage.removeItem("hasLoggedInOnce");
-            localStorage.removeItem("bbnl_user");
+            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }

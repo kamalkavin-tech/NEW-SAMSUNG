@@ -13,6 +13,7 @@
    ================================ */
 
 // Check authentication - redirect to login if never logged in
+// NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -20,20 +21,10 @@
         window.location.replace("login.html");
         return;
     }
-    // Validate bbnl_user has actual user data
     try {
         var userData = localStorage.getItem("bbnl_user");
-        if (!userData) {
-            console.log("[Auth] No bbnl_user found - forcing re-login");
-            localStorage.removeItem("hasLoggedInOnce");
-            window.location.replace("login.html");
-            return;
-        }
-        var user = JSON.parse(userData);
-        if (!user.userid) {
-            console.log("[Auth] bbnl_user has no userid - forcing re-login");
-            localStorage.removeItem("hasLoggedInOnce");
-            localStorage.removeItem("bbnl_user");
+        if (!userData || !JSON.parse(userData).userid) {
+            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }

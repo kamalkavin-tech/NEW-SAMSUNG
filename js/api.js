@@ -2627,23 +2627,31 @@ if (typeof window !== 'undefined') {
 console.log("[BBNL_API] API Service loaded successfully");
 
 // ==========================================
-// APP LIFECYCLE - Exit on HOME button
+// APP LIFECYCLE - HOME button handling
 // Samsung TV HOME button sends app to background.
-// Exit the app completely so next launch is fresh.
-// Also stops any active media playback before exiting.
+// Flow: stop playback → exit app (NO server logout).
+// On relaunch: hasLoggedInOnce=true + bbnl_user valid → home.html → FoFi plays after 3s.
+// Resume fallback: if exit() fails, redirect to home on resume.
+//
+// IMPORTANT: Server logout is ONLY done from Settings > Logout (explicit user action).
+// HOME button must NOT invalidate the server session — otherwise relaunch
+// API calls fail and the user gets stuck on the login page.
 //
 // IMPORTANT: Page navigation (e.g. login → verify) can
 // briefly trigger visibilitychange='hidden' on Tizen WebKit.
 // The _isPageUnloading guard prevents exiting during navigation.
 // ==========================================
 var _isPageUnloading = false;
+var _wasBackgrounded = false;
+
 window.addEventListener('beforeunload', function () {
     _isPageUnloading = true;
 });
 
 document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden' && !_isPageUnloading) {
-        console.log("[App] App going to background (HOME pressed) - stopping playback and exiting...");
+        console.log("[App] App going to background (HOME pressed) - performing cleanup...");
+        _wasBackgrounded = true;
 
         // 1. Stop any active media playback (prevents background audio)
         try {
@@ -2659,7 +2667,14 @@ document.addEventListener('visibilitychange', function () {
             }
         } catch (e) {}
 
-        // 2. Exit the Tizen application completely
+        // 2. NO server logout here — session must stay alive for relaunch.
+        //    Server logout only happens from Settings > Logout (explicit user action).
+        //    Sending logout here would invalidate the server session, causing API
+        //    failures on relaunch and the user getting stuck on the login page.
+
+        // 3. Exit the Tizen application completely
+        //    sessionStorage is automatically cleared when the process dies.
+        //    localStorage (hasLoggedInOnce, bbnl_user) persists for relaunch.
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
                 tizen.application.getCurrentApplication().exit();
@@ -2667,6 +2682,29 @@ document.addEventListener('visibilitychange', function () {
         } catch (e) {
             console.error("[App] Exit failed:", e);
         }
+
+    } else if (document.visibilityState === 'visible' && _wasBackgrounded) {
+        // FALLBACK: App was resumed from background (exit() didn't work on this TV).
+        // Redirect to home page so FoFi plays after 3 seconds.
+        console.log("[App] App resumed from background - redirecting to home page...");
+        _wasBackgrounded = false;
+
+        // Stop any lingering playback
+        try {
+            if (typeof AVPlayer !== 'undefined') AVPlayer.stop();
+        } catch (e) {}
+
+        // Clear session flags so home page does full fresh load with FoFi auto-play
+        sessionStorage.removeItem('fofi_autoplay_done');
+        sessionStorage.removeItem('home_init_done');
+
+        // Redirect to home page (skip if on auth pages — auth check handles those)
+        var currentPage = window.location.pathname.split('/').pop() || '';
+        var isAuthPage = (currentPage === 'login.html' || currentPage === 'verify.html' || currentPage === 'index.html');
+        if (!isAuthPage) {
+            window.location.replace('home.html');
+        }
+
     } else if (_isPageUnloading) {
         console.log("[App] Page navigation in progress - NOT exiting app");
     }

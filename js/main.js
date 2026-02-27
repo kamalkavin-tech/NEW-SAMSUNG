@@ -14,13 +14,25 @@ var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fi
     var authPages = ['index.html', 'login.html', 'verify.html', ''];
     var isAuthPage = authPages.indexOf(currentPage) !== -1;
 
-    // If user has logged in before, skip login pages and go to home
+    // If user has logged in before AND has valid session data, skip login pages and go to home
     if (isAuthPage) {
         var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
         if (hasLoggedInOnce === "true") {
-            console.log("[Auth] User has logged in before, redirecting to home...");
-            window.location.replace("home.html");
-            return;
+            // Also validate bbnl_user has actual user data before redirecting
+            // If bbnl_user is missing/invalid, stay on login so user can re-authenticate
+            try {
+                var userData = localStorage.getItem("bbnl_user");
+                if (userData) {
+                    var user = JSON.parse(userData);
+                    if (user && user.userid) {
+                        console.log("[Auth] User has valid session, redirecting to home...");
+                        window.location.replace("home.html");
+                        return;
+                    }
+                }
+            } catch (e) {}
+            // hasLoggedInOnce=true but bbnl_user invalid — stay on login for re-auth
+            console.log("[Auth] hasLoggedInOnce=true but bbnl_user invalid - staying on login for re-auth");
         }
     }
 })();
