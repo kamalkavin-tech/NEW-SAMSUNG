@@ -351,7 +351,11 @@ window.onload = function () {
             if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
                 BBNL_API.getChannelData().then(function (channels) {
                     if (channels && channels.length > 0) {
-                        allChannels = channels;
+                        allChannels = channels.sort(function (a, b) {
+                            var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
+                            var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+                            return aNo - bNo;
+                        });
                         // Find the same channel in refreshed list by ID
                         if (chId) {
                             var updated = channels.find(function (ch) {
@@ -381,6 +385,7 @@ window.onload = function () {
 var allChannels = [];
 var currentIndex = -1;
 var _lastAttemptedChannel = null; // Tracks the current channel for retry
+var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
 
 async function loadChannelList(lookupName = null) {
     try {
@@ -530,6 +535,29 @@ function updateExpiryDisplay(channel) {
 
 function setupPlayer(channel) {
     console.log("=== Setting up player for channel ===", channel);
+
+    // Increment stream generation — stale callbacks from previous channel will be ignored
+    _playerStreamGen++;
+    var myGen = _playerStreamGen;
+
+    // CRITICAL: Stop any previous stream IMMEDIATELY before anything else
+    // This prevents the old channel from continuing to play in the background
+    try {
+        if (typeof AVPlayer !== 'undefined') {
+            AVPlayer.stop();
+        }
+    } catch (e) {
+        console.log("[Player] Previous stream stop (cleanup):", e.message);
+    }
+
+    // Clear any pending stream timeout from previous channel
+    if (window._streamTimeoutTimer) {
+        clearTimeout(window._streamTimeoutTimer);
+        window._streamTimeoutTimer = null;
+    }
+
+    // Reset loading state for this new channel
+    hasHiddenLoadingIndicator = false;
 
     // Track current channel for retry
     _lastAttemptedChannel = channel;
@@ -798,6 +826,8 @@ function setupPlayer(channel) {
         // Stream timeout: if playback doesn't start within 15 seconds, show error
         if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
         window._streamTimeoutTimer = setTimeout(function () {
+            // Abort if a newer setupPlayer call was made (user switched channels)
+            if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
                 console.warn("[Player] Stream timeout - playback did not start within 15s");
                 hideBufferingIndicator();
@@ -2172,13 +2202,13 @@ function handleKeydown(e) {
             var btn = document.getElementById('playerRetryBtn');
             if (btn) btn.click();
         } else if (code === 38) {
-            // UP - switch to previous channel
-            hidePlayerErrorPopup();
-            changeChannel(-1);
-        } else if (code === 40) {
-            // DOWN - switch to next channel
+            // UP - switch to next channel (consistent with normal mode)
             hidePlayerErrorPopup();
             changeChannel(1);
+        } else if (code === 40) {
+            // DOWN - switch to previous channel (consistent with normal mode)
+            hidePlayerErrorPopup();
+            changeChannel(-1);
         } else if (code === 37) {
             // LEFT - open sidebar for channel browsing
             if (!sidebarState.isOpen) {

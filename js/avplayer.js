@@ -128,6 +128,14 @@ var AVPlayer = (function () {
     // Track if we should try HTTP fallback
     var httpsFailedUrls = {};
 
+    // Timeout IDs for cancellation on new changeStream calls
+    var _setUrlTimer = null;
+    var _playTimer = null;
+    // Generation counter — increments on each changeStream call
+    // Stale callbacks check this to avoid acting on old streams
+    var _streamGeneration = 0;
+    var _httpFallbackTimer = null;
+
     return {
         init: function (options) {
             console.log("[AVPlayer] Init called");
@@ -223,7 +231,14 @@ var AVPlayer = (function () {
 
                 // Minimal delay for cleanup to complete
                 var self = this;
-                setTimeout(function () {
+                var myGeneration = _streamGeneration;
+                _setUrlTimer = setTimeout(function () {
+                    _setUrlTimer = null;
+                    // Abort if a newer changeStream call has been made
+                    if (myGeneration !== _streamGeneration) {
+                        console.log("[AVPlayer] setUrl aborted — stale generation", myGeneration, "vs", _streamGeneration);
+                        return;
+                    }
                     try {
                         // STEP 2: Open stream FIRST (required before setting properties)
                         console.log("[AVPlayer] Opening stream...");
@@ -366,8 +381,13 @@ var AVPlayer = (function () {
                     // Direct play without prepare causes InvalidAccessError on real TV
                     console.log("[AVPlayer] Preparing stream (prepareAsync required for Samsung TV)...");
 
+                    var playGeneration = _streamGeneration;
                     avplay.prepareAsync(
                         function () {
+                            if (playGeneration !== _streamGeneration) {
+                                console.log("[AVPlayer] prepareAsync success aborted — stale generation", playGeneration, "vs", _streamGeneration);
+                                return;
+                            }
                             console.log("[AVPlayer] ✓✓✓ PREPARE SUCCESS ✓✓✓");
                             playerState = "READY";
 
@@ -387,6 +407,10 @@ var AVPlayer = (function () {
                             }
                         },
                         function (prepareError) {
+                            if (playGeneration !== _streamGeneration) {
+                                console.log("[AVPlayer] prepareAsync error ignored — stale generation", playGeneration, "vs", _streamGeneration);
+                                return;
+                            }
                             console.error("[AVPlayer] ========================================");
                             console.error("[AVPlayer] ✗✗✗ PREPARE FAILED ✗✗✗");
                             console.error("[AVPlayer] Error:", prepareError);
@@ -477,26 +501,42 @@ var AVPlayer = (function () {
 
         changeStream: function (url) {
             console.log("[AVPlayer] Changing stream to:", url);
-            
+
+            // CRITICAL: Cancel any pending timers from previous changeStream calls
+            if (_setUrlTimer) { clearTimeout(_setUrlTimer); _setUrlTimer = null; }
+            if (_playTimer) { clearTimeout(_playTimer); _playTimer = null; }
+            if (_httpFallbackTimer) { clearTimeout(_httpFallbackTimer); _httpFallbackTimer = null; }
+
+            // Increment generation — all stale callbacks will check and abort
+            _streamGeneration++;
+            var myGeneration = _streamGeneration;
+            console.log("[AVPlayer] Stream generation:", myGeneration);
+
             // Check if this is a DVB/FTA stream
             if (isDVBUrl(url)) {
-                console.log("[AVPlayer] 📡 DVB/FTA stream detected");
+                console.log("[AVPlayer] DVB/FTA stream detected");
                 this.playDVBStream(url);
                 return;
             }
-            
+
             // Stop any DVB playback if switching from FTA to IPTV
             if (isDVBStream) {
                 this.stopDVBStream();
             }
-            
+
             isDVBStream = false;
             this.destroy();
             this.setUrl(url);
             var self = this;
-            setTimeout(function () {
+            _playTimer = setTimeout(function () {
+                _playTimer = null;
+                // Abort if a newer changeStream call has been made
+                if (myGeneration !== _streamGeneration) {
+                    console.log("[AVPlayer] play() aborted — stale generation", myGeneration, "vs", _streamGeneration);
+                    return;
+                }
                 self.play();
-            }, 50); // ULTRA-FAST: 50ms delay for instant channel switching
+            }, 50);
         },
 
         /**
@@ -708,6 +748,7 @@ var AVPlayer = (function () {
         },
 
         getState: function () { return playerState; },
+        getGeneration: function () { return _streamGeneration; },
         isTizen: function () { return isTizenProp; },
         isAVPlaySupported: function () { return isTizenProp; },
 
@@ -737,6 +778,8 @@ var AVPlayer = (function () {
                     },
 
                     onerror: function (eventType) {
+                        // Capture generation to detect stale callbacks after channel switch
+                        var errorGeneration = _streamGeneration;
                         console.error("[AVPlayer] ========================================");
                         console.error("[AVPlayer] ✗✗✗ ERROR EVENT ✗✗✗");
                         console.error("[AVPlayer] Error Type:", eventType);
@@ -756,8 +799,14 @@ var AVPlayer = (function () {
                             console.log("[AVPlayer] 🔄 HTTPS failed, auto-retrying with HTTP...");
                             console.log("[AVPlayer] HTTP URL:", httpUrl);
 
-                            // Try HTTP version
-                            setTimeout(function() {
+                            // Try HTTP version (tracked timer so changeStream can cancel it)
+                            _httpFallbackTimer = setTimeout(function() {
+                                _httpFallbackTimer = null;
+                                // Abort if user already switched channels
+                                if (errorGeneration !== _streamGeneration) {
+                                    console.log("[AVPlayer] HTTP fallback aborted — stale generation", errorGeneration, "vs", _streamGeneration);
+                                    return;
+                                }
                                 try {
                                     avplay.stop();
                                     avplay.close();
@@ -777,11 +826,19 @@ var AVPlayer = (function () {
                                     }
                                     avplay.prepareAsync(
                                         function() {
+                                            // Abort if user switched channels during prepare
+                                            if (errorGeneration !== _streamGeneration) {
+                                                console.log("[AVPlayer] HTTP fallback play aborted — stale generation");
+                                                try { avplay.stop(); avplay.close(); } catch(ig) {}
+                                                return;
+                                            }
                                             console.log("[AVPlayer] ✓ HTTP fallback succeeded!");
                                             avplay.play();
                                             playerState = "PLAYING";
                                         },
                                         function(err) {
+                                            // Suppress stale errors
+                                            if (errorGeneration !== _streamGeneration) return;
                                             console.error("[AVPlayer] HTTP fallback also failed:", err);
                                             eventCallbacks.onError("Cannot connect to stream server (both HTTPS and HTTP failed)", {
                                                 type: eventType,
@@ -794,6 +851,12 @@ var AVPlayer = (function () {
                                 }
                             }, 100);
                             return; // Don't show error yet, trying HTTP
+                        }
+
+                        // Suppress stale errors from previous channel
+                        if (errorGeneration !== _streamGeneration) {
+                            console.log("[AVPlayer] Error suppressed — stale generation", errorGeneration, "vs", _streamGeneration);
+                            return;
                         }
 
                         var errorDetails = {
