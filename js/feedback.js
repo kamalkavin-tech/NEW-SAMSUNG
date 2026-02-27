@@ -2,7 +2,7 @@
    BBNL Feedback CONTROLLER
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -10,6 +10,15 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 var focusables = [];
@@ -195,8 +204,8 @@ function submitFeedback() {
 
     // Prepare feedback data with robust field detection
     // Try multiple field name variants for userid and mobile
-    var userid = userData.userid || userData.userId || userData.id || userData.username || "testiser1";  // ✅ Fixed: use "testiser1" not "testuser1"
-    var mobile = userData.mobile || userData.phone || userData.mobilenumber || "7800000001";
+    var userid = userData.userid || userData.userId || userData.id || userData.username || "";
+    var mobile = userData.mobile || userData.phone || userData.mobilenumber || "";
 
     var feedbackData = {
         userid: userid,

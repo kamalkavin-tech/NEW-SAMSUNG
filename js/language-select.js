@@ -2,7 +2,7 @@
    BBNL IPTV - LANGUAGE SELECT PAGE CONTROLLER
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -10,6 +10,15 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 var focusables = [];

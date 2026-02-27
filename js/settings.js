@@ -21,7 +21,7 @@
    BACK KEY: always go to home.html
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -29,6 +29,15 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 // Navigation state
@@ -386,8 +395,15 @@ async function handleLogout() {
     if (confirmLogout) {
         console.log("[Settings] User confirmed logout - stopping all background processes");
 
-        // 1. Stop all background timers/intervals on this page
-        // Clear any active intervals by clearing a wide range of timer IDs
+        // 1. Save critical data BEFORE API logout
+        // BBNL_API.logout() calls CacheManager.clear() which removes bbnl_user.
+        // We must preserve bbnl_user and hasLoggedInOnce so relaunch skips login.
+        var savedUser = localStorage.getItem('bbnl_user');
+        var savedHasLoggedIn = localStorage.getItem('hasLoggedInOnce');
+        var savedMac = localStorage.getItem('macAddress');
+        var savedDeviceId = localStorage.getItem('deviceId');
+
+        // 2. Stop all background timers/intervals on this page
         var highestTimerId = setTimeout(function () {}, 0);
         for (var i = 0; i < highestTimerId; i++) {
             clearTimeout(i);
@@ -395,8 +411,7 @@ async function handleLogout() {
         }
         console.log("[Settings] All timers/intervals cleared");
 
-        // 2. Call API logout (server-side cleanup + cache clear)
-        // AuthAPI.logout() no longer redirects — it only clears data
+        // 3. Call API logout (server-side cleanup + cache clear)
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
             try {
                 await BBNL_API.logout();
@@ -405,9 +420,14 @@ async function handleLogout() {
             }
         }
 
-        // 3. Clear session-related data but KEEP hasLoggedInOnce and MAC
-        // This ensures app relaunch goes directly to Home, not Login
-        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId'];
+        // 4. Restore critical data that CacheManager.clear() removed
+        if (savedUser) localStorage.setItem('bbnl_user', savedUser);
+        if (savedHasLoggedIn) localStorage.setItem('hasLoggedInOnce', savedHasLoggedIn);
+        if (savedMac) localStorage.setItem('macAddress', savedMac);
+        if (savedDeviceId) localStorage.setItem('deviceId', savedDeviceId);
+
+        // 5. Clear everything else from localStorage (cache data, etc.)
+        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId', 'bbnl_user'];
         var keysToRemove = [];
 
         for (var i = 0; i < localStorage.length; i++) {
@@ -422,26 +442,29 @@ async function handleLogout() {
         });
 
         console.log("[Settings] localStorage cleared (kept:", keysToKeep.join(', '), ")");
+        console.log("[Settings] bbnl_user preserved:", !!localStorage.getItem('bbnl_user'));
+        console.log("[Settings] hasLoggedInOnce preserved:", localStorage.getItem('hasLoggedInOnce'));
 
-        // 4. Clear all sessionStorage
+        // 6. Clear all sessionStorage (so FoFi auto-plays on relaunch)
         sessionStorage.clear();
         console.log("[Settings] sessionStorage cleared");
 
         console.log("[Settings] Logout complete - exiting application");
 
-        // 5. Exit the Tizen application completely
+        // 7. Exit the Tizen application completely
+        // On relaunch: hasLoggedInOnce=true → skip login → home → FoFi plays
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
                 console.log("[Settings] Exiting Tizen application");
                 tizen.application.getCurrentApplication().exit();
             } else {
-                // For browser testing - redirect to login
-                console.log("[Settings] Not on Tizen - redirecting to login");
-                window.location.href = "login.html";
+                // For browser testing - simulate relaunch by going to home
+                console.log("[Settings] Not on Tizen - redirecting to home (simulating relaunch)");
+                window.location.href = "home.html";
             }
         } catch (e) {
             console.log("[Settings] Exit failed:", e);
-            window.location.href = "login.html";
+            window.location.href = "home.html";
         }
     }
 }
@@ -457,7 +480,7 @@ function loadAboutAppInfo() {
         .then(function (response) {
             console.log("[Settings] App Version Response:", response);
 
-            if (response && response.status && response.status.err_code === 0) {
+            if (response && response.status && Number(response.status.err_code) === 0) {
                 if (response.body) {
                     var versionData = response.body;
 
@@ -521,7 +544,6 @@ function loadDeviceInfoPanel() {
     loadUserId();
     loadModelInfo(isTizen);
     loadDeviceId(deviceInfo, isTizen);
-    loadAppVersion();
     loadNetworkInfo(deviceInfo, isTizen);
     loadScreenResolution();
     loadTizenVersion(isTizen);
@@ -629,17 +651,17 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 setElementText('device-ipv4', safeCall(function () {
                     return webapis.network.getIp(networkType);
                 }, 'N/A'));
-                
+
+                // Load Public IP and show it in Gateway IP field
+                loadPublicIPForGateway();
+
                 // Load IPv6 Address - use tizen.systeminfo first (more reliable)
                 loadIPv6Address(networkType);
             } else {
                 setElementText('device-ipv4', 'Disconnected');
+                setElementText('device-gateway', 'Disconnected');
                 setElementText('device-ipv6', 'N/A');
             }
-
-            setElementText('device-gateway', safeCall(function () {
-                return webapis.network.getGateway(networkType);
-            }, 'N/A'));
 
             setElementText('device-dns', safeCall(function () {
                 return webapis.network.getDns(networkType);
@@ -652,17 +674,17 @@ function loadNetworkInfo(deviceInfo, isTizen) {
         } else {
             // Browser/Emulator mode - use external APIs for IP addresses
             setElementText('device-connection-type', 'Browser/Emulator');
-            setElementText('device-gateway', 'N/A');
             setElementText('device-dns', 'N/A');
             setElementText('device-wifi-mac', 'N/A');
-            
+
             var connectionStatus = document.getElementById('device-connection-status');
             if (connectionStatus) {
                 connectionStatus.innerText = 'Emulator Mode';
             }
-            
+
             // Load IP addresses from external APIs
             loadIPv4FromExternalAPI();
+            loadPublicIPForGateway();
             loadIPv6FromExternalAPI(document.getElementById('device-ipv6'));
         }
     } catch (e) {
@@ -765,17 +787,24 @@ function loadIPv4FromExternalAPI() {
         'https://ipv4.icanhazip.com'
     ];
     
+    function fetchWithTimeout(url, timeoutMs) {
+        var timeoutPromise = new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
+        });
+        return Promise.race([fetch(url), timeoutPromise]);
+    }
+
     function tryService(index) {
         if (index >= ipv4Services.length) {
             ipv4El.innerText = 'N/A';
             console.log("[Settings] All IPv4 services failed");
             return;
         }
-        
+
         var service = ipv4Services[index];
         console.log("[Settings] Trying IPv4 service:", service);
-        
-        fetch(service)
+
+        fetchWithTimeout(service, 5000)
             .then(function(response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 var contentType = response.headers.get('content-type');
@@ -808,6 +837,61 @@ function loadIPv4FromExternalAPI() {
     
     tryService(0);
 }
+
+/**
+ * Load Public IP and display it in the Gateway IP field
+ */
+function loadPublicIPForGateway() {
+    var gatewayEl = document.getElementById('device-gateway');
+    if (!gatewayEl) return;
+
+    console.log("[Settings] Loading Public IP for Gateway field...");
+    gatewayEl.innerText = 'Loading...';
+
+    var ipServices = [
+        'https://api.ipify.org?format=json',
+        'https://api64.ipify.org?format=json',
+        'https://ipinfo.io/json'
+    ];
+
+    function fetchWithTimeout(url, timeoutMs) {
+        var timeoutPromise = new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
+        });
+        return Promise.race([fetch(url), timeoutPromise]);
+    }
+
+    function tryService(index) {
+        if (index >= ipServices.length) {
+            gatewayEl.innerText = 'N/A';
+            console.log("[Settings] All public IP services failed for Gateway");
+            return;
+        }
+
+        var service = ipServices[index];
+        fetchWithTimeout(service, 5000)
+            .then(function(response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function(data) {
+                var ip = data.ip || data.IP || null;
+                if (ip) {
+                    gatewayEl.innerText = ip;
+                    console.log("[Settings] Gateway IP (Public IP):", ip);
+                } else {
+                    tryService(index + 1);
+                }
+            })
+            .catch(function(error) {
+                console.log("[Settings] Public IP service error:", error);
+                tryService(index + 1);
+            });
+    }
+
+    tryService(0);
+}
+
 /**
  * Load IPv6 Address using tizen.systeminfo first, then fallback to webapis.network
  * Implements reliable detection for Tizen 5.0+
@@ -819,16 +903,22 @@ function loadIPv6Address(networkType) {
 
     try {
         // First try tizen.systeminfo API (more reliable for IPv6 on Tizen 5.0+)
+        // NOTE: "NETWORK" property only returns networkType, NOT IP addresses.
+        // Must use "WIFI_NETWORK" or "ETHERNET_NETWORK" to get ipv6Address.
         if (typeof tizen !== 'undefined' && tizen.systeminfo) {
+            // networkType: 1=WiFi, 3=Ethernet
+            var sysinfoProperty = (networkType === 3) ? "ETHERNET_NETWORK" : "WIFI_NETWORK";
+            console.log("[Settings] Querying systeminfo property:", sysinfoProperty);
+
             tizen.systeminfo.getPropertyValue(
-                "NETWORK",
+                sysinfoProperty,
                 function (network) {
                     // Log full network object for debugging
                     console.log("[Settings] Network Info:", JSON.stringify(network));
                     console.log("[Settings] IPv6 from systeminfo:", network.ipv6Address);
-                    
+
                     var ipv6Address = null;
-                    
+
                     // Check IPv6 array/string first
                     if (network.ipv6Address && network.ipv6Address.length > 0) {
                         // May be array or string depending on firmware
@@ -842,7 +932,7 @@ function loadIPv6Address(networkType) {
                     else if (network.ipAddress && network.ipAddress.includes(":")) {
                         ipv6Address = network.ipAddress;
                     }
-                    
+
                     if (ipv6Address) {
                         ipv6El.innerText = ipv6Address;
                         console.log("[Settings] IPv6 found:", ipv6Address);
@@ -862,7 +952,7 @@ function loadIPv6Address(networkType) {
 
         // Direct fallback to webapis
         loadIPv6FromWebapis(networkType, ipv6El);
-        
+
     } catch (e) {
         console.error("[Settings] IPv6 fetch error:", e);
         ipv6El.innerText = 'N/A';
@@ -919,28 +1009,34 @@ function loadIPv6FromWebapis(networkType, ipv6El) {
  */
 function loadIPv6FromExternalAPI(ipv6El) {
     console.log("[Settings] Trying external IPv6 API services...");
-    
+
     var ipv6Services = [
-        'https://api64.ipify.org?format=json',
-        'https://v6.ident.me/.json',
-        'https://ipv6.icanhazip.com'
+        { url: 'https://api64.ipify.org?format=json', type: 'json' },
+        { url: 'https://v6.ident.me/', type: 'text' },
+        { url: 'https://ipv6.icanhazip.com', type: 'text' }
     ];
-    
+
+    function fetchWithTimeout(url, timeoutMs) {
+        var timeoutPromise = new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
+        });
+        return Promise.race([fetch(url), timeoutPromise]);
+    }
+
     function tryService(index) {
         if (index >= ipv6Services.length) {
-            ipv6El.innerText = 'N/A';
-            console.log("[Settings] All external IPv6 services failed or no IPv6 available");
+            ipv6El.innerText = 'Not Available';
+            console.log("[Settings] All external IPv6 services failed or no IPv6 available on this network");
             return;
         }
-        
+
         var service = ipv6Services[index];
-        console.log("[Settings] Trying IPv6 service:", service);
-        
-        fetch(service, { timeout: 3000 })
+        console.log("[Settings] Trying IPv6 service:", service.url);
+
+        fetchWithTimeout(service.url, 4000)
             .then(function(response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
-                var contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
+                if (service.type === 'json') {
                     return response.json();
                 } else {
                     return response.text();
@@ -953,22 +1049,21 @@ function loadIPv6FromExternalAPI(ipv6El) {
                 } else {
                     ip = data.ip || data.IP || data.address || null;
                 }
-                
+
                 // Check if it's actually an IPv6 address (contains :)
                 if (ip && ip.includes(":")) {
                     ipv6El.innerText = ip;
                     console.log("[Settings] IPv6 found via external API:", ip);
                 } else {
-                    // Not IPv6, try next service
-                    console.log("[Settings] Response was IPv4, trying next...");
+                    console.log("[Settings] Response was IPv4 (" + ip + "), trying next...");
                     tryService(index + 1);
                 }
             })
             .catch(function(error) {
-                console.log("[Settings] IPv6 service failed:", service, error);
+                console.log("[Settings] IPv6 service failed:", service.url, error.message);
                 tryService(index + 1);
             });
     }
-    
+
     tryService(0);
 }

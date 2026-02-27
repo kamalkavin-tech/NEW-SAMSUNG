@@ -6,14 +6,67 @@ var focusables = [];
 var currentFocus = 0;
 var exitPopupOpen = false; // Track if exit/logout popup is open
 var homeSearchTimeout = null; // Timer for auto-play channel by number
+var homeAdInterval = null; // Interval for ad rotation
+var homeNetworkInterval = null; // Interval for network status updates
 
-// Check authentication - redirect to login only if never logged in before
+// Clean up background intervals when leaving page
+window.addEventListener('beforeunload', function () {
+    if (homeAdInterval) clearInterval(homeAdInterval);
+    if (homeNetworkInterval) clearInterval(homeNetworkInterval);
+});
+
+// ==========================================
+// FOFI AUTO-PLAY FLAG
+// FoFi should play every time the app is launched/resumed from TV
+// Uses sessionStorage for internal navigation detection
+// Uses visibilitychange for app resume from background (HOME button)
+// ==========================================
+var fofiShouldAutoPlay = false;
+
+(function detectFreshLaunch() {
+    var fofiPlayed = sessionStorage.getItem('fofi_autoplay_done');
+    if (!fofiPlayed) {
+        console.log("[HOME] Fresh app launch - FoFi will auto-play");
+        fofiShouldAutoPlay = true;
+    } else {
+        console.log("[HOME] FoFi already played this session - skipping on initial load");
+        fofiShouldAutoPlay = false;
+    }
+})();
+
+// HOME button now exits the app completely (handled globally in api.js).
+// On re-launch, sessionStorage is empty → detectFreshLaunch() sets fofiShouldAutoPlay = true.
+// No visibilitychange handler needed here.
+
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
         console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
+    }
+
+    // Validate bbnl_user has actual user data (not just OTP response)
+    try {
+        var userData = localStorage.getItem("bbnl_user");
+        if (userData) {
+            var user = JSON.parse(userData);
+            if (!user.userid) {
+                console.log("[Auth] bbnl_user has no userid - invalid session, forcing re-login");
+                localStorage.removeItem("hasLoggedInOnce");
+                localStorage.removeItem("bbnl_user");
+                window.location.replace("login.html");
+                return;
+            }
+        } else {
+            console.log("[Auth] No bbnl_user found - forcing re-login");
+            localStorage.removeItem("hasLoggedInOnce");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {
+        console.error("[Auth] Error validating session:", e);
     }
 
     // Clear browser history to prevent back navigation to login pages
@@ -125,20 +178,15 @@ window.onload = function () {
         });
     }
 
-    // Auto-play FoFi channel (LCN 999) after 3 seconds - ONLY on app launch
-    // Not when returning from other pages within the app
-    var fofiPlayedThisSession = sessionStorage.getItem('fofi_autoplay_done');
-    
-    if (!fofiPlayedThisSession) {
-        // First time loading home page this session - auto-play FoFi
-        sessionStorage.setItem('fofi_autoplay_done', 'true');
-        console.log("[HOME] Setting FoFi auto-play timer (3 seconds) - App launch...");
+    // Auto-play FoFi channel (LCN 999) after 3 seconds - ONLY on fresh app launch
+    if (fofiShouldAutoPlay) {
+        console.log("[HOME] ✅ FoFi auto-play enabled - starting 3 second timer...");
         setTimeout(function () {
-            console.log("[HOME] Auto-playing FoFi channel from API...");
+            console.log("[HOME] ⏰ 3 seconds passed - Auto-playing FoFi channel...");
             playFoFiChannel();
         }, 3000);
     } else {
-        console.log("[HOME] Skipping FoFi auto-play - Already played this session");
+        console.log("[HOME] ⏭️ Skipping FoFi auto-play (internal navigation)");
     }
 };
 
@@ -789,7 +837,7 @@ function renderAdsInHeroBanner(ads) {
         }
 
         // Auto-rotate every 6 seconds
-        setInterval(rotateAds, 6000);
+        homeAdInterval = setInterval(rotateAds, 6000);
 
         // Manual dot navigation
         dots.forEach(function (dot, index) {
@@ -1350,7 +1398,7 @@ function initNetworkStatus() {
     updateNetworkStatus();
 
     // Update network status every 5 seconds
-    setInterval(updateNetworkStatus, 5000);
+    homeNetworkInterval = setInterval(updateNetworkStatus, 5000);
 
     // Close popup when clicking outside
     document.addEventListener('click', function (e) {
@@ -1652,6 +1700,12 @@ function showAppLockScreen() {
         overlay.style.display = 'flex';
         appLockActive = true;
 
+        // Set error image from API
+        var img = document.getElementById('errorImg_serviceLocked');
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
+        }
+
         // Focus on retry button
         var retryBtn = document.getElementById('appLockRetryBtn');
         if (retryBtn) retryBtn.focus();
@@ -1751,6 +1805,20 @@ function showHomeErrorPopup(type) {
 
     var popup = document.getElementById(popupId);
     if (popup) {
+        // Set error image from API
+        if (typeof ErrorImagesAPI !== 'undefined') {
+            if (type === 'failedLoad') {
+                var img = document.getElementById('errorImg_failedLoad');
+                if (img) img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+            } else if (type === 'loginRequired') {
+                var img = document.getElementById('errorImg_loginRequired');
+                if (img) img.src = ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED');
+            } else if (type === 'noChannels') {
+                var img = document.getElementById('errorImg_noChannels');
+                if (img) img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+            }
+        }
+
         popup.style.display = 'flex';
         homeErrorPopupOpen = true;
         // Focus retry button
@@ -1776,6 +1844,13 @@ function hideHomeErrorPopups() {
 
 // Initialize error popup retry buttons
 document.addEventListener('DOMContentLoaded', function () {
+    // Pre-warm channel cache as early as possible (before images/CSS finish loading)
+    // This fires before 'load' event, giving the API call a head start
+    if (typeof BBNL_API !== 'undefined') {
+        BBNL_API.getChannelList().catch(function () {});
+        console.log("[HOME] Pre-warming channel cache at DOMContentLoaded");
+    }
+
     // Failed to Load - Retry
     var retryLoadBtn = document.getElementById('retryLoadBtn');
     if (retryLoadBtn) {
@@ -1888,54 +1963,70 @@ function autoTuneDefaultChannel() {
 
 /**
  * Play FoFi Channel - Auto-play after 3 seconds on first app launch
- * Fetches FoFi channel from API instead of using static LCN
+ * Fetches FoFi channel (LCN 999) from API and plays it
  */
 function playFoFiChannel() {
-    console.log("[HOME] Fetching FoFi channel from API...");
-
-    // Flag is now set BEFORE setTimeout fires (in window.onload)
-    // This prevents race conditions when returning from player
+    console.log("[HOME] 🎬 Fetching FoFi channel from API...");
 
     BBNL_API.getChannelList()
         .then(function (channels) {
+            console.log("[HOME] Got", channels ? channels.length : 0, "channels from API");
+            
             if (!channels || !Array.isArray(channels) || channels.length === 0) {
-                console.log("[HOME] No channels available for FoFi auto-play");
+                console.log("[HOME] ❌ No channels available for FoFi auto-play");
                 return;
             }
 
-            // Find FoFi channel - look for channel with "fofi" in name or specific identifier
-            var fofiChannel = channels.find(function (ch) {
-                var title = (ch.chtitle || ch.channel_name || "").toLowerCase();
-                var grid = (ch.grid || "").toLowerCase();
-                // Match channels with "fofi" or "fo-fi" in name or grid
-                return title.indexOf('fofi') !== -1 || 
-                       title.indexOf('fo-fi') !== -1 ||
-                       grid.indexOf('fofi') !== -1;
-            });
+            var fofiChannel = null;
 
-            // If no FoFi channel found by name, try to find a default/info channel
+            // FIRST: Look for LCN 999 (FoFi Info channel)
+            fofiChannel = channels.find(function (ch) {
+                var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
+                return chNo === 999;
+            });
+            
+            if (fofiChannel) {
+                console.log("[HOME] ✓ Found FoFi by LCN 999:", fofiChannel.chtitle);
+            }
+
+            // SECOND: Look for channel with "fofi" or "fo-fi" in name
             if (!fofiChannel) {
                 fofiChannel = channels.find(function (ch) {
                     var title = (ch.chtitle || ch.channel_name || "").toLowerCase();
-                    return title.indexOf('info') !== -1 || title.indexOf('default') !== -1;
+                    return title.indexOf('fofi') !== -1 || title.indexOf('fo-fi') !== -1;
                 });
+                if (fofiChannel) {
+                    console.log("[HOME] ✓ Found FoFi by name:", fofiChannel.chtitle);
+                }
             }
 
-            // Fallback to first channel if no FoFi channel found
+            // THIRD: Look for "info" channel
+            if (!fofiChannel) {
+                fofiChannel = channels.find(function (ch) {
+                    var title = (ch.chtitle || ch.channel_name || "").toLowerCase();
+                    return title.indexOf('info') !== -1;
+                });
+                if (fofiChannel) {
+                    console.log("[HOME] ✓ Found Info channel:", fofiChannel.chtitle);
+                }
+            }
+
+            // FALLBACK: Use first channel
             if (!fofiChannel && channels.length > 0) {
                 fofiChannel = channels[0];
-                console.log("[HOME] No FoFi channel found, using first channel:", fofiChannel.chtitle || fofiChannel.channel_name);
+                console.log("[HOME] ⚠️ No FoFi found, using first channel:", fofiChannel.chtitle);
             }
 
             if (fofiChannel) {
-                console.log("[HOME] Playing FoFi channel:", fofiChannel.chtitle || fofiChannel.channel_name);
+                console.log("[HOME] Playing FoFi channel:", fofiChannel.chtitle, "| Stream:", fofiChannel.streamlink);
+                sessionStorage.setItem('fofi_autoplay_done', 'true');
                 BBNL_API.playChannel(fofiChannel);
             } else {
-                console.log("[HOME] No channel available for FoFi auto-play");
+                console.log("[HOME] ❌ No channel available for FoFi auto-play");
             }
         })
         .catch(function (error) {
-            console.error("[HOME] FoFi auto-play failed:", error);
+            console.error("[HOME] ❌ FoFi auto-play failed:", error);
         });
 }
 
@@ -1954,18 +2045,15 @@ window.addEventListener('load', function () {
     // Check app lock status first
     setTimeout(checkAppLockStatus, 50);
 
-    // Send TRP data for analytics
-    setTimeout(sendTRPDataOnLoad, 200);
+    // Send TRP data for analytics (non-critical, delay slightly)
+    setTimeout(sendTRPDataOnLoad, 500);
 
-    // Use setTimeout to ensure they load after critical content
-    setTimeout(loadHomeAds, 100);
-    setTimeout(loadHomeLanguages, 150); // Load languages
+    // Load all data in PARALLEL immediately - no artificial delays
+    // All three are independent API calls and should fire concurrently
+    loadHomeAds();
+    loadHomeLanguages();
+    loadHomeChannels();
 
-    // Pre-warm channel cache early so channels/player pages load instantly
-    setTimeout(loadHomeChannels, 200);
-
-    // NOTE: FOFI channel (LCN 999) auto-plays after 3 seconds on home page
-    // This is handled in window.onload with setTimeout
-    console.log("[HOME] Home page loaded - FoFi auto-play timer started");
+    console.log("[HOME] Home page loaded - all data loading in parallel");
 
 });

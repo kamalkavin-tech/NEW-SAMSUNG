@@ -4,7 +4,7 @@
    Navigation: Header ↔ Apps Grid
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -12,6 +12,15 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 var focusables = [];
@@ -49,12 +58,11 @@ window.onload = function () {
         currentZone = 'header';
     }
 
-    // Setup retry button
+    // Setup Go Back button
     var retryBtn = document.getElementById('retryAppsBtn');
     if (retryBtn) {
         retryBtn.addEventListener('click', function() {
-            hideError();
-            loadOTTApps();
+            window.location.href = 'home.html';
         });
     }
 
@@ -341,7 +349,7 @@ function loadOTTApps() {
             console.log("[OTT Apps] API Response:", response);
 
             // Check if response is successful
-            if (response && response.status && response.status.err_code === 0) {
+            if (response && response.status && Number(response.status.err_code) === 0) {
                 // Extract apps array from response
                 if (response.apps && response.apps.length > 0) {
                     console.log("[OTT Apps] Found " + response.apps.length + " apps");
@@ -429,6 +437,12 @@ function showError(message) {
     var appsGrid = document.getElementById("appsGrid");
 
     if (popup) {
+        // Set error image from API
+        var img = document.getElementById("errorImg_comingSoonOtt");
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+        }
+
         popup.style.display = "flex";
         var msgEl = popup.querySelector(".error-popup-message");
         if (msgEl) {

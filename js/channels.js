@@ -12,13 +12,33 @@
    8. DOWN from Back/Search: Move to tabs
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
         console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
+    }
+    // Validate bbnl_user has actual user data
+    try {
+        var userData = localStorage.getItem("bbnl_user");
+        if (!userData) {
+            console.log("[Auth] No bbnl_user found - forcing re-login");
+            localStorage.removeItem("hasLoggedInOnce");
+            window.location.replace("login.html");
+            return;
+        }
+        var user = JSON.parse(userData);
+        if (!user.userid) {
+            console.log("[Auth] bbnl_user has no userid - forcing re-login");
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {
+        console.error("[Auth] Error validating session:", e);
     }
 })();
 
@@ -157,7 +177,7 @@ async function initPage() {
     const selectedLangName = sessionStorage.getItem('selectedLanguageName');
 
     // Check if Fofi channel has already been played this login session
-    const fofiPlayedThisSession = sessionStorage.getItem('fofiPlayedThisSession');
+    const fofiPlayedThisSession = sessionStorage.getItem('fofi_autoplay_done');
 
     // Determine if user has any language filter active (either from URL or session)
     const hasLanguageFilter = selectedLangName || urlLang;
@@ -734,6 +754,17 @@ function isNetworkDisconnected() {
 // ==========================================
 
 function showErrorPopup(type) {
+    // Set error images from API
+    if (typeof ErrorImagesAPI !== 'undefined') {
+        if (type === 'channels') {
+            var img = document.getElementById('errorImg_noChannels');
+            if (img) img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+        } else if (type === 'internet') {
+            var img = document.getElementById('errorImg_noInternet');
+            if (img) img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+        }
+    }
+
     if (type === 'channels') {
         document.getElementById('noChannelsPopup').style.display = 'flex';
         document.getElementById('noInternetPopup').style.display = 'none';
@@ -841,6 +872,54 @@ function renderAllChannels(channels) {
 
     container.appendChild(grid);
     refreshFocusables();
+    initLazyLoading();
+}
+
+// ==========================================
+// LAZY LOADING - Load channel logos only when visible
+// Dramatically reduces initial load time for 100+ channels
+// ==========================================
+var _lazyObserver = null;
+
+function initLazyLoading() {
+    // Disconnect previous observer if any
+    if (_lazyObserver) {
+        _lazyObserver.disconnect();
+    }
+
+    var lazyImages = document.querySelectorAll('img.lazy-logo');
+    if (lazyImages.length === 0) return;
+
+    if ('IntersectionObserver' in window) {
+        _lazyObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    var img = entry.target;
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                        img.removeAttribute('data-src');
+                    }
+                    _lazyObserver.unobserve(img);
+                }
+            });
+        }, {
+            rootMargin: '300px'  // Pre-load 300px before visible (2 rows ahead)
+        });
+
+        lazyImages.forEach(function (img) {
+            _lazyObserver.observe(img);
+        });
+        console.log("[Channels] Lazy loading initialized for", lazyImages.length, "logos");
+    } else {
+        // Fallback for older Tizen: load all immediately
+        lazyImages.forEach(function (img) {
+            if (img.dataset.src) {
+                img.src = img.dataset.src;
+                img.removeAttribute('data-src');
+            }
+        });
+        console.log("[Channels] IntersectionObserver not available - loaded all logos immediately");
+    }
 }
 
 function createChannelCard(ch) {
@@ -879,8 +958,9 @@ function createChannelCard(ch) {
 
     if (chLogo && !chLogo.includes("chnlnoimage")) {
         const img = document.createElement("img");
-        img.src = chLogo;
+        img.dataset.src = chLogo;  // Lazy load: use data-src, not src
         img.alt = chName;
+        img.className = "lazy-logo";
         img.onerror = function() {
             this.style.display = 'none';
             const fallback = document.createElement("div");

@@ -84,18 +84,52 @@ console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
 console.log("[API CONFIG] Ads Endpoint: " + API_BASE_URL_PROD + "/iptvads");
 console.log("=".repeat(60));
 
-// Default headers for all API requests (devmac & devslno populated by DeviceInfo.initializeDeviceInfo)
+// Default headers for all API requests (devmac & devslno populated dynamically by DeviceInfo.initializeDeviceInfo)
 const DEFAULT_HEADERS = {
     "Content-Type": "application/json",
     "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
-    "devmac": "68:1D:EF:14:6C:21",
-    "devslno": "FOFI20191129000336"
+    "devmac": "",
+    "devslno": ""
 };
 
-// Default user information
+// Dynamic user fallback - reads from logged-in user session in localStorage
+// Returns empty strings if no user is logged in
+var _sessionUserCache = null;
+var _sessionUserCacheTime = 0;
+
+function _getSessionUser() {
+    var now = 0;
+    try { now = Date.now(); } catch (e) { now = new Date().getTime(); }
+    if (_sessionUserCache && (now - _sessionUserCacheTime) < 1000) return _sessionUserCache;
+    try {
+        var data = localStorage.getItem("bbnl_user");
+        if (data) {
+            var user = JSON.parse(data);
+
+            // Mobile may be at top level or nested in custdet[0].mobile
+            var mobile = user.mobile || user.phone || "";
+            if (!mobile && user.custdet && user.custdet.length > 0) {
+                mobile = user.custdet[0].mobile || "";
+            }
+
+            _sessionUserCache = {
+                userid: user.userid || user.userId || "",
+                mobile: mobile
+            };
+            _sessionUserCacheTime = now;
+            return _sessionUserCache;
+        }
+    } catch (e) {
+        console.error("[API] Error reading session user:", e);
+    }
+    _sessionUserCache = { userid: "", mobile: "" };
+    _sessionUserCacheTime = now;
+    return _sessionUserCache;
+}
+
 const DEFAULT_USER = {
-    userid: "testiser1",  // ✅ Correct userid (with typo as per backend)
-    mobile: "7800000001"
+    get userid() { return _getSessionUser().userid; },
+    get mobile() { return _getSessionUser().mobile; }
 };
 
 // Default language ID (Kannada = 9, as per client API)
@@ -112,13 +146,18 @@ const API_CONFIG = {
 // CACHE MANAGER - Handles localStorage caching with expiry
 // ==========================================
 const CacheManager = {
+    // Safe Date.now() helper for Tizen simulator compatibility
+    _now: function () {
+        try { return Date.now(); } catch (e) { return new Date().getTime(); }
+    },
+
     // Cache keys
     KEYS: {
         CHANNEL_LIST: 'bbnl_channels_cache',
         CATEGORIES: 'bbnl_categories_cache',
         LANGUAGES: 'bbnl_languages_cache',
         LOGIN_TOKEN: 'bbnl_user',
-        FOFI_PLAYED: 'fofiPlayedThisSession',  // Uses sessionStorage
+        FOFI_PLAYED: 'fofi_autoplay_done',  // Uses sessionStorage - consistent across all files
         LAST_CHANNEL: 'bbnl_last_channel',
         EXPIRING_CHANNELS: 'bbnl_expiring_cache'
     },
@@ -141,10 +180,11 @@ const CacheManager = {
     set: function (key, data, expiryMs) {
         try {
             var expiry = expiryMs || this.EXPIRY.CHANNEL_LIST;
+            var now = this._now();
             var cacheObject = {
                 data: data,
-                timestamp: Date.now(),
-                expiry: Date.now() + expiry
+                timestamp: now,
+                expiry: now + expiry
             };
             localStorage.setItem(key, JSON.stringify(cacheObject));
             console.log('[CacheManager] ✓ Cached:', key, '| Expires in:', Math.round(expiry / 60000), 'minutes');
@@ -172,12 +212,13 @@ const CacheManager = {
             var cacheObject = JSON.parse(cached);
 
             // Check expiry
-            if (!ignoreExpiry && cacheObject.expiry && Date.now() > cacheObject.expiry) {
+            var now = this._now();
+            if (!ignoreExpiry && cacheObject.expiry && now > cacheObject.expiry) {
                 console.log('[CacheManager] Cache expired:', key, '| Expired:', new Date(cacheObject.expiry).toLocaleTimeString());
                 return null;
             }
 
-            var age = Math.round((Date.now() - cacheObject.timestamp) / 60000);
+            var age = Math.round((now - cacheObject.timestamp) / 60000);
             console.log('[CacheManager] ✓ Cache hit:', key, '| Age:', age, 'minutes');
             return cacheObject.data;
         } catch (e) {
@@ -205,7 +246,7 @@ const CacheManager = {
             var cached = localStorage.getItem(key);
             if (!cached) return null;
             var cacheObject = JSON.parse(cached);
-            return Math.round((Date.now() - cacheObject.timestamp) / 60000);
+            return Math.round((this._now() - cacheObject.timestamp) / 60000);
         } catch (e) {
             return null;
         }
@@ -262,7 +303,7 @@ const CacheManager = {
                     var obj = JSON.parse(cached);
                     stats[keyName] = {
                         age: self.getAge(key) + ' minutes',
-                        expired: obj.expiry ? Date.now() > obj.expiry : false,
+                        expired: obj.expiry ? self._now() > obj.expiry : false,
                         size: Math.round(cached.length / 1024) + ' KB'
                     };
                 } catch (e) {
@@ -321,17 +362,18 @@ const API_ENDPOINTS = {
     FEED_BACK: `${API_BASE_URL_PROD}/feedback`,
     APP_LOCK: `${API_BASE_URL_PROD}/applock`,
     TRP_DATA: `${API_BASE_URL_PROD}/trpdata`,
-    APP_VERSION: `${API_BASE_URL_PROD}/appversion`
+    APP_VERSION: `${API_BASE_URL_PROD}/appversion`,
+    ERROR_IMAGES: `${API_BASE_URL_PROD}/errorimages`
 };
 
-// Device info - registered values for API authentication
-// These are the registered device credentials required by the BBNL backend
+// Device info - populated dynamically from Samsung TV APIs on real TV
+// Falls back to emulator defaults when webapis is not available
 const DEVICE_INFO = {
-    ip_address: "103.5.132.130",
-    mac_address: "26:F2:AE:D8:3F:99",
-    device_name: "rk3368_box_",
+    ip_address: "",
+    mac_address: "",
+    device_name: "",
     device_type: "FOFI_SAMSUNG",
-    devslno: "FOFI20191129000336"
+    devslno: ""
 };
 
 // ==========================================
@@ -391,17 +433,67 @@ const DeviceInfo = {
     initializeDeviceInfo: function () {
         try {
             if (typeof webapis !== 'undefined') {
-                // Only detect device model name from TV
+                // 1. MAC Address from network API
+                if (webapis.network) {
+                    try {
+                        var mac = webapis.network.getMac();
+                        if (mac) {
+                            DEVICE_INFO.mac_address = mac;
+                            console.log("[DeviceInfo] MAC Address:", mac);
+                        }
+                    } catch (e) {
+                        console.warn("[DeviceInfo] MAC detection failed:", e);
+                    }
+
+                    // 2. IP Address from active network connection
+                    try {
+                        var networkType = webapis.network.getActiveConnectionType();
+                        if (networkType > 0) {
+                            var ip = webapis.network.getIp(networkType);
+                            if (ip) {
+                                DEVICE_INFO.ip_address = ip;
+                                console.log("[DeviceInfo] IP Address:", ip);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("[DeviceInfo] IP detection failed:", e);
+                    }
+                }
+
+                // 3. Device DUID (unique device ID) as serial number
                 if (webapis.productinfo) {
                     try {
+                        var duid = webapis.productinfo.getDuid();
+                        if (duid) {
+                            DEVICE_INFO.devslno = duid;
+                            console.log("[DeviceInfo] DUID:", duid);
+                        }
+                    } catch (e) {
+                        console.warn("[DeviceInfo] DUID detection failed:", e);
+                    }
+
+                    // 4. Device model name
+                    try {
                         var model = webapis.productinfo.getModel ? webapis.productinfo.getModel() : null;
-                        if (model && model !== "NA") DEVICE_INFO.device_name = model;
+                        if (model && model !== "NA") {
+                            DEVICE_INFO.device_name = model;
+                            console.log("[DeviceInfo] Model:", model);
+                        }
                     } catch (e) {
                         console.warn("[DeviceInfo] Model detection failed:", e);
                     }
                 }
             }
-            console.log("[DeviceInfo] Initialized:", DEVICE_INFO);
+
+            // Sync DEFAULT_HEADERS with detected device info
+            if (DEVICE_INFO.mac_address) {
+                DEFAULT_HEADERS["devmac"] = DEVICE_INFO.mac_address;
+            }
+            if (DEVICE_INFO.devslno) {
+                DEFAULT_HEADERS["devslno"] = DEVICE_INFO.devslno;
+            }
+
+            console.log("[DeviceInfo] Initialized:", JSON.stringify(DEVICE_INFO));
             console.log("[DeviceInfo] Headers - devmac:", DEFAULT_HEADERS["devmac"], "devslno:", DEFAULT_HEADERS["devslno"]);
         } catch (e) {
             console.warn("[DeviceInfo] Tizen WebAPIs not available, using defaults");
@@ -460,6 +552,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            devslno: device.devslno,
             ipv6: ipv6,
             getuserdet: ""
         };
@@ -477,6 +570,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            devslno: device.devslno,
             ipv6: ipv6
         };
         console.log("[AuthAPI] Adding MAC Address Payload:", payload);
@@ -495,6 +589,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            devslno: device.devslno,
             ipv6: ipv6,
             getuserdet: ""
         };
@@ -502,7 +597,7 @@ const AuthAPI = {
         console.log("[AuthAPI] Verifying OTP Payload:", payload);
         const response = await apiCall(API_ENDPOINTS.LOGIN, payload);
 
-        if (response && response.status && response.status.err_code === 0) {
+        if (response && response.status && Number(response.status.err_code) === 0) {
             this.setSession(response);
         }
         return response;
@@ -515,11 +610,12 @@ const AuthAPI = {
         const payload = {
             userid: userid || DEFAULT_USER.userid,
             mobile: mobile || DEFAULT_USER.mobile,
-            email: email || "sureshs@bbnl.co.in",
+            email: email || "",
             mac_address: deviceData.mac_address || device.mac_address,
             device_name: deviceData.device_name || device.device_name,
             ip_address: deviceData.ip_address || device.ip_address,
             device_type: deviceData.device_type || device.device_type,
+            devslno: deviceData.devslno || device.devslno,
             ipv6: deviceData.ipv6 || ipv6
         };
 
@@ -531,8 +627,23 @@ const AuthAPI = {
         // Extract user data from response.body[0] and save it
         if (response && response.body && response.body.length > 0) {
             var userData = response.body[0];
+
+            // GUARD: Only save if response has actual user data (userid field)
+            // The verify OTP response only has {otpcode, msg} — must NOT overwrite real user data
+            if (!userData.userid) {
+                console.log("[AuthAPI] Response has no userid — keeping existing session data");
+                return;
+            }
+
+            // Flatten mobile/email from custdet to top level if not already present
+            // Login API returns: { userid: "xxx", custdet: [{ mobile: "9894170148", email: "..." }] }
+            if (!userData.mobile && userData.custdet && userData.custdet.length > 0) {
+                userData.mobile = userData.custdet[0].mobile || "";
+                userData.email = userData.email || userData.custdet[0].email || "";
+            }
+
             localStorage.setItem("bbnl_user", JSON.stringify(userData));
-            console.log("[AuthAPI] Session saved for user:", userData.userid);
+            console.log("[AuthAPI] Session saved - userid:", userData.userid, "mobile:", userData.mobile);
         } else {
             console.error("[AuthAPI] Invalid response structure for setSession:", response);
         }
@@ -560,13 +671,16 @@ const AuthAPI = {
         var user = this.getUserData();
         var device = DeviceInfo.getDeviceInfo();
 
-        var userid = DEFAULT_USER.userid;
-        var mobile = DEFAULT_USER.mobile;
-
-        if (user) {
-            if (user.userid) userid = user.userid;
-            if (user.mobile) mobile = user.mobile;
+        // If no user session, skip server call - just do local cleanup
+        if (!user || !user.userid) {
+            console.log("[AuthAPI] No user session - skipping server logout, doing local cleanup only");
+            sessionStorage.clear();
+            CacheManager.clear();
+            return;
         }
+
+        var userid = user.userid;
+        var mobile = user.mobile || "";
 
         var ipv6 = DeviceInfo.getIPv6();
         var payload = {
@@ -576,6 +690,7 @@ const AuthAPI = {
             device_name: device.device_name,
             ip_address: device.ip_address,
             device_type: device.device_type,
+            devslno: device.devslno,
             ipv6: ipv6
         };
 
@@ -588,8 +703,7 @@ const AuthAPI = {
             console.warn("[AuthAPI] Logout API error (proceeding with local cleanup):", e.message);
         }
 
-        // Clear local session data (do NOT redirect — caller handles navigation/exit)
-        localStorage.removeItem("bbnl_user");
+        // Clear caches but keep bbnl_user (TV stays registered to this user)
         sessionStorage.clear();
 
         // Clear all cached data (channels, categories, languages, expiry)
@@ -805,9 +919,16 @@ const ChannelsAPI = {
             return [];
         }
 
-        // Check for API error status
-        if (response && response.status && response.status.err_code !== 0) {
-            console.error("[ChannelsAPI] API Error:", response.status.err_msg);
+        // Check for API error status (use loose comparison — API may return err_code as string "0" or number 0)
+        var errCode = response && response.status ? Number(response.status.err_code) : -1;
+        if (errCode !== 0) {
+            console.error("[ChannelsAPI] API Error (err_code=" + (response && response.status ? response.status.err_code : 'N/A') + "):", response && response.status ? response.status.err_msg : 'Unknown');
+            // Try to return stale cache if available
+            var errorStaleCache = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+            if (errorStaleCache && errorStaleCache.length > 0) {
+                console.log("[ChannelsAPI] Using stale cache due to API error (" + errorStaleCache.length + " channels)");
+                return errorStaleCache;
+            }
             return [];
         }
 
@@ -816,15 +937,29 @@ const ChannelsAPI = {
 
         if (response && response.body && Array.isArray(response.body)) {
             if (response.body.length > 0 && response.body[0].channels && Array.isArray(response.body[0].channels)) {
-                console.log("[ChannelsAPI] 📦 Detected OLD format (body[0].channels[])");
+                console.log("[ChannelsAPI] Detected OLD format (body[0].channels[])");
                 channels = response.body[0].channels;
             }
-            else if (response.body.length > 0 && response.body[0].chid) {
-                console.log("[ChannelsAPI] 📦 Detected NEW format (body[] with channel objects)");
+            else if (response.body.length > 0 && (response.body[0].chid || response.body[0].chtitle || response.body[0].streamlink)) {
+                console.log("[ChannelsAPI] Detected NEW format (body[] with channel objects)");
                 channels = response.body;
             }
+            else if (response.body.length > 0) {
+                // Fallback: treat body array as channels if items have any channel-like fields
+                var firstItem = response.body[0];
+                if (firstItem && typeof firstItem === 'object' && (firstItem.channelno || firstItem.urno || firstItem.ch_no)) {
+                    console.log("[ChannelsAPI] Detected channel objects by alternate fields");
+                    channels = response.body;
+                }
+            }
 
-            console.log("[ChannelsAPI] ✅ Successfully loaded " + channels.length + " channels from API");
+            console.log("[ChannelsAPI] Successfully loaded " + channels.length + " channels from API");
+        } else if (response && response.body && typeof response.body === 'object' && !Array.isArray(response.body)) {
+            // Handle case where body is an object with a channels array inside
+            if (response.body.channels && Array.isArray(response.body.channels)) {
+                console.log("[ChannelsAPI] Detected format: body.channels[]");
+                channels = response.body.channels;
+            }
         }
 
         // Cache the fresh data
@@ -1222,9 +1357,9 @@ const AdsAPI = {
                 return [];
             }
 
-            // Check API status - CRITICAL: Must be err_code === 0 for success
+            // Check API status - err_code 0 = success (use Number() for type safety)
             if (data.status) {
-                if (data.status.err_code === 0) {
+                if (Number(data.status.err_code) === 0) {
                     console.log("[AdsAPI] ✅ Status: " + (data.status.err_msg || "Success"));
                 } else {
                     console.warn("[AdsAPI] ❌ API Error Code:", data.status.err_code);
@@ -1346,10 +1481,10 @@ const AdsAPI = {
      *
      * Request Payload:
      * {
-     *   "userid": "testiser1",
-     *   "mobile": "7800000001",
-     *   "ip_address": "192.168.101.110",
-     *   "mac_address": "26:F2:AE:D8:3F:99",
+     *   "userid": "<from session>",
+     *   "mobile": "<from session>",
+     *   "ip_address": "<device IP>",
+     *   "mac_address": "<device MAC>",
      *   "grid": "3",
      *   "chid": "202"
      * }
@@ -1401,7 +1536,7 @@ const AdsAPI = {
             var data = await response.json();
             console.log("[AdsAPI] Stream Ads Response:", data);
 
-            if (data && data.status && data.status.err_code === 0 && data.body && Array.isArray(data.body)) {
+            if (data && data.status && Number(data.status.err_code) === 0 && data.body && Array.isArray(data.body)) {
                 console.log("[AdsAPI] Stream Ads loaded:", data.body.length);
                 return data.body;
             }
@@ -1439,8 +1574,8 @@ const FeedbackAPI = {
             rate_count: String(feedbackData.rating || 0),  // IMPORTANT: Must be STRING!
             feedback: feedbackData.feedback,
             mac_address: device.mac_address,
-            device_name: (device.device_name || "rk3368_box_").replace(/_$/, ''),  // Remove trailing underscore if present
-            device_type: (device.device_type || "FOFI_LG").replace(/_LG$/, '')     // Use "FOFI" not "FOFI_LG"
+            device_name: (device.device_name || "Samsung TV").replace(/_$/, ''),
+            device_type: device.device_type || "FOFI_SAMSUNG"
         };
 
         console.log("[FeedbackAPI] ✅ Submitting with CORRECT format:", payload);
@@ -1609,6 +1744,69 @@ const RaiseTicketAPI = {
 };
 
 // ==========================================
+// ERROR IMAGES API
+// ==========================================
+const ErrorImagesAPI = {
+    _cache: {},
+    _STORAGE_KEY: 'bbnl_error_images',
+
+    /**
+     * Fetch error images from API and cache them
+     */
+    fetchErrorImages: async function () {
+        try {
+            // Load from localStorage first (instant offline fallback)
+            this.loadFromCache();
+
+            // Error images are not user-specific - use session data if available, generic fallback otherwise
+            var user = AuthAPI.getUserData();
+            var response = await apiCall(API_ENDPOINTS.ERROR_IMAGES, {
+                userid: (user && user.userid) || DEFAULT_USER.userid || "app",
+                mobile: (user && user.mobile) || DEFAULT_USER.mobile || "0000000000"
+            });
+
+            if (response && response.status && Number(response.status.err_code) === 0 && response.errImgs) {
+                var images = {};
+                response.errImgs.forEach(function (item) {
+                    var key = Object.keys(item)[0];
+                    images[key] = item[key];
+                });
+
+                this._cache = images;
+                try {
+                    localStorage.setItem(this._STORAGE_KEY, JSON.stringify(images));
+                } catch (e) { }
+
+                console.log("[ErrorImagesAPI] Loaded " + Object.keys(images).length + " error images");
+            }
+        } catch (e) {
+            console.warn("[ErrorImagesAPI] Failed to fetch error images:", e.message);
+        }
+    },
+
+    /**
+     * Get error image URL by key
+     * @param {string} key - e.g. 'NO_INTERNET_CONNECTION'
+     * @returns {string} Image URL or empty string
+     */
+    getImageUrl: function (key) {
+        return this._cache[key] || "";
+    },
+
+    /**
+     * Load error images from localStorage (offline fallback)
+     */
+    loadFromCache: function () {
+        try {
+            var stored = localStorage.getItem(this._STORAGE_KEY);
+            if (stored) {
+                this._cache = JSON.parse(stored);
+            }
+        } catch (e) { }
+    }
+};
+
+// ==========================================
 // GLOBAL EXPORT
 // ==========================================
 // Create BBNL_API object and expose it globally
@@ -1664,6 +1862,10 @@ const BBNL_API = {
     // Raise Ticket Methods
     raiseTicket: RaiseTicketAPI.raiseTicket.bind(RaiseTicketAPI),
 
+    // Error Images Methods
+    errorImages: ErrorImagesAPI,
+    getErrorImageUrl: ErrorImagesAPI.getImageUrl.bind(ErrorImagesAPI),
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -1690,12 +1892,16 @@ if (typeof window !== 'undefined') {
     window.AppLockAPI = AppLockAPI;
     window.TRPDataAPI = TRPDataAPI;
     window.RaiseTicketAPI = RaiseTicketAPI;
+    window.ErrorImagesAPI = ErrorImagesAPI;
     window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
 }
 
 // Auto-initialize device info on load
 DeviceInfo.initializeDeviceInfo();
+
+// Auto-fetch error images (non-blocking)
+ErrorImagesAPI.fetchErrorImages();
 
 // ==========================================
 // SAMSUNG TV REMOTE KEY REGISTRATION
@@ -1847,3 +2053,49 @@ if (typeof window !== 'undefined') {
 }
 
 console.log("[BBNL_API] API Service loaded successfully");
+
+// ==========================================
+// APP LIFECYCLE - Exit on HOME button
+// Samsung TV HOME button sends app to background.
+// Exit the app completely so next launch is fresh.
+// Also stops any active media playback before exiting.
+//
+// IMPORTANT: Page navigation (e.g. login → verify) can
+// briefly trigger visibilitychange='hidden' on Tizen WebKit.
+// The _isPageUnloading guard prevents exiting during navigation.
+// ==========================================
+var _isPageUnloading = false;
+window.addEventListener('beforeunload', function () {
+    _isPageUnloading = true;
+});
+
+document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && !_isPageUnloading) {
+        console.log("[App] App going to background (HOME pressed) - stopping playback and exiting...");
+
+        // 1. Stop any active media playback (prevents background audio)
+        try {
+            if (typeof webapis !== 'undefined' && webapis.avplay) {
+                webapis.avplay.stop();
+                webapis.avplay.close();
+            }
+        } catch (e) {}
+
+        try {
+            if (typeof AVPlayer !== 'undefined') {
+                AVPlayer.stop();
+            }
+        } catch (e) {}
+
+        // 2. Exit the Tizen application completely
+        try {
+            if (typeof tizen !== 'undefined' && tizen.application) {
+                tizen.application.getCurrentApplication().exit();
+            }
+        } catch (e) {
+            console.error("[App] Exit failed:", e);
+        }
+    } else if (_isPageUnloading) {
+        console.log("[App] Page navigation in progress - NOT exiting app");
+    }
+});

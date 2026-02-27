@@ -2,7 +2,7 @@
    BBNL IPTV - FAVORITES CONTROLLER
    ================================ */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -10,6 +10,15 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 var focusables = [];
@@ -19,14 +28,17 @@ var allChannels = [];
 window.onload = function () {
     console.log("=== BBNL Favorites Page Initialized ===");
 
-    // Load channels from API
-    loadFavoriteChannels();
+    // Show Coming Soon popup immediately
+    showComingSoonPopup();
 
     // 1. Select Focusables
     focusables = document.querySelectorAll(".focusable");
 
-    // 2. Set Initial Focus
-    if (focusables.length > 0) {
+    // 2. Set Initial Focus on Go Back button
+    var goBackBtn = document.getElementById("goBackBtn");
+    if (goBackBtn) {
+        goBackBtn.focus();
+    } else if (focusables.length > 0) {
         currentFocus = 0;
         focusables[0].focus();
     }
@@ -39,7 +51,7 @@ window.onload = function () {
         });
 
         el.addEventListener("click", function (e) {
-            if (el.classList.contains('back-btn')) {
+            if (el.classList.contains('back-btn') || el.id === 'goBackBtn') {
                 window.location.href = 'home.html';
                 return;
             }
@@ -56,6 +68,27 @@ window.onload = function () {
         } catch (e) { }
     }
 };
+
+/**
+ * Show Coming Soon popup
+ */
+function showComingSoonPopup() {
+    var popup = document.getElementById("comingSoonPopup");
+    if (popup) {
+        // Load error image if available
+        var img = document.getElementById("errorImg_comingSoonFav");
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+        }
+        popup.style.display = "flex";
+
+        // Focus the Go Back button
+        var goBackBtn = document.getElementById("goBackBtn");
+        if (goBackBtn) {
+            goBackBtn.focus();
+        }
+    }
+}
 
 /**
  * Load channels from API for favorites page
@@ -239,7 +272,7 @@ function moveFocus(step) {
 function handleEnter(el) {
     if (!el) el = document.activeElement;
 
-    if (el.classList.contains('back-btn')) {
+    if (el.classList.contains('back-btn') || el.id === 'goBackBtn') {
         window.location.href = "home.html";
         return;
     }

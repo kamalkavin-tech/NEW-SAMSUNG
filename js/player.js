@@ -2,7 +2,7 @@
  * BBNL Player Controller - Uses AVPlayer Module
  */
 
-// Check authentication - redirect to login only if never logged in before
+// Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
@@ -10,11 +10,27 @@
         window.location.replace("login.html");
         return;
     }
+    try {
+        var ud = localStorage.getItem("bbnl_user");
+        if (!ud || !JSON.parse(ud).userid) {
+            localStorage.removeItem("hasLoggedInOnce");
+            localStorage.removeItem("bbnl_user");
+            window.location.replace("login.html");
+            return;
+        }
+    } catch (e) {}
 })();
 
 // ==========================================
 // CONFIGURATION
 // ==========================================
+var playerDateTimeInterval = null; // Interval for date/time updates
+
+// Clean up background intervals when leaving page
+window.addEventListener('beforeunload', function () {
+    if (playerDateTimeInterval) clearInterval(playerDateTimeInterval);
+});
+
 const PLAYER_CONFIG = {
     // Your IPTV server IP address
     // Replace 127.0.0.1/localhost URLs with this IP
@@ -55,7 +71,8 @@ function fixLocalhostUrl(url) {
 
     // Transform old stream servers to new Samsung HTTP/1.1 compatible server
     // livestream.bbnl.in and livestream2.bbnl.in -> livestream3.bbnl.in
-    if (url.includes('livestream.bbnl.in') || url.includes('livestream2.bbnl.in')) {
+    // NOTE: Only rewrite non-fmp4 streams. fmp4.m3u8 streams do NOT exist on livestream3.
+    if ((url.includes('livestream.bbnl.in') || url.includes('livestream2.bbnl.in')) && !url.includes('fmp4')) {
         wasOldServer = true;
         console.log("⚠️ OLD STREAM SERVER DETECTED - Switching to Samsung HTTP/1.1 server");
 
@@ -100,6 +117,17 @@ function showPlayerErrorPopup(title, message) {
         var msgEl = document.getElementById('playerErrorMessage');
         if (titleEl) titleEl.textContent = title || 'Playback Error';
         if (msgEl) msgEl.textContent = message || 'Please Check your network and try again';
+
+        // Set error image from API
+        var img = document.getElementById('errorImg_player');
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            var key = 'NO_INTERNET_CONNECTION';
+            if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
+                key = 'SIGNAL_UNAVAILABLE';
+            }
+            img.src = ErrorImagesAPI.getImageUrl(key);
+        }
+
         popup.style.display = 'flex';
         playerErrorPopupOpen = true;
         setTimeout(function () {
@@ -258,10 +286,13 @@ window.onload = function () {
     // Events
     document.addEventListener("keydown", handleKeydown);
 
-    document.getElementById("back-btn").addEventListener("click", () => {
-        closePlayer();
-        window.history.back();
-    });
+    var backBtn = document.getElementById("back-btn");
+    if (backBtn) {
+        backBtn.addEventListener("click", () => {
+            closePlayer();
+            window.history.back();
+        });
+    }
 
     // Player error popup retry button
     var playerRetryBtn = document.getElementById('playerRetryBtn');
@@ -272,16 +303,8 @@ window.onload = function () {
         });
     }
 
-    // Lifecycle
-    document.addEventListener("visibilitychange", function () {
-        if (typeof AVPlayer === 'undefined') return;
-
-        if (document.hidden) {
-            AVPlayer.pause();
-        } else {
-            AVPlayer.play();
-        }
-    });
+    // Note: Visibility change (HOME button) is handled by top-level handler
+    // which STOPS video when minimized and redirects to home when resumed
 };
 
 var allChannels = [];
@@ -434,20 +457,27 @@ function setupPlayer(channel) {
     const uiNum = document.getElementById("ui-channel-number");
     if (uiNum) uiNum.innerText = channelNum;
 
-    // Channel Logo
+    // Channel Logo - immediately clear old logo to prevent stale display
+    var LOGO_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
     const logo = channel.logo_url || channel.chlogo || channel.logo;
     const uiLogo = document.getElementById("ui-channel-logo");
     if (uiLogo) {
+        // Immediately show placeholder to clear previous channel's logo
+        uiLogo.src = LOGO_PLACEHOLDER;
+        uiLogo.onerror = null;
+
         if (logo && logo.trim() !== "" && !logo.includes('chnlnoimage')) {
             console.log("Setting channel logo:", logo);
-            uiLogo.src = logo;
-            uiLogo.onerror = function () {
-                console.warn("Logo failed to load:", logo);
-                this.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
+            // Preload the new logo off-screen, then swap once ready
+            var preloader = new Image();
+            preloader.onload = function () {
+                uiLogo.src = logo;
             };
-        } else {
-            console.log("No valid logo, using placeholder");
-            uiLogo.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect fill='%23667eea' width='100' height='100'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23fff' font-size='20' font-weight='bold'%3ETV%3C/text%3E%3C/svg%3E";
+            preloader.onerror = function () {
+                console.warn("Logo failed to load:", logo);
+                uiLogo.src = LOGO_PLACEHOLDER;
+            };
+            preloader.src = logo;
         }
     }
 
@@ -592,7 +622,7 @@ function setupPlayer(channel) {
     // Current Date and Time (live updating)
     updateDateTime();
     // Update time every second
-    setInterval(updateDateTime, 1000);
+    playerDateTimeInterval = setInterval(updateDateTime, 1000);
 
     // Update Index if list loaded
     if (allChannels.length > 0) {
@@ -838,6 +868,59 @@ function closePlayer() {
     hideStreamAd();
     if (typeof AVPlayer !== 'undefined') {
         AVPlayer.destroy();
+    }
+}
+
+// ==========================================
+// LOGO CACHE - Cache loaded logos in memory
+// Prevents re-downloading when sidebar re-renders
+// ==========================================
+var _logoCache = {};  // URL → true (marks as loaded, browser HTTP cache handles actual data)
+var _sidebarLazyObserver = null;
+
+function initSidebarLazyLoading() {
+    if (_sidebarLazyObserver) {
+        _sidebarLazyObserver.disconnect();
+    }
+
+    var container = document.getElementById('channelsList');
+    if (!container) return;
+
+    var lazyImages = container.querySelectorAll('img.sidebar-lazy-logo');
+    if (lazyImages.length === 0) return;
+
+    if ('IntersectionObserver' in window) {
+        _sidebarLazyObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    var img = entry.target;
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                        img.removeAttribute('data-src');
+                        img.addEventListener('load', function () {
+                            _logoCache[img.src] = true;
+                        }, { once: true });
+                    }
+                    _sidebarLazyObserver.unobserve(img);
+                }
+            });
+        }, {
+            root: container,       // Observe within the scrollable sidebar
+            rootMargin: '200px'    // Pre-load 200px ahead
+        });
+
+        lazyImages.forEach(function (img) {
+            _sidebarLazyObserver.observe(img);
+        });
+        console.log("[Sidebar] Lazy loading initialized for", lazyImages.length, "logos");
+    } else {
+        // Fallback: load all
+        lazyImages.forEach(function (img) {
+            if (img.dataset.src) {
+                img.src = img.dataset.src;
+                img.removeAttribute('data-src');
+            }
+        });
     }
 }
 
@@ -1265,13 +1348,12 @@ function renderChannelsList() {
         btn.tabIndex = 0;
         btn.dataset.channelIndex = index;
 
-        // Channel Logo (left)
+        // Channel Logo (left) - with cache + lazy loading
         var logoDiv = document.createElement('div');
         logoDiv.className = 'channel-item-logo';
         var logoUrl = ch.logo_url || ch.chlogo || ch.logo || '';
         if (logoUrl && logoUrl.trim() !== '') {
             var logoImg = document.createElement('img');
-            logoImg.src = logoUrl;
             logoImg.alt = ch.chtitle || 'Channel';
             logoImg.onerror = function() {
                 this.style.display = 'none';
@@ -1280,6 +1362,14 @@ function renderChannelsList() {
                 placeholder.textContent = (ch.chtitle || 'CH').substring(0, 2).toUpperCase();
                 this.parentNode.appendChild(placeholder);
             };
+            // If already cached in memory, load immediately (browser HTTP cache serves it)
+            if (_logoCache[logoUrl]) {
+                logoImg.src = logoUrl;
+            } else {
+                // Lazy load: defer until visible in sidebar scroll
+                logoImg.dataset.src = logoUrl;
+                logoImg.className = 'sidebar-lazy-logo';
+            }
             logoDiv.appendChild(logoImg);
         } else {
             var placeholder = document.createElement('span');
@@ -1325,6 +1415,9 @@ function renderChannelsList() {
     });
 
     console.log("[Sidebar] Rendered", sidebarState.channels.length, "channels");
+
+    // Initialize lazy loading for logos not yet in cache
+    initSidebarLazyLoading();
 }
 
 /**
@@ -2017,13 +2110,9 @@ function handleKeydown(e) {
         e.preventDefault();
     }
 
-    // Enter key - handle OK button to show/reset info bar
+    // Enter key (OK button) - Show/toggle info bar only
+    // Do NOT click activeElement here - sidebar handles its own Enter via handleSidebarKeydown
     if (code === 13) {
-        var activeEl = document.activeElement;
-        if (activeEl && activeEl.classList.contains('focusable')) {
-            activeEl.click();
-        }
-        // Call OK button handler instead of showOverlay for better info bar management
         if (typeof handleOKButton === 'function') {
             handleOKButton();
         } else {
@@ -2056,25 +2145,6 @@ function handleKeydown(e) {
             case 417: AVPlayer.jumpForward(10000); break;
             case 412: AVPlayer.jumpBackward(10000); break;
         }
-    }
-
-    // OK Button - Toggle Info Bar
-    if (code === 13) { // ENTER/OK
-        e.preventDefault();
-        var overlay = document.querySelector('.player-overlay');
-        if (overlay) {
-            var isVisible = overlay.classList.contains('visible');
-            if (isVisible) {
-                // If visible, reset the timer
-                showOverlay();
-                console.log('[Player] OK pressed - Info bar timer reset');
-            } else {
-                // If hidden, show it
-                showOverlay();
-                console.log('[Player] OK pressed - Info bar shown');
-            }
-        }
-        return;
     }
 
     // Volume Control (works on all pages)
@@ -2520,11 +2590,10 @@ function hideOverlay() {
  */
 var handleOKButton = function () {
     var overlay = document.querySelector('.player-overlay');
-    if (overlay && overlay.classList.contains('hidden')) {
-        console.log('[InfoBar] OK pressed - showing info bar');
-        showOverlay();
-    } else if (overlay && overlay.classList.contains('visible')) {
-        // If already visible, reset the timer
+    if (!overlay) return;
+
+    if (overlay.classList.contains('visible')) {
+        // Already visible - reset the auto-hide timer
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
         }
@@ -2532,6 +2601,10 @@ var handleOKButton = function () {
             hideOverlay();
         }, OVERLAY_HIDE_DELAY);
         console.log('[InfoBar] OK pressed - timer reset');
+    } else {
+        // Hidden or initial state - show the info bar
+        console.log('[InfoBar] OK pressed - showing info bar');
+        showOverlay();
     }
 };
 
