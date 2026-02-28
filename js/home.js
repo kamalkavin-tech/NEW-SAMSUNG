@@ -1882,7 +1882,12 @@ document.addEventListener('DOMContentLoaded', function () {
         // Load data immediately from sessionStorage cache (no IP wait needed)
         loadHomeAds();
         loadHomeLanguages();
-        loadHomeChannels();
+        // Skip rendering channels if FoFi is about to auto-play (prevents brief channel card flash)
+        if (!fofiShouldAutoPlay) {
+            loadHomeChannels();
+        } else {
+            console.log("[HOME] Skipping channel grid render - FoFi auto-play will navigate away");
+        }
 
         // Defer app lock check to background (still important for security)
         setTimeout(checkAppLockStatus, 2000);
@@ -1945,7 +1950,12 @@ document.addEventListener('DOMContentLoaded', function () {
             // sessionStorage cache makes repeat visits instant (no API calls)
             loadHomeAds();
             loadHomeLanguages();
-            loadHomeChannels();
+            // Skip rendering channels if FoFi is about to auto-play (prevents brief channel card flash)
+            if (!fofiShouldAutoPlay) {
+                loadHomeChannels();
+            } else {
+                console.log("[HOME] Skipping channel grid render - FoFi auto-play will navigate away");
+            }
 
             // Mark first init done - enables fast path for return visits
             try { sessionStorage.setItem('home_init_done', String(Date.now())); } catch (e) {}
@@ -2135,18 +2145,27 @@ function playFoFiChannel() {
                 }
             }
 
-            // FALLBACK: Use first channel
-            if (!fofiChannel && channels.length > 0) {
-                fofiChannel = channels[0];
-                console.log("[HOME] ⚠️ No FoFi found, using first channel:", fofiChannel.chtitle);
-            }
+            // NO FALLBACK: Only play FoFi channel, never fall back to other channels
 
             if (fofiChannel) {
-                console.log("[HOME] Playing FoFi channel:", fofiChannel.chtitle, "| Stream:", fofiChannel.streamlink);
-                sessionStorage.setItem('fofi_autoplay_done', 'true');
-                BBNL_API.playChannel(fofiChannel);
+                // Check if FoFi channel is subscribed — only play subscribed channels
+                var isSubscribed = fofiChannel.subscribed === "yes" ||
+                    fofiChannel.subscribed === "1" ||
+                    fofiChannel.subscribed === "true" ||
+                    fofiChannel.subscribed === true ||
+                    fofiChannel.subscribed === 1;
+
+                if (isSubscribed) {
+                    console.log("[HOME] ✓ FoFi channel is subscribed, playing:", fofiChannel.chtitle, "| Stream:", fofiChannel.streamlink);
+                    sessionStorage.setItem('fofi_autoplay_done', 'true');
+                    BBNL_API.playChannel(fofiChannel);
+                } else {
+                    console.log("[HOME] ❌ FoFi channel found but NOT subscribed:", fofiChannel.chtitle, "| subscribed:", fofiChannel.subscribed);
+                    sessionStorage.setItem('fofi_autoplay_done', 'true');
+                }
             } else {
-                console.log("[HOME] ❌ No channel available for FoFi auto-play");
+                console.log("[HOME] ❌ No FoFi channel available for auto-play");
+                sessionStorage.setItem('fofi_autoplay_done', 'true');
             }
         })
         .catch(function (error) {

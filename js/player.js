@@ -351,7 +351,9 @@ window.onload = function () {
             if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
                 BBNL_API.getChannelData().then(function (channels) {
                     if (channels && channels.length > 0) {
-                        allChannels = channels.sort(function (a, b) {
+                        // Only keep subscribed channels for navigation
+                        var subscribedChannels = BBNL_API.getSubscribedChannels(channels);
+                        allChannels = (subscribedChannels.length > 0 ? subscribedChannels : channels).sort(function (a, b) {
                             var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                             var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                             return aNo - bNo;
@@ -398,13 +400,16 @@ async function loadChannelList(lookupName = null) {
         let response = await BBNL_API.getChannelList();
 
         if (Array.isArray(response)) {
+            // Only keep subscribed channels for navigation
+            var subscribedChannels = BBNL_API.getSubscribedChannels(response);
+            var channelsForNav = subscribedChannels.length > 0 ? subscribedChannels : response;
             // Sort channels by LCN (channelno) for proper prev/next navigation
-            allChannels = response.sort(function (a, b) {
+            allChannels = channelsForNav.sort(function (a, b) {
                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                 return aNo - bNo;
             });
-            console.log("Player: Loaded " + allChannels.length + " channels for zapping (sorted by LCN).");
+            console.log("Player: Loaded " + allChannels.length + " subscribed channels for zapping (sorted by LCN).");
 
             // IF lookupName is provided, find it and play
             if (lookupName) {
@@ -455,7 +460,10 @@ async function loadChannelList(lookupName = null) {
                     try {
                         var freshData = await BBNL_API.getChannelList();
                         if (Array.isArray(freshData) && freshData.length > 0) {
-                            allChannels = freshData.sort(function (a, b) {
+                            // Only keep subscribed channels for navigation
+                            var subscribedFresh = BBNL_API.getSubscribedChannels(freshData);
+                            var navFresh = subscribedFresh.length > 0 ? subscribedFresh : freshData;
+                            allChannels = navFresh.sort(function (a, b) {
                                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                                 return aNo - bNo;
