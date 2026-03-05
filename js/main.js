@@ -832,10 +832,10 @@ function handleOK() {
                         sessionStorage.setItem('_pendingOTP', serverOTP);
                         console.log("[Login] OTP stored for verification");
 
-                        console.log("[Login] Mobile:", val);
+                        sessionStorage.setItem('_pendingMobile', val);
 
-                        // Navigate to verify page with mobile only
-                        window.location.href = "verify.html?mobile=" + val;
+                        // Navigate to verify page (mobile passed via sessionStorage, not URL)
+                        window.location.href = "verify.html";
                     } else {
                         // Reset flag and button on error
                         otpRequestInProgress = false;
@@ -883,13 +883,12 @@ function handleOK() {
         if (fullOTP.length === 4) {
             otpVerifyInProgress = true;
 
-            // Get mobile from URL
-            var urlParams = new URLSearchParams(window.location.search);
-            var mobile = urlParams.get('mobile') || "";
+            // Get mobile from sessionStorage (not URL, for security)
+            var mobile = sessionStorage.getItem('_pendingMobile') || "";
 
             // If mobile is missing, redirect back to login
             if (!mobile) {
-                console.error("[Verify] Missing mobile in URL params - redirecting to login");
+                console.error("[Verify] Missing mobile - redirecting to login");
                 window.location.replace("login.html");
                 return;
             }
@@ -899,7 +898,7 @@ function handleOK() {
             btn.innerText = "Verifying...";
             btn.disabled = true;
 
-            console.log("[Verify] OTP entered:", fullOTP);
+            console.log("[Verify] Verifying OTP...");
 
             // CLIENT-SIDE OTP VERIFICATION
             // Compare entered OTP against the stored OTP from API response
@@ -1108,8 +1107,7 @@ function initResendOTPTimer() {
 function handleResendOTP() {
     if (resendInProgress) return;
 
-    var urlParams = new URLSearchParams(window.location.search);
-    var mobile = urlParams.get('mobile') || "";
+    var mobile = sessionStorage.getItem('_pendingMobile') || "";
     if (!mobile) return;
 
     var resendBtn = document.getElementById('resendOtpBtn');

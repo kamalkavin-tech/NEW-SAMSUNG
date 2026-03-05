@@ -986,13 +986,20 @@ function renderChannelsInHomeGrid(channels) {
             img.alt = channelName;
             img.style.cssText = 'max-width:80%;max-height:80%;object-fit:contain';
             img.onerror = function () {
-                iconDiv.innerHTML = '<span class="channel-name" style="color:white;font-weight:bold;font-size:16px">' +
-                    channelName.substring(0, 10) + '</span>';
+                var span = document.createElement('span');
+                span.className = 'channel-name';
+                span.style.cssText = 'color:white;font-weight:bold;font-size:16px';
+                span.textContent = channelName.substring(0, 10);
+                iconDiv.innerHTML = '';
+                iconDiv.appendChild(span);
             };
             iconDiv.appendChild(img);
         } else {
-            iconDiv.innerHTML = '<span class="channel-name" style="color:white;font-weight:bold;font-size:16px;text-align:center">' +
-                channelName.substring(0, 15) + '</span>';
+            var span = document.createElement('span');
+            span.className = 'channel-name';
+            span.style.cssText = 'color:white;font-weight:bold;font-size:16px;text-align:center';
+            span.textContent = channelName.substring(0, 15);
+            iconDiv.appendChild(span);
         }
 
         card.appendChild(iconDiv);
@@ -1001,8 +1008,14 @@ function renderChannelsInHomeGrid(channels) {
         var labelDiv = document.createElement('div');
         labelDiv.className = 'card-info';
         labelDiv.style.cssText = 'padding:12px 16px';
-        labelDiv.innerHTML = '<div class="card-title-bottom">' + channelName +
-            '</div><div class="card-subtitle-bottom">Live Channels</div>';
+        var titleDiv = document.createElement('div');
+        titleDiv.className = 'card-title-bottom';
+        titleDiv.textContent = channelName;
+        var subtitleDiv = document.createElement('div');
+        subtitleDiv.className = 'card-subtitle-bottom';
+        subtitleDiv.textContent = 'Live Channels';
+        labelDiv.appendChild(titleDiv);
+        labelDiv.appendChild(subtitleDiv);
         card.appendChild(labelDiv);
 
         card.addEventListener('click', function () {
@@ -1294,8 +1307,12 @@ function renderAppsInHomeGrid(apps) {
 
             // Fallback to text if image fails to load
             img.onerror = function () {
-                iconDiv.innerHTML = '<span class="app-name" style="color: white; font-weight: bold; font-size: 16px;">' +
-                    appName + '</span>';
+                var span = document.createElement('span');
+                span.className = 'app-name';
+                span.style.cssText = 'color: white; font-weight: bold; font-size: 16px;';
+                span.textContent = appName;
+                iconDiv.innerHTML = '';
+                iconDiv.appendChild(span);
             };
 
             iconDiv.appendChild(img);

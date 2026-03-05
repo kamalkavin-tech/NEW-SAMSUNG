@@ -21,7 +21,6 @@
     <!-- ============================================ -->
     <!-- ACCESS ORIGINS (Allow external resources) -->
     <!-- ============================================ -->
-    <access origin="*" subdomains="true"/>
     <access origin="http://124.40.244.211" subdomains="true"/>
     <access origin="https://netmontest.bbnl.in" subdomains="true"/>
     <!-- Stream domains - both HTTP and HTTPS -->

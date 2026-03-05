@@ -156,7 +156,11 @@ function renderFavoriteChannels(channels) {
             img.src = channelLogo;
             img.alt = channelName;
             img.onerror = function () {
-                iconDiv.innerHTML = '<span style="color: white; font-weight: bold; font-size: 16px;">' + channelName.substring(0, 10) + '</span>';
+                var span = document.createElement('span');
+                span.style.cssText = 'color: white; font-weight: bold; font-size: 16px;';
+                span.textContent = channelName.substring(0, 10);
+                iconDiv.innerHTML = '';
+                iconDiv.appendChild(span);
             };
             iconDiv.appendChild(img);
         } else {

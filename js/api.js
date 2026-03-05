@@ -1169,7 +1169,7 @@ const AuthAPI = {
             devdets: DeviceInfo.getDevDets(),
             app_package: APP_ID
         };
-        console.log("[AuthAPI] Requesting OTP Payload:", payload);
+        console.log("[AuthAPI] Requesting OTP - device:", payload.device_type);
         return await apiCall(API_ENDPOINTS.LOGIN, payload);
     },
 
@@ -1187,7 +1187,7 @@ const AuthAPI = {
             devdets: DeviceInfo.getDevDets(),
             app_package: APP_ID
         };
-        console.log("[AuthAPI] Adding MAC Address Payload:", payload);
+        console.log("[AuthAPI] Adding MAC Address...");
         return await apiCall(API_ENDPOINTS.ADD_MACADDRESS, payload);
     },
 
@@ -1197,7 +1197,7 @@ const AuthAPI = {
             otpcode: otpcode
         };
 
-        console.log("[AuthAPI] Verifying OTP Payload:", payload);
+        console.log("[AuthAPI] Verifying OTP...");
         const response = await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
 
         if (response && response.status && Number(response.status.err_code) === 0) {
@@ -1211,7 +1211,7 @@ const AuthAPI = {
             mobile: mobile
         };
 
-        console.log("[AuthAPI] Resending OTP Payload:", payload);
+        console.log("[AuthAPI] Resending OTP...");
         return await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
     },
 
@@ -1251,7 +1251,7 @@ const AuthAPI = {
                     localStorage.setItem("bbnl_user", userJson);
                 }
             }
-            console.log("[AuthAPI] Session saved - userid:", userData.userid, "mobile:", userData.mobile);
+            console.log("[AuthAPI] Session saved successfully.");
         } else {
             console.error("[AuthAPI] Invalid response structure for setSession:", response);
         }
@@ -1302,11 +1302,11 @@ const AuthAPI = {
             ipv6: ipv6
         };
 
-        console.log("[AuthAPI] Logout Payload:", payload);
+        console.log("[AuthAPI] Logging out...");
 
         try {
-            var response = await apiCall(API_ENDPOINTS.USER_LOGOUT, payload);
-            console.log("[AuthAPI] Logout Response:", response);
+            await apiCall(API_ENDPOINTS.USER_LOGOUT, payload);
+            console.log("[AuthAPI] Logout successful.");
         } catch (e) {
             console.warn("[AuthAPI] Logout API error (proceeding with local cleanup):", e.message);
         }
