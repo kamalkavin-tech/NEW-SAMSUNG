@@ -23,8 +23,8 @@
              DOWN = cards, LEFT from search = sidebar
    ================================ */
 
-// Grid columns for the language cards (same as TV Channel page)
-var GRID_COLS = 5;
+// Grid columns for the language cards — must match CSS: repeat(4, 1fr)
+var GRID_COLS = 4;
 
 // Navigation State
 var navState = {

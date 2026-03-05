@@ -149,6 +149,18 @@
         </div>
     </div>
 
+    <!-- Custom Confirm Popup (replaces native confirm) -->
+    <div id="settings-popup-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center;">
+        <div class="tv-popup">
+            <div class="tv-popup-header">Fo-Fi TV - Settings</div>
+            <div class="tv-popup-body" id="settings-popup-msg"></div>
+            <div class="tv-popup-footer">
+                <button class="tv-popup-ok focusable" id="settings-popup-yes" tabindex="0">Yes</button>
+                <button class="tv-popup-cancel focusable" id="settings-popup-no" tabindex="0">No</button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/api.js"></script>
     <script src="js/settings.js"></script>
 </body>

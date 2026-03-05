@@ -219,11 +219,13 @@ const CacheManager = {
     },
 
     // Cache keys
+    // NOTE: bbnl_user (login session) is NOT managed by CacheManager.
+    // It is permanent login state stored/read directly via localStorage.
+    // Only explicit logout (Settings > Logout) should clear it.
     KEYS: {
         CHANNEL_LIST: 'bbnl_channels_cache',
         CATEGORIES: 'bbnl_categories_cache',
         LANGUAGES: 'bbnl_languages_cache',
-        LOGIN_TOKEN: 'bbnl_user',
         FOFI_PLAYED: 'fofi_autoplay_done',  // Uses sessionStorage - consistent across all files
         LAST_CHANNEL: 'bbnl_last_channel',
         EXPIRING_CHANNELS: 'bbnl_expiring_cache'
@@ -253,13 +255,48 @@ const CacheManager = {
                 timestamp: now,
                 expiry: now + expiry
             };
-            localStorage.setItem(key, JSON.stringify(cacheObject));
+            var jsonStr = JSON.stringify(cacheObject);
+            try {
+                localStorage.setItem(key, jsonStr);
+            } catch (quotaError) {
+                // localStorage full — clear expired caches and retry
+                console.warn('[CacheManager] Quota exceeded, clearing expired caches...');
+                this._clearExpired();
+                try {
+                    localStorage.setItem(key, jsonStr);
+                } catch (retryError) {
+                    // Still full — clear all non-login caches and retry once more
+                    this.clearAll();
+                    localStorage.setItem(key, jsonStr);
+                }
+            }
             console.log('[CacheManager] ✓ Cached:', key, '| Expires in:', Math.round(expiry / 60000), 'minutes');
             return true;
         } catch (e) {
             console.error('[CacheManager] ✗ Failed to cache:', key, e);
             return false;
         }
+    },
+
+    /**
+     * Clear only expired cache entries (free up space without losing valid data)
+     */
+    _clearExpired: function () {
+        var self = this;
+        var now = this._now();
+        Object.keys(this.KEYS).forEach(function (keyName) {
+            var key = self.KEYS[keyName];
+            try {
+                var cached = localStorage.getItem(key);
+                if (cached) {
+                    var obj = JSON.parse(cached);
+                    if (obj.expiry && now > obj.expiry) {
+                        localStorage.removeItem(key);
+                        console.log('[CacheManager] Removed expired:', key);
+                    }
+                }
+            } catch (e) {}
+        });
     },
 
     /**
@@ -338,22 +375,17 @@ const CacheManager = {
     clearAll: function () {
         var self = this;
         Object.keys(this.KEYS).forEach(function (keyName) {
-            if (keyName !== 'LOGIN_TOKEN') {
-                self.remove(self.KEYS[keyName]);
-            }
+            self.remove(self.KEYS[keyName]);
         });
         console.log('[CacheManager] All caches cleared');
     },
 
     /**
-     * Clear ALL caches including login token (used on logout)
+     * Clear ALL caches (same as clearAll since bbnl_user is no longer in KEYS)
+     * bbnl_user is managed directly by AuthAPI, not CacheManager.
      */
     clear: function () {
-        var self = this;
-        Object.keys(this.KEYS).forEach(function (keyName) {
-            self.remove(self.KEYS[keyName]);
-        });
-        console.log('[CacheManager] All caches cleared (full logout)');
+        this.clearAll();
     },
 
     /**
@@ -461,20 +493,31 @@ async function apiCall(endpoint, payload, customHeaders) {
     const url = endpoint;
     const headers = Object.assign({}, DEFAULT_HEADERS, customHeaders || {});
 
-    // Enhanced debug logging
-    console.log("[API DEBUG] URL:", url);
-    console.log("[API DEBUG] Payload:", JSON.stringify(payload, null, 2));
-    console.log("[API DEBUG] Headers:", JSON.stringify(headers, null, 2));
-
     console.log(`[API] Request: ${url}`, payload);
-    console.log('[API] Request Headers:', headers);
+
+    // Abort controller with 10-second timeout — prevents hanging requests
+    // that accumulate across repeated Home→Relaunch cycles on Samsung TV
+    var controller = null;
+    var timeoutId = null;
+    try {
+        controller = new AbortController();
+        timeoutId = setTimeout(function () { controller.abort(); }, 10000);
+    } catch (e) {
+        // AbortController not supported on older Tizen — proceed without timeout
+        controller = null;
+    }
 
     try {
-        const response = await fetch(url, {
+        var fetchOptions = {
             method: "POST",
             headers: headers,
             body: JSON.stringify(payload)
-        });
+        };
+        if (controller) fetchOptions.signal = controller.signal;
+
+        const response = await fetch(url, fetchOptions);
+
+        if (timeoutId) clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
@@ -485,13 +528,15 @@ async function apiCall(endpoint, payload, customHeaders) {
 
         return data;
     } catch (error) {
-        console.error(`[API] Error: ${url}`, error);
+        if (timeoutId) clearTimeout(timeoutId);
+        var isTimeout = error && error.name === 'AbortError';
+        console.error(`[API] ${isTimeout ? 'TIMEOUT' : 'Error'}: ${url}`, error);
         return {
             error: true,
-            message: error.message,
+            message: isTimeout ? 'Request timed out (10s)' : error.message,
             status: {
                 err_code: -1,
-                err_msg: error.message
+                err_msg: isTimeout ? 'Request timed out (10s)' : error.message
             }
         };
     }
@@ -509,11 +554,17 @@ function mapBBNLError(msg) {
 // ==========================================
 const DeviceInfo = {
     initializeDeviceInfo: function () {
-        // Load cached public IP from sessionStorage FIRST (instant, synchronous)
+        // Load cached public IP — check sessionStorage first, then localStorage
+        // sessionStorage survives page navigation; localStorage survives HOME→Relaunch
         try {
             var cachedPublicIP = sessionStorage.getItem('_publicIP');
+            if (!cachedPublicIP || this._isPrivateIP(cachedPublicIP)) {
+                cachedPublicIP = localStorage.getItem('_publicIP');
+            }
             if (cachedPublicIP && !this._isPrivateIP(cachedPublicIP)) {
                 DEVICE_INFO.ip_address = cachedPublicIP;
+                // Restore to sessionStorage for page-navigation cache
+                try { sessionStorage.setItem('_publicIP', cachedPublicIP); } catch (e2) {}
                 console.log("[DeviceInfo] Loaded cached public IP:", cachedPublicIP);
             }
         } catch (e) {}
@@ -672,6 +723,14 @@ const DeviceInfo = {
      */
     _detectPublicIP: function () {
         var self = this;
+
+        // If we already have a public IP from localStorage, skip external detection
+        if (!this._isPrivateIP(DEVICE_INFO.ip_address)) {
+            console.log("[DeviceInfo] Public IP already available from cache, skipping detection");
+            this._publicIPPromise = Promise.resolve(true);
+            return;
+        }
+
         var services = [
             'https://api.ipify.org?format=json',
             'https://api64.ipify.org?format=json'
@@ -684,19 +743,37 @@ const DeviceInfo = {
                     resolve(false);
                     return;
                 }
-                fetch(services[i], { method: 'GET' })
-                    .then(function (r) { return r.json(); })
+                // 5-second timeout per service to prevent hanging
+                var controller = null;
+                var timeoutId = null;
+                try {
+                    controller = new AbortController();
+                    timeoutId = setTimeout(function () { controller.abort(); }, 5000);
+                } catch (e) { controller = null; }
+
+                var fetchOpts = { method: 'GET' };
+                if (controller) fetchOpts.signal = controller.signal;
+
+                fetch(services[i], fetchOpts)
+                    .then(function (r) {
+                        if (timeoutId) clearTimeout(timeoutId);
+                        return r.json();
+                    })
                     .then(function (data) {
                         if (data && data.ip && !self._isPrivateIP(data.ip)) {
                             DEVICE_INFO.ip_address = data.ip;
                             try { sessionStorage.setItem('_publicIP', data.ip); } catch (e) {}
+                            try { localStorage.setItem('_publicIP', data.ip); } catch (e) {}
                             console.log("[DeviceInfo] Public IP detected:", data.ip);
                             resolve(true);
                         } else {
                             tryService(i + 1);
                         }
                     })
-                    .catch(function () { tryService(i + 1); });
+                    .catch(function () {
+                        if (timeoutId) clearTimeout(timeoutId);
+                        tryService(i + 1);
+                    });
             }
             tryService(0);
         });
@@ -728,10 +805,10 @@ const DeviceInfo = {
     },
 
     getDeviceInfo: function () {
-        // Guard: if IP is still private, try sessionStorage cache
+        // Guard: if IP is still private, try sessionStorage then localStorage cache
         if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
             try {
-                var cached = sessionStorage.getItem('_publicIP');
+                var cached = sessionStorage.getItem('_publicIP') || localStorage.getItem('_publicIP');
                 if (cached && !this._isPrivateIP(cached)) {
                     DEVICE_INFO.ip_address = cached;
                     console.log("[DeviceInfo] Using cached public IP:", cached);
@@ -749,7 +826,7 @@ const DeviceInfo = {
         // Ensure public IP is used (same guard as getDeviceInfo)
         if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
             try {
-                var cached = sessionStorage.getItem('_publicIP');
+                var cached = sessionStorage.getItem('_publicIP') || localStorage.getItem('_publicIP');
                 if (cached && !this._isPrivateIP(cached)) {
                     DEVICE_INFO.ip_address = cached;
                 }
@@ -1089,7 +1166,8 @@ const AuthAPI = {
             devslno: device.devslno,
             ipv6: ipv6 || "",
             getuserdet: "",
-            devdets: DeviceInfo.getDevDets()
+            devdets: DeviceInfo.getDevDets(),
+            app_package: APP_ID
         };
         console.log("[AuthAPI] Requesting OTP Payload:", payload);
         return await apiCall(API_ENDPOINTS.LOGIN, payload);
@@ -1106,7 +1184,8 @@ const AuthAPI = {
             device_type: device.device_type,
             devslno: device.devslno,
             ipv6: ipv6 || "",
-            devdets: DeviceInfo.getDevDets()
+            devdets: DeviceInfo.getDevDets(),
+            app_package: APP_ID
         };
         console.log("[AuthAPI] Adding MAC Address Payload:", payload);
         return await apiCall(API_ENDPOINTS.ADD_MACADDRESS, payload);
@@ -1155,7 +1234,23 @@ const AuthAPI = {
                 userData.email = userData.email || userData.custdet[0].email || "";
             }
 
-            localStorage.setItem("bbnl_user", JSON.stringify(userData));
+            var userJson = JSON.stringify(userData);
+            try {
+                localStorage.setItem("bbnl_user", userJson);
+            } catch (quotaErr) {
+                // localStorage full — clear non-login caches to make space, then retry
+                console.warn("[AuthAPI] localStorage full — clearing caches to save session");
+                CacheManager.clearAll();
+                try {
+                    localStorage.setItem("bbnl_user", userJson);
+                } catch (retryErr) {
+                    // Last resort — clear everything except hasLoggedInOnce, then retry
+                    var savedFlag = localStorage.getItem("hasLoggedInOnce");
+                    localStorage.clear();
+                    if (savedFlag) localStorage.setItem("hasLoggedInOnce", savedFlag);
+                    localStorage.setItem("bbnl_user", userJson);
+                }
+            }
             console.log("[AuthAPI] Session saved - userid:", userData.userid, "mobile:", userData.mobile);
         } else {
             console.error("[AuthAPI] Invalid response structure for setSession:", response);
@@ -1236,24 +1331,17 @@ const AuthAPI = {
 // CHANNELS API (FIXED)
 // ==========================================
 const ChannelsAPI = {
-    _backgroundRefreshInProgress: false,
     _fetchInProgress: null,
     _expiryMergeInProgress: false,
 
     getCategories: async function () {
-        // Check cache first
+        // Check cache first (also accept expired cache — call-once strategy)
         var cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES);
+        if (!cachedCategories || cachedCategories.length === 0) {
+            cachedCategories = CacheManager.get(CacheManager.KEYS.CATEGORIES, true);
+        }
         if (cachedCategories && cachedCategories.length > 0) {
-            console.log("[ChannelsAPI] Using cached categories (" + cachedCategories.length + ")");
-
-            // Background refresh only if cache is older than 5 minutes
-            var catAge = CacheManager.getAge(CacheManager.KEYS.CATEGORIES);
-            if (catAge !== null && catAge >= 5) {
-                this._fetchAndCacheCategories().catch(function (e) {
-                    console.warn("[ChannelsAPI] Background categories refresh failed:", e);
-                });
-            }
-
+            console.log("[ChannelsAPI] Using cached categories (" + cachedCategories.length + ") — no API call");
             return cachedCategories;
         }
 
@@ -1342,24 +1430,29 @@ const ChannelsAPI = {
         console.log("[ChannelsAPI] User info - userid:", userid, "mobile:", mobile);
 
         // ==========================================
-        // CACHE-FIRST STRATEGY
-        // 1. Check if cached data exists and is valid
-        // 2. If valid, return cached data immediately
-        // 3. Then fetch fresh data in background
-        // 4. Update cache after successful fetch
+        // CALL-ONCE STRATEGY
+        // Channel Data API is called ONCE after login.
+        // Data is cached in localStorage and reused for ALL subsequent calls.
+        // No background refresh — data stays until explicit logout clears cache.
+        // Also check stale cache (ignoreExpiry) for relaunch scenarios.
         // ==========================================
 
         var cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST);
 
-        // ── CACHE HIT: Return cached data immediately ──
-        if (cachedChannels && cachedChannels.length > 0) {
-            var cacheAgeMinutes = CacheManager.getAge(CacheManager.KEYS.CHANNEL_LIST);
+        // Also accept expired cache — channel data is call-once, expiry is irrelevant
+        if (!cachedChannels || cachedChannels.length === 0) {
+            cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+        }
 
-            // Background expiry merge (non-blocking, deduped) — only on fresh cache without expiry data
+        // ── CACHE HIT: Return cached data immediately (NO background refresh) ──
+        if (cachedChannels && cachedChannels.length > 0) {
+            console.log("[ChannelsAPI] Using cached channel data (" + cachedChannels.length + " channels) — no API call");
+
+            // One-time expiry merge (non-blocking, deduped) — only if no expiry data yet
             var hasExpiry = cachedChannels.some(function (ch) {
                 return ch.expirydate && String(ch.expirydate).trim() !== "";
             });
-            if (!hasExpiry && !this._expiryMergeInProgress && (cacheAgeMinutes === null || cacheAgeMinutes < 2)) {
+            if (!hasExpiry && !this._expiryMergeInProgress) {
                 this._expiryMergeInProgress = true;
                 var self = this;
                 this._mergeExpiryData(cachedChannels, userid, mobile, device).then(function (merged) {
@@ -1370,26 +1463,12 @@ const ChannelsAPI = {
                 }).catch(function () { self._expiryMergeInProgress = false; });
             }
 
-            var filteredCached = this._applyFilters(cachedChannels, options);
-
-            // Background refresh — only if cache is older than 5 minutes AND not already in progress
-            if (!this._backgroundRefreshInProgress && cacheAgeMinutes !== null && cacheAgeMinutes >= 5) {
-                this._backgroundRefreshInProgress = true;
-                var self = this;
-                console.log("[ChannelsAPI] Cache age:", cacheAgeMinutes, "min — triggering background refresh");
-                this._fetchAndCacheChannels(userid, mobile, device).then(function () {
-                    self._backgroundRefreshInProgress = false;
-                }).catch(function () {
-                    self._backgroundRefreshInProgress = false;
-                });
-            } else if (cacheAgeMinutes !== null && cacheAgeMinutes < 5) {
-                console.log("[ChannelsAPI] Cache age:", cacheAgeMinutes, "min — skipping background refresh (< 5 min)");
-            }
-
-            return filteredCached;
+            return this._applyFilters(cachedChannels, options);
         }
 
-        // ── CACHE MISS: Deduplicate in-flight fetches ──
+        // ── CACHE MISS: Fetch once from API (deduplicate in-flight requests) ──
+        console.log("[ChannelsAPI] No cached data — fetching from API (one-time call)");
+
         if (this._fetchInProgress) {
             var channels = await this._fetchInProgress;
             return this._applyFilters(channels || [], options);
@@ -1645,19 +1724,13 @@ const ChannelsAPI = {
     },
 
     getLanguageList: async function () {
-        // Check cache first
+        // Check cache first (also accept expired cache — call-once strategy)
         var cachedLanguages = CacheManager.get(CacheManager.KEYS.LANGUAGES);
+        if (!cachedLanguages || cachedLanguages.length === 0) {
+            cachedLanguages = CacheManager.get(CacheManager.KEYS.LANGUAGES, true);
+        }
         if (cachedLanguages && cachedLanguages.length > 0) {
-            console.log("[ChannelsAPI] Using cached languages (" + cachedLanguages.length + ")");
-
-            // Background refresh only if cache is older than 5 minutes
-            var langAge = CacheManager.getAge(CacheManager.KEYS.LANGUAGES);
-            if (langAge !== null && langAge >= 5) {
-                this._fetchAndCacheLanguages().catch(function (e) {
-                    console.warn("[ChannelsAPI] Background languages refresh failed:", e);
-                });
-            }
-
+            console.log("[ChannelsAPI] Using cached languages (" + cachedLanguages.length + ") — no API call");
             return cachedLanguages;
         }
 
@@ -1760,8 +1833,7 @@ const ChannelsAPI = {
             const data = encodeURIComponent(JSON.stringify(channel));
             window.location.href = `player.html?data=${data}`;
         } else {
-            console.error("No stream URL for channel", channel);
-            alert("Stream not available");
+            console.error("[ChannelsAPI] No stream URL for channel:", channel.chtitle || channel.channel_name || "unknown");
         }
     }
 };
@@ -2017,7 +2089,17 @@ const AdsAPI = {
      * @param {String} grid - Grid/layout position (default "3")
      * @returns {Promise<Array>} Array of stream ad objects, or empty array on error
      */
+    // Session-level cache for stream ads keyed by chid
+    _streamAdsCache: {},
+
     getStreamAds: async function (chid, grid) {
+        // Return cached ads for this channel if already fetched this session
+        var cacheKey = String(chid || "");
+        if (cacheKey && this._streamAdsCache[cacheKey]) {
+            console.log("[AdsAPI] Stream Ads cache hit for chid:", cacheKey);
+            return this._streamAdsCache[cacheKey];
+        }
+
         const user = AuthAPI.getUserData();
         var userid = _getSessionUser().userid;
         var mobile = _getSessionUser().mobile;
@@ -2042,29 +2124,20 @@ const AdsAPI = {
             chid: chid || ""
         };
 
-        console.log("[AdsAPI] 📺 Fetching Stream Ads for chid:", chid);
-        console.log("[AdsAPI] 📦 Stream Ads Payload:", payload);
+        console.log("[AdsAPI] Fetching Stream Ads for chid:", chid);
 
         try {
-            var response = await fetch(API_ENDPOINTS.STREAM_ADS, {
-                method: "POST",
-                headers: DEFAULT_HEADERS,
-                body: JSON.stringify(payload)
-            });
+            var response = await apiCall(API_ENDPOINTS.STREAM_ADS, payload);
 
-            if (!response.ok) {
-                console.warn("[AdsAPI] Stream Ads HTTP Error:", response.status);
-                return [];
+            if (response && response.status && Number(response.status.err_code) === 0 && response.body && Array.isArray(response.body)) {
+                console.log("[AdsAPI] Stream Ads loaded:", response.body.length);
+                // Cache for this session
+                if (cacheKey) this._streamAdsCache[cacheKey] = response.body;
+                return response.body;
             }
 
-            var data = await response.json();
-            console.log("[AdsAPI] Stream Ads Response:", data);
-
-            if (data && data.status && Number(data.status.err_code) === 0 && data.body && Array.isArray(data.body)) {
-                console.log("[AdsAPI] Stream Ads loaded:", data.body.length);
-                return data.body;
-            }
-
+            // Cache empty result too (prevents re-fetching for channels with no ads)
+            if (cacheKey) this._streamAdsCache[cacheKey] = [];
             return [];
         } catch (error) {
             console.error("[AdsAPI] Stream Ads error:", error.message);
@@ -2242,24 +2315,26 @@ const TRPDataAPI = {
      * Endpoint: /trpdata
      * Method: POST
      *
-     * @param {String} comment - Comment/tracking data (e.g. email)
+     * @param {String} chid - Channel ID being watched
      * @returns {Promise<Object>} API response
      */
-    sendTRPData: async function (chid, comment) {
+    sendTRPData: async function (chid) {
         const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
 
         const payload = {
             userid: user && user.userid ? user.userid : _getSessionUser().userid,
             mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
-            chid: chid || "",
-            comment: comment || ""
+            ip_address: device.ip_address,
+            chid: chid || ""
         };
 
         console.log("[TRPDataAPI] Sending TRP data:", payload);
 
         return await apiCall(API_ENDPOINTS.TRP_DATA, payload, {
-            "devmac": DEVICE_INFO.mac_address,
-            "devslno": DEVICE_INFO.devslno
+            userid: payload.userid,
+            mobile: payload.mobile,
+            chid: chid || ""
         });
     }
 };
@@ -2310,7 +2385,15 @@ const ErrorImagesAPI = {
             // Load from localStorage first (instant offline fallback)
             this.loadFromCache();
 
-            // Error images are not user-specific - use session data if available, generic fallback otherwise
+            // If localStorage already has error images, skip API call entirely
+            // Error images rarely change — only fetch once, reuse from cache
+            if (Object.keys(this._cache).length > 0) {
+                console.log("[ErrorImagesAPI] Using cached error images (" + Object.keys(this._cache).length + ") — no API call");
+                return;
+            }
+
+            // No cache — fetch from API (one-time call)
+            console.log("[ErrorImagesAPI] No cached data — fetching from API (one-time call)");
             var user = AuthAPI.getUserData();
             var response = await apiCall(API_ENDPOINTS.ERROR_IMAGES, {
                 userid: (user && user.userid) || _getSessionUser().userid || "app",
@@ -2329,7 +2412,7 @@ const ErrorImagesAPI = {
                     localStorage.setItem(this._STORAGE_KEY, JSON.stringify(images));
                 } catch (e) { }
 
-                console.log("[ErrorImagesAPI] Loaded " + Object.keys(images).length + " error images");
+                console.log("[ErrorImagesAPI] Loaded " + Object.keys(images).length + " error images from API");
             }
         } catch (e) {
             console.warn("[ErrorImagesAPI] Failed to fetch error images:", e.message);

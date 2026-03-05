@@ -327,6 +327,14 @@ function initErrorModal() {
     });
 }
 
+function showLoginError(title, message) {
+    var titleEl = document.querySelector('#errorModal .error-title');
+    var msgEl = document.querySelector('#errorModal .error-message');
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    showErrorModal();
+}
+
 function showErrorModal() {
     var errorModal = document.getElementById("errorModal");
     if (errorModal) {
@@ -829,27 +837,23 @@ function handleOK() {
                         // Navigate to verify page with mobile only
                         window.location.href = "verify.html?mobile=" + val;
                     } else {
-                        // Reset flag and button on error only
+                        // Reset flag and button on error
                         otpRequestInProgress = false;
                         btn.innerText = originalText;
                         btn.disabled = false;
+                        btn.classList.add('enabled');
 
                         console.error("[Login] OTP request failed:", response);
-                        // Show error message from API response dynamically
-                        var errorMsg = (response && response.status && response.status.err_msg)
-                            ? response.status.err_msg : "";
-                        if (errorMsg) {
-                            showErrorPopup(errorMsg);
-                        }
+                        showLoginError("Request Failed", "OTP request failed. Please try again.");
                     }
                 })
                 .catch(function (error) {
                     console.error("[Login] ❌ OTP request error:", error);
-                    // Reset flag and restore button
                     otpRequestInProgress = false;
                     btn.innerText = originalText;
                     btn.disabled = false;
-                    showErrorPopup(error.message || "");
+                    btn.classList.add('enabled');
+                    showLoginError("Connection Error", "No internet connection. Please try again.");
                 });
         } else {
             // Show error modal for invalid phone number length

@@ -18,11 +18,50 @@
             window.location.replace("login.html");
             return;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
+    }
 })();
 
 var focusables = [];
 var currentFocus = 0;
+
+// ==========================================
+// CUSTOM POPUP - Replaces native alert()
+// Header shows: "Fo-Fi TV Feedback"
+// ==========================================
+function showPopup(message, callback) {
+    var overlay = document.getElementById('fb-popup-overlay');
+    var msgEl = document.getElementById('fb-popup-msg');
+    var okBtn = document.getElementById('fb-popup-ok');
+    if (!overlay || !msgEl || !okBtn) {
+        // Fallback if DOM not ready
+        if (callback) callback();
+        return;
+    }
+    msgEl.textContent = message;
+    overlay.style.display = 'flex';
+    okBtn.focus();
+
+    function closePopup() {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', closePopup);
+        document.removeEventListener('keydown', onPopupKey);
+        if (callback) callback();
+    }
+
+    function onPopupKey(e) {
+        if (e.keyCode === 13 || e.keyCode === 65376) { // Enter / OK
+            e.preventDefault();
+            closePopup();
+        }
+    }
+
+    okBtn.addEventListener('click', closePopup);
+    document.addEventListener('keydown', onPopupKey);
+}
 
 window.onload = function () {
     console.log("=== BBNL Feedback Page Initialized ===");
@@ -179,9 +218,9 @@ function submitFeedback() {
 
     if (!userData) {
         console.error("[Feedback] No user data found in session");
-        alert("Please login first");
-        // Go to home page
-        window.location.href = 'home.html';
+        showPopup("Please login first", function () {
+            window.location.href = 'home.html';
+        });
         return;
     }
 
@@ -191,14 +230,13 @@ function submitFeedback() {
 
     // Validate feedback text
     if (!feedbackText) {
-        alert("Please enter your feedback");
-        textarea.focus();
+        showPopup("Please enter your feedback", function () { textarea.focus(); });
         return;
     }
 
     // Validate rating
     if (currentRating === 0) {
-        alert("Please select a rating");
+        showPopup("Please select a rating");
         return;
     }
 
@@ -248,13 +286,14 @@ function submitFeedback() {
 
             if (errCode === 0) {
                 console.log("[Feedback] ✅ Success:", errMsg);
-                alert("Thank you for your feedback!");
-                window.location.href = 'home.html';
+                showPopup("Thank you for your feedback!", function () {
+                    window.location.href = 'home.html';
+                });
             } else {
                 console.error("[Feedback] ❌ Error code:", errCode);
                 console.error("[Feedback] ❌ Error message:", errMsg);
                 console.error("[Feedback] Full error response:", response);
-                alert("Error: " + errMsg + "\n\nThe API says some required fields are missing. Please contact support.");
+                showPopup("Error: " + errMsg + "\n\nPlease contact support.");
             }
         })
         .catch(function(error) {
@@ -266,6 +305,6 @@ function submitFeedback() {
             submitBtn.innerText = originalText;
             submitBtn.disabled = false;
 
-            alert("Failed to submit feedback. Please try again.\nError: " + error.message);
+            showPopup("Failed to submit feedback. Please try again.");
         });
 }

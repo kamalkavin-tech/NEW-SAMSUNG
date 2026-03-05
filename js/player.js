@@ -18,7 +18,11 @@
             window.location.replace("login.html");
             return;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
+    }
 })();
 
 // ==========================================
@@ -351,13 +355,13 @@ window.onload = function () {
             if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
                 BBNL_API.getChannelData().then(function (channels) {
                     if (channels && channels.length > 0) {
-                        // Only keep subscribed channels for navigation
-                        var subscribedChannels = BBNL_API.getSubscribedChannels(channels);
-                        allChannels = (subscribedChannels.length > 0 ? subscribedChannels : channels).sort(function (a, b) {
+                        // Update ALL channels for navigation and sidebar
+                        allChannels = channels.slice().sort(function (a, b) {
                             var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                             var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                             return aNo - bNo;
                         });
+                        _allChannelsUnfiltered = allChannels; // Same list for sidebar
                         // Find the same channel in refreshed list by ID
                         if (chId) {
                             var updated = channels.find(function (ch) {
@@ -384,7 +388,8 @@ window.onload = function () {
     // which STOPS video when minimized and redirects to home when resumed
 };
 
-var allChannels = [];
+var allChannels = [];          // ALL channels — used for channel up/down navigation
+var _allChannelsUnfiltered = []; // ALL channels (subscribed + unsubscribed) — for sidebar display
 var currentIndex = -1;
 var _lastAttemptedChannel = null; // Tracks the current channel for retry
 var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
@@ -400,16 +405,15 @@ async function loadChannelList(lookupName = null) {
         let response = await BBNL_API.getChannelList();
 
         if (Array.isArray(response)) {
-            // Only keep subscribed channels for navigation
-            var subscribedChannels = BBNL_API.getSubscribedChannels(response);
-            var channelsForNav = subscribedChannels.length > 0 ? subscribedChannels : response;
-            // Sort channels by LCN (channelno) for proper prev/next navigation
-            allChannels = channelsForNav.sort(function (a, b) {
+            // Store ALL channels for navigation and sidebar display
+            allChannels = response.slice().sort(function (a, b) {
                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                 return aNo - bNo;
             });
-            console.log("Player: Loaded " + allChannels.length + " subscribed channels for zapping (sorted by LCN).");
+            _allChannelsUnfiltered = allChannels; // Same list for sidebar
+
+            console.log("Player: Loaded " + allChannels.length + " channels for navigation and sidebar.");
 
             // IF lookupName is provided, find it and play
             if (lookupName) {
@@ -460,18 +464,17 @@ async function loadChannelList(lookupName = null) {
                     try {
                         var freshData = await BBNL_API.getChannelList();
                         if (Array.isArray(freshData) && freshData.length > 0) {
-                            // Only keep subscribed channels for navigation
-                            var subscribedFresh = BBNL_API.getSubscribedChannels(freshData);
-                            var navFresh = subscribedFresh.length > 0 ? subscribedFresh : freshData;
-                            allChannels = navFresh.sort(function (a, b) {
+                            // Update ALL channels for navigation and sidebar
+                            allChannels = freshData.slice().sort(function (a, b) {
                                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                                 return aNo - bNo;
                             });
+                            _allChannelsUnfiltered = allChannels; // Same list for sidebar
 
-                            // Update sidebar with expiry data
+                            // Update sidebar with ALL channels
                             if (sidebarState && sidebarState.allChannelsCache) {
-                                sidebarState.allChannelsCache = allChannels;
+                                sidebarState.allChannelsCache = _allChannelsUnfiltered;
                             }
 
                             // Update current channel expiry display
@@ -499,15 +502,10 @@ function updateExpiryDisplay(channel) {
     var uiExpiry = document.getElementById("ui-expiry");
     if (!uiExpiry) return;
 
-    var channelPrice = parseFloat(channel.chprice || channel.chPrice || channel.price || 0);
-
     // Remove all previous expiry classes
     uiExpiry.classList.remove('expiry-free', 'expiry-active', 'expiry-warning', 'expiry-urgent', 'expiry-critical', 'expiry-expired');
 
-    if (channelPrice === 0) {
-        uiExpiry.innerText = "N/A";
-        uiExpiry.classList.add('expiry-free');
-    } else if (channel.expirydate && channel.expirydate.trim() !== "") {
+    if (channel.expirydate && String(channel.expirydate).trim() !== "") {
         var expiryDate = new Date(channel.expirydate);
         var today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -536,8 +534,8 @@ function updateExpiryDisplay(channel) {
         }
         console.log("[Player] Expiry updated: " + channel.expirydate + " (" + diffDays + " days)");
     } else {
-        uiExpiry.innerText = "Active";
-        uiExpiry.classList.add('expiry-active');
+        uiExpiry.innerText = "N/A";
+        uiExpiry.classList.add('expiry-free');
     }
 }
 
@@ -658,20 +656,6 @@ function setupPlayer(channel) {
         }
     }
 
-    // Update ui-subscription (info bar center section)
-    if (uiSubscription) {
-        // Remove existing classes
-        uiSubscription.classList.remove('subscribed-yes', 'subscribed-no');
-
-        if (isSubscribed) {
-            uiSubscription.innerText = "Yes";
-            uiSubscription.classList.add('subscribed-yes');
-        } else {
-            uiSubscription.innerText = "No";
-            // subscribed-no is default styling (red)
-        }
-    }
-
     // Update Price display
     const uiPrice = document.getElementById("ui-price");
     if (uiPrice) {
@@ -681,8 +665,7 @@ function setupPlayer(channel) {
             uiPrice.innerText = "₹" + priceVal.toFixed(2);
             uiPrice.classList.add('price-paid');
         } else {
-            uiPrice.innerText = "Free";
-            // Default green color for Free
+            uiPrice.innerText = "₹0.00";
         }
     }
 
@@ -1022,7 +1005,6 @@ function changeChannel(step) {
     if (nextIndex >= allChannels.length) nextIndex = 0;
     if (nextIndex < 0) nextIndex = allChannels.length - 1;
 
-    // Set currentIndex BEFORE calling setupPlayer — this is the authoritative index
     currentIndex = nextIndex;
 
     var nextCh = allChannels[nextIndex];
@@ -1145,8 +1127,9 @@ async function initializeSidebar() {
  * Load languages dynamically from channel data
  */
 async function loadLanguagesFromChannels() {
-    // Channels are already loaded by loadChannelList() before initializeSidebar() is called
-    if (!allChannels || allChannels.length === 0) {
+    // Use ALL channels (including unsubscribed) so all languages appear in sidebar
+    var channelsForLangs = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+    if (!channelsForLangs || channelsForLangs.length === 0) {
         return;
     }
 
@@ -1190,9 +1173,9 @@ async function loadLanguagesFromChannels() {
         console.warn("[Sidebar] Failed to get languages from API:", e);
     }
 
-    // Fallback: Extract unique languages from channel data
+    // Fallback: Extract unique languages from ALL channel data (including unsubscribed)
     var languageSet = new Set();
-    allChannels.forEach(function(ch) {
+    channelsForLangs.forEach(function(ch) {
         // Try multiple possible language fields
         var lang = ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '';
         if (lang && lang.trim() !== '') {
@@ -1344,6 +1327,20 @@ function buildCategoriesForLanguage() {
 }
 
 /**
+ * Find index of the currently playing channel in sidebarState.channels
+ * Used so the sidebar opens with focus on the current channel, not the first one.
+ */
+function findCurrentChannelInSidebar() {
+    if (!_lastAttemptedChannel || sidebarState.channels.length === 0) return 0;
+    var chId = _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || "";
+    if (!chId) return 0;
+    var idx = sidebarState.channels.findIndex(function (ch) {
+        return (ch.channelno || ch.urno || ch.chid || "") === chId;
+    });
+    return idx >= 0 ? idx : 0;
+}
+
+/**
  * Get channels filtered by current language
  */
 function getFilteredChannelsByLanguage() {
@@ -1478,20 +1475,23 @@ function filterChannelsByCategory() {
 }
 
 /**
- * Load channels for sidebar (uses existing allChannels from player)
+ * Load channels for sidebar (uses ALL channels — subscribed + unsubscribed)
+ * Sidebar displays all channels; playback is controlled by subscription check in setupPlayer.
  */
 function loadSidebarChannels() {
-    if (!allChannels || allChannels.length === 0) {
+    // Use unfiltered list for sidebar (all channels visible)
+    var channelsForSidebar = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+    if (!channelsForSidebar || channelsForSidebar.length === 0) {
         return;
     }
 
-    // Cache all channels
-    sidebarState.allChannelsCache = allChannels;
+    // Cache ALL channels for sidebar filtering (language/category)
+    sidebarState.allChannelsCache = channelsForSidebar;
 
     // Build categories for current language
     buildCategoriesForLanguage();
-    
-    console.log("[Sidebar] Loaded", allChannels.length, "channels");
+
+    console.log("[Sidebar] Loaded", channelsForSidebar.length, "channels (all for display)");
 }
 
 /**
@@ -1622,8 +1622,9 @@ function openSidebar() {
         var firstChannel = document.querySelector('.channel-item');
         if (firstChannel) {
             sidebarState.currentLevel = 'channels';
-            sidebarState.channelIndex = 0;
-            focusChannelItem(0);
+            var currentChIdx = findCurrentChannelInSidebar();
+            sidebarState.channelIndex = currentChIdx;
+            focusChannelItem(currentChIdx);
         }
     } else {
         var firstCat = document.querySelector('.category-item');
@@ -1898,10 +1899,11 @@ function handleSidebarKeydown(e) {
                 var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
                 
                 if (categoriesHidden) {
-                    // Categories hidden - go directly to first channel
+                    // Categories hidden - go directly to current channel
                     sidebarState.currentLevel = 'channels';
-                    sidebarState.channelIndex = 0;
-                    focusChannelItem(0);
+                    var currentChIdx = findCurrentChannelInSidebar();
+                    sidebarState.channelIndex = currentChIdx;
+                    focusChannelItem(currentChIdx);
                 } else {
                     // Categories visible - go to first category
                     sidebarState.currentLevel = 'categories';
@@ -1965,10 +1967,11 @@ function handleSidebarKeydown(e) {
                     focusCategoryItem(newCatIdx);
                     selectCategory(newCatIdx);
                 } else {
-                    // At last category, move to first channel
+                    // At last category, move to current channel
                     sidebarState.currentLevel = 'channels';
-                    sidebarState.channelIndex = 0;
-                    focusChannelItem(0);
+                    var currentChIdx = findCurrentChannelInSidebar();
+                    sidebarState.channelIndex = currentChIdx;
+                    focusChannelItem(currentChIdx);
                 }
                 e.preventDefault();
                 handled = true;
@@ -1977,10 +1980,11 @@ function handleSidebarKeydown(e) {
             case 13: // ENTER
                 // Select category (already highlighted, just confirm)
                 selectCategory(currentCatIndex);
-                // Move to channels
+                // Move to channels — focus on currently playing channel
                 sidebarState.currentLevel = 'channels';
-                sidebarState.channelIndex = 0;
-                focusChannelItem(0);
+                var currentChIdx = findCurrentChannelInSidebar();
+                sidebarState.channelIndex = currentChIdx;
+                focusChannelItem(currentChIdx);
                 e.preventDefault();
                 handled = true;
                 break;
@@ -2676,34 +2680,26 @@ function showChannelNotFound(number) {
     var container = document.getElementById('player-container');
     if (!container) return;
 
-    var notFoundDisplay = document.getElementById('channel-not-found');
-    if (!notFoundDisplay) {
-        notFoundDisplay = document.createElement('div');
-        notFoundDisplay.id = 'channel-not-found';
-        notFoundDisplay.style.cssText = `
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: #fff;
-            padding: 30px 50px;
-            border-radius: 15px;
-            font-size: 24px;
-            z-index: 10000;
-            text-align: center;
-            border: 2px solid rgba(255, 68, 68, 0.5);
-        `;
-        container.appendChild(notFoundDisplay);
+    // Toast notification — bottom-center, auto-dismisses after 2.5s
+    var toast = document.getElementById('channel-not-found');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'channel-not-found';
+        toast.style.cssText = 'position:absolute; bottom:120px; left:50%; transform:translateX(-50%);' +
+            'background:rgba(30,30,30,0.95); color:#fff; padding:16px 40px; border-radius:40px;' +
+            'font-size:22px; z-index:10000; text-align:center; white-space:nowrap;' +
+            'border:1px solid rgba(255,68,68,0.5); pointer-events:none;';
+        container.appendChild(toast);
     }
 
-    notFoundDisplay.innerHTML = '<div style="color: #ff4444; font-size: 36px; margin-bottom: 10px;">Channel ' + number + '</div><div style="color: #aaa;">Not Found</div>';
-    notFoundDisplay.style.display = 'block';
+    toast.textContent = 'Channel ' + number + ' is not available';
+    toast.style.display = 'block';
+    toast.style.opacity = '1';
 
-    // Auto-hide after 2 seconds
-    setTimeout(function () {
-        notFoundDisplay.style.display = 'none';
-    }, 2000);
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(function () {
+        toast.style.display = 'none';
+    }, 2500);
 }
 
 // ==========================================

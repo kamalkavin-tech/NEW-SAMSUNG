@@ -37,8 +37,63 @@
             window.location.replace("login.html");
             return;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
+    }
 })();
+
+// ==========================================
+// CUSTOM CONFIRM POPUP - Replaces native confirm()
+// Header shows: "Fo-Fi TV - Settings"
+// ==========================================
+function showConfirmPopup(message, onYes) {
+    var overlay = document.getElementById('settings-popup-overlay');
+    var msgEl = document.getElementById('settings-popup-msg');
+    var yesBtn = document.getElementById('settings-popup-yes');
+    var noBtn = document.getElementById('settings-popup-no');
+    if (!overlay || !msgEl || !yesBtn || !noBtn) {
+        // Fallback
+        if (confirm(message) && onYes) onYes();
+        return;
+    }
+    msgEl.textContent = message;
+    overlay.style.display = 'flex';
+    noBtn.focus(); // Default focus on No (safer for logout)
+
+    function closePopup(confirmed) {
+        overlay.style.display = 'none';
+        yesBtn.removeEventListener('click', onYesClick);
+        noBtn.removeEventListener('click', onNoClick);
+        document.removeEventListener('keydown', onPopupKey);
+        if (confirmed && onYes) onYes();
+    }
+
+    function onYesClick() { closePopup(true); }
+    function onNoClick() { closePopup(false); }
+
+    function onPopupKey(e) {
+        if (e.keyCode === 13 || e.keyCode === 65376) {
+            e.preventDefault();
+            // Let the focused button handle Enter via click
+            var focused = document.activeElement;
+            if (focused === yesBtn) closePopup(true);
+            else closePopup(false);
+        } else if (e.keyCode === 10009 || e.keyCode === 461) { // Back key
+            e.preventDefault();
+            closePopup(false);
+        } else if (e.keyCode === 37) { // Left → focus Yes
+            yesBtn.focus();
+        } else if (e.keyCode === 39) { // Right → focus No
+            noBtn.focus();
+        }
+    }
+
+    yesBtn.addEventListener('click', onYesClick);
+    noBtn.addEventListener('click', onNoClick);
+    document.addEventListener('keydown', onPopupKey);
+}
 
 // Navigation state
 var settingsNav = {
@@ -391,15 +446,10 @@ function switchSection(section) {
 // ==========================================
 
 async function handleLogout() {
-    var confirmLogout = confirm('Are you sure you want to logout?');
-    if (confirmLogout) {
-        console.log("[Settings] User confirmed logout - stopping all background processes");
+    showConfirmPopup('Are you sure you want to logout?', async function () {
+        console.log("[Settings] User confirmed EXPLICIT logout");
 
-        // 1. Save critical data BEFORE API logout
-        // BBNL_API.logout() calls CacheManager.clear() which removes bbnl_user.
-        // We must preserve bbnl_user and hasLoggedInOnce so relaunch skips login.
-        var savedUser = localStorage.getItem('bbnl_user');
-        var savedHasLoggedIn = localStorage.getItem('hasLoggedInOnce');
+        // 1. Save device-level data BEFORE API logout (these survive logout — device identity)
         var savedMac = localStorage.getItem('macAddress');
         var savedDeviceId = localStorage.getItem('deviceId');
 
@@ -411,7 +461,7 @@ async function handleLogout() {
         }
         console.log("[Settings] All timers/intervals cleared");
 
-        // 3. Call API logout (server-side cleanup + cache clear)
+        // 3. Call API logout (server-side session cleanup)
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
             try {
                 await BBNL_API.logout();
@@ -420,53 +470,37 @@ async function handleLogout() {
             }
         }
 
-        // 4. Restore critical data that CacheManager.clear() removed
-        if (savedUser) localStorage.setItem('bbnl_user', savedUser);
-        if (savedHasLoggedIn) localStorage.setItem('hasLoggedInOnce', savedHasLoggedIn);
+        // 4. CLEAR ALL localStorage — this is an EXPLICIT logout
+        // Remove hasLoggedInOnce and bbnl_user so login page shows on next launch
+        localStorage.clear();
+        console.log("[Settings] localStorage fully cleared (explicit logout)");
+
+        // 5. Restore device-level data only (not user session data)
         if (savedMac) localStorage.setItem('macAddress', savedMac);
         if (savedDeviceId) localStorage.setItem('deviceId', savedDeviceId);
 
-        // 5. Clear everything else from localStorage (cache data, etc.)
-        var keysToKeep = ['hasLoggedInOnce', 'macAddress', 'deviceId', 'bbnl_user'];
-        var keysToRemove = [];
-
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
-            if (keysToKeep.indexOf(key) === -1) {
-                keysToRemove.push(key);
-            }
-        }
-
-        keysToRemove.forEach(function(key) {
-            localStorage.removeItem(key);
-        });
-
-        console.log("[Settings] localStorage cleared (kept:", keysToKeep.join(', '), ")");
-        console.log("[Settings] bbnl_user preserved:", !!localStorage.getItem('bbnl_user'));
-        console.log("[Settings] hasLoggedInOnce preserved:", localStorage.getItem('hasLoggedInOnce'));
-
-        // 6. Clear all sessionStorage (so FoFi auto-plays on relaunch)
+        // 6. Clear all sessionStorage
         sessionStorage.clear();
         console.log("[Settings] sessionStorage cleared");
 
-        console.log("[Settings] Logout complete - exiting application");
+        console.log("[Settings] Logout complete - user session destroyed, login page will show on next launch");
 
         // 7. Exit the Tizen application completely
-        // On relaunch: hasLoggedInOnce=true → skip login → home → FoFi plays
+        // On relaunch: hasLoggedInOnce is GONE → login page shows (correct for explicit logout)
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
                 console.log("[Settings] Exiting Tizen application");
                 tizen.application.getCurrentApplication().exit();
             } else {
-                // For browser testing - simulate relaunch by going to home
-                console.log("[Settings] Not on Tizen - redirecting to home (simulating relaunch)");
-                window.location.href = "home.html";
+                // For browser testing - redirect to login
+                console.log("[Settings] Not on Tizen - redirecting to login");
+                window.location.href = "login.html";
             }
         } catch (e) {
             console.log("[Settings] Exit failed:", e);
-            window.location.href = "home.html";
+            window.location.href = "login.html";
         }
-    }
+    }); // end showConfirmPopup callback
 }
 
 // ==========================================

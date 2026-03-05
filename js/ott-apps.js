@@ -20,7 +20,11 @@
             window.location.replace("login.html");
             return;
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
+    }
 })();
 
 var focusables = [];

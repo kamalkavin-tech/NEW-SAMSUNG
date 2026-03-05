@@ -490,7 +490,7 @@ video {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
-    z-index: 1003;
+    z-index: 2100; /* Above error popup (2000) so sidebar overrides it */
     display: flex;
     flex-direction: column;
     overflow: hidden;

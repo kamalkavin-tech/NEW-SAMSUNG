@@ -29,7 +29,9 @@
             return;
         }
     } catch (e) {
-        console.error("[Auth] Error validating session:", e);
+        console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
     }
 })();
 

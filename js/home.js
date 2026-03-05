@@ -66,7 +66,9 @@ var fofiShouldAutoPlay = false;
             return;
         }
     } catch (e) {
-        console.error("[Auth] Error validating session:", e);
+        console.error("[Auth] Error validating session (corrupted data?) - redirecting to login:", e);
+        window.location.replace("login.html");
+        return;
     }
 
     // Clear browser history to prevent back navigation to login pages
@@ -1760,7 +1762,7 @@ function sendTRPDataOnLoad() {
         return;
     }
 
-    TRPDataAPI.sendTRPData("", "home_page_view")
+    TRPDataAPI.sendTRPData("")
         .then(function (response) {
             console.log("[HOME] TRP data sent successfully:", response);
         })
@@ -2148,21 +2150,10 @@ function playFoFiChannel() {
             // NO FALLBACK: Only play FoFi channel, never fall back to other channels
 
             if (fofiChannel) {
-                // Check if FoFi channel is subscribed — only play subscribed channels
-                var isSubscribed = fofiChannel.subscribed === "yes" ||
-                    fofiChannel.subscribed === "1" ||
-                    fofiChannel.subscribed === "true" ||
-                    fofiChannel.subscribed === true ||
-                    fofiChannel.subscribed === 1;
-
-                if (isSubscribed) {
-                    console.log("[HOME] ✓ FoFi channel is subscribed, playing:", fofiChannel.chtitle, "| Stream:", fofiChannel.streamlink);
-                    sessionStorage.setItem('fofi_autoplay_done', 'true');
-                    BBNL_API.playChannel(fofiChannel);
-                } else {
-                    console.log("[HOME] ❌ FoFi channel found but NOT subscribed:", fofiChannel.chtitle, "| subscribed:", fofiChannel.subscribed);
-                    sessionStorage.setItem('fofi_autoplay_done', 'true');
-                }
+                // Play FoFi channel on app launch - NO subscription restriction for FoFi
+                console.log("[HOME] ✓ Playing FoFi channel:", fofiChannel.chtitle, "| Stream:", fofiChannel.streamlink);
+                sessionStorage.setItem('fofi_autoplay_done', 'true');
+                BBNL_API.playChannel(fofiChannel);
             } else {
                 console.log("[HOME] ❌ No FoFi channel available for auto-play");
                 sessionStorage.setItem('fofi_autoplay_done', 'true');
@@ -2170,6 +2161,7 @@ function playFoFiChannel() {
         })
         .catch(function (error) {
             console.error("[HOME] ❌ FoFi auto-play failed:", error);
+            sessionStorage.setItem('fofi_autoplay_done', 'true');
         });
 }
 
