@@ -299,10 +299,12 @@ function initErrorModal() {
         tryAgainBtn.addEventListener("click", function (e) {
             e.preventDefault();
             hideErrorModal();
+            initializePhoneInput();
             var phoneInput = document.getElementById("phoneInput");
             if (phoneInput) {
-                phoneInput.value = "";
                 phoneInput.focus();
+                var phoneIdx = Array.from(focusables).indexOf(phoneInput);
+                if (phoneIdx >= 0) currentFocus = phoneIdx;
             }
         });
     }
@@ -327,11 +329,9 @@ function initErrorModal() {
     });
 }
 
-function showLoginError(title, message) {
+function showLoginError(title) {
     var titleEl = document.querySelector('#errorModal .error-title');
-    var msgEl = document.querySelector('#errorModal .error-message');
     if (titleEl) titleEl.textContent = title;
-    if (msgEl) msgEl.textContent = message;
     showErrorModal();
 }
 
@@ -404,7 +404,7 @@ function setupNumberOnlyInputs() {
 
         // Filter on input (for paste/auto-fill) + validate 10 digits for OTP button
         phoneInput.addEventListener("input", function (e) {
-            this.value = this.value.replace(/[^0-9]/g, '');
+            this.value = this.value.replace(/[^0-9]/g, '').substring(0, 10);
             
             // Enable/disable Get OTP button based on 10 digit validation
             if (getOtpBtn) {
@@ -663,8 +663,13 @@ document.addEventListener("keydown", function (e) {
             if (errorModal && errorModal.classList.contains("show")) {
                 e.preventDefault();
                 hideErrorModal();
+                initializePhoneInput();
                 var phoneInput = document.getElementById("phoneInput");
-                if (phoneInput) phoneInput.focus();
+                if (phoneInput) {
+                    phoneInput.focus();
+                    var phoneIdx = Array.from(focusables).indexOf(phoneInput);
+                    if (phoneIdx >= 0) currentFocus = phoneIdx;
+                }
             } else if (isInput) {
                 active.blur(); // Hide keyboard if open
                 e.preventDefault(); // Prevent app exit if keyboard was just open
@@ -751,10 +756,12 @@ function handleOK() {
         // Properly clear and reinitialize phone input
         initializePhoneInput();
 
-        // Set focus
+        // Set focus and sync currentFocus
         var phoneInput = document.getElementById("phoneInput");
         if (phoneInput) {
             phoneInput.focus();
+            var phoneIdx = Array.from(focusables).indexOf(phoneInput);
+            if (phoneIdx >= 0) currentFocus = phoneIdx;
         }
 
         console.log("[ErrorModal] Try Again - Phone input cleared and reinitialized");
@@ -819,19 +826,15 @@ function handleOK() {
                         console.log("[Login] OTP sent successfully via /login");
                         // Keep button disabled and flag set - we're navigating away
 
-                        // Store full user session from /login response
-                        // This sets bbnl_user in localStorage (required by home page auth check)
+                        // Store session from /login response (only API call made)
                         AuthAPI.setSession(response);
 
-                        // Store OTP code from API response for client-side verification
-                        // /login returns OTP in response.body[0].otpcode
+                        // Store OTP for client-side verification on verify page
                         var serverOTP = "";
                         if (response.body && response.body.length > 0 && response.body[0].otpcode) {
                             serverOTP = String(response.body[0].otpcode);
                         }
                         sessionStorage.setItem('_pendingOTP', serverOTP);
-                        console.log("[Login] OTP stored for verification");
-
                         sessionStorage.setItem('_pendingMobile', val);
 
                         // Navigate to verify page (mobile passed via sessionStorage, not URL)
@@ -844,7 +847,9 @@ function handleOK() {
                         btn.classList.add('enabled');
 
                         console.error("[Login] OTP request failed:", response);
-                        showLoginError("Request Failed", "OTP request failed. Please try again.");
+                        var errTitle = (response && response.status && response.status.err_msg)
+                            ? response.status.err_msg : "Request Failed";
+                        showLoginError(errTitle);
                     }
                 })
                 .catch(function (error) {
@@ -853,7 +858,7 @@ function handleOK() {
                     btn.innerText = originalText;
                     btn.disabled = false;
                     btn.classList.add('enabled');
-                    showLoginError("Connection Error", "No internet connection. Please try again.");
+                    showLoginError("Connection Error");
                 });
         } else {
             // Show error modal for invalid phone number length
@@ -898,38 +903,25 @@ function handleOK() {
             btn.innerText = "Verifying...";
             btn.disabled = true;
 
-            console.log("[Verify] Verifying OTP...");
-
-            // CLIENT-SIDE OTP VERIFICATION
-            // Compare entered OTP against the stored OTP from API response
-            // This avoids calling /loginOtp which generates a NEW OTP instead of verifying
+            // CLIENT-SIDE OTP VERIFICATION (no second API call)
             var storedOTP = sessionStorage.getItem('_pendingOTP') || "";
-            console.log("[Verify] Comparing entered OTP against stored OTP");
+            console.log("[Verify] Comparing OTP client-side...");
 
             if (storedOTP && fullOTP === storedOTP) {
-                // OTP matches - login successful
-                // Session already saved by requestOTP (/login response)
+                // OTP matches — session already stored by /login response
                 sessionStorage.removeItem('_pendingOTP');
+                sessionStorage.removeItem('_pendingMobile');
                 localStorage.setItem('isLoggedIn', 'true');
                 localStorage.setItem('mobile', mobile);
                 localStorage.setItem('loginTime', new Date().toISOString());
-
-                // CRITICAL: Set hasLoggedInOnce - this should NEVER be removed even on logout
                 localStorage.setItem('hasLoggedInOnce', 'true');
                 console.log("[Verify] OTP verified successfully - navigating to home");
-
-                // Navigate to home page
                 window.location.replace("home.html");
             } else {
-                // OTP does not match - reject login
-                console.log("[Verify] OTP mismatch - rejecting");
                 otpVerifyInProgress = false;
                 btn.innerText = "Verify";
                 btn.disabled = false;
-
                 showErrorPopup("Invalid OTP");
-
-                // Clear OTP inputs for re-entry
                 for (var j = 1; j <= 4; j++) {
                     document.getElementById('otp' + j).value = '';
                 }
@@ -963,13 +955,12 @@ function handleNumberPadInput(value) {
         } else if (value === 'backspace') {
             active.value = active.value.slice(0, -1);
         } else {
-            // Append value (if maxlength allow)
-            if (active.maxLength > 0 && active.value.length >= active.maxLength) {
-                // Determine if we should move to next input (for OTP)
-                if (active.classList.contains('otp-input')) {
-                    // If filled, try to move next? 
-                    // Usually remote keys handle separate focus, but valid point.
-                }
+            // Enforce length limit without relying on maxlength attribute
+            // (maxlength triggers a Tizen TV system popup "The box is full")
+            var maxLen = active.classList.contains('otp-input') ? 1
+                       : active.id === 'phoneInput' ? 10
+                       : -1;
+            if (maxLen > 0 && active.value.length >= maxLen) {
                 return;
             }
             active.value += value;
@@ -1125,13 +1116,6 @@ function handleResendOTP() {
 
             if (response && response.status && Number(response.status.err_code) === 0) {
                 console.log("[Verify] OTP resent successfully via /loginOtp");
-
-                // Store the NEW OTP code from resend response
-                // /loginOtp returns {otpcode, msg} in response.body[0]
-                if (response.body && response.body.length > 0 && response.body[0].otpcode) {
-                    sessionStorage.setItem('_pendingOTP', String(response.body[0].otpcode));
-                    console.log("[Verify] New OTP stored after resend");
-                }
 
                 // Clear OTP inputs for fresh entry
                 clearOTPInputs();

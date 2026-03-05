@@ -11,6 +11,10 @@
     <script>
         (function () {
             try {
+                // If _pendingOTP exists, user came from login flow — stay on verify page
+                if (sessionStorage.getItem("_pendingOTP")) return;
+
+                // No pending mobile — returning user, redirect to home if session is valid
                 if (localStorage.getItem("hasLoggedInOnce") === "true") {
                     var ud = localStorage.getItem("bbnl_user");
                     if (ud && JSON.parse(ud).userid) {

@@ -181,6 +181,9 @@ window.onload = function () {
         });
     }
 
+    // Load FoFi TV logo from API
+    loadFoFiLogo();
+
     // Auto-play FoFi channel (LCN 999) after 3 seconds - ONLY on fresh app launch
     if (fofiShouldAutoPlay) {
         console.log("[HOME] ✅ FoFi auto-play enabled - starting 3 second timer...");
@@ -2020,23 +2023,18 @@ document.addEventListener('DOMContentLoaded', function () {
  * @param {Number} lcn - The LCN number to play
  */
 function showSearchNotFound(msg) {
-    var searchInput = document.getElementById('searchInput');
-    if (!searchInput) return;
-    var bar = searchInput.closest('.search-bar');
-    if (!bar) return;
-    // Remove any existing message
-    var existing = bar.querySelector('.search-not-found');
+    // Remove any existing toast
+    var existing = document.getElementById('search-toast');
     if (existing) existing.remove();
-    // Show message below search bar
-    var msgEl = document.createElement('div');
-    msgEl.className = 'search-not-found';
-    msgEl.textContent = msg;
-    msgEl.style.cssText = 'position:absolute;top:100%;left:0;right:0;text-align:center;color:#ff4444;font-size:14px;font-weight:600;padding:8px 0;white-space:nowrap;';
-    bar.style.position = 'relative';
-    bar.appendChild(msgEl);
-    // Auto-remove after 3 seconds
+
+    var toast = document.createElement('div');
+    toast.id = 'search-toast';
+    toast.textContent = msg;
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.95);color:#ff4444;font-size:22px;font-weight:600;padding:18px 48px;border-radius:12px;border:2px solid #ff4444;z-index:9999;white-space:nowrap;pointer-events:none;';
+    document.body.appendChild(toast);
+
     setTimeout(function () {
-        if (msgEl.parentNode) msgEl.remove();
+        if (toast.parentNode) toast.remove();
     }, 3000);
 }
 
@@ -2112,6 +2110,30 @@ function autoTuneDefaultChannel() {
             console.error("[HOME] Auto-tune failed:", error);
             sessionStorage.setItem('autoTuneCompleted', 'true');
         });
+}
+
+/**
+ * Load FoFi TV logo from API and display in sidebar
+ */
+function loadFoFiLogo() {
+    BBNL_API.getFoFiLogo().then(function (response) {
+        if (response && response.status && Number(response.status.err_code) === 0
+            && response.body && response.body.logo_path) {
+            var logoImg = document.getElementById('fofitv-logo');
+            var fallbackText = document.getElementById('brand-text-fallback');
+            if (logoImg) {
+                logoImg.src = response.body.logo_path;
+                logoImg.style.display = 'block';
+                logoImg.onerror = function () {
+                    logoImg.style.display = 'none';
+                    if (fallbackText) fallbackText.style.display = 'block';
+                };
+                if (fallbackText) fallbackText.style.display = 'none';
+            }
+        }
+    }).catch(function () {
+        console.warn("[HOME] FoFi logo fetch failed, using fallback text.");
+    });
 }
 
 /**

@@ -463,7 +463,8 @@ const API_ENDPOINTS = {
     APP_LOCK: `${API_BASE_URL_PROD}/applock`,
     TRP_DATA: `${API_BASE_URL_PROD}/trpdata`,
     APP_VERSION: `${API_BASE_URL_PROD}/appversion`,
-    ERROR_IMAGES: `${API_BASE_URL_PROD}/errorimages`
+    ERROR_IMAGES: `${API_BASE_URL_PROD}/errorimages`,
+    FOFITV_LOGO: `${API_BASE_URL_PROD}/fofitv_logo`
 };
 
 // Device info - populated dynamically from Samsung TV APIs on real TV
@@ -1192,13 +1193,23 @@ const AuthAPI = {
     },
 
     verifyOTP: async function (mobile, otpcode) {
+        const device = DeviceInfo.getDeviceInfo();
+        const ipv6 = DeviceInfo.getIPv6();
         const payload = {
             mobile: mobile,
-            otpcode: otpcode
+            otpcode: otpcode,
+            mac_address: device.mac_address,
+            device_type: device.device_type,
+            device_id: device.device_id,
+            ip_address: device.ip_address,
+            ipv6_address: ipv6,
+            getuserdet: "",
+            devdets: DeviceInfo.getDevDets(),
+            app_package: APP_ID
         };
 
         console.log("[AuthAPI] Verifying OTP...");
-        const response = await apiCall(API_ENDPOINTS.LOGIN_OTP, payload);
+        const response = await apiCall(API_ENDPOINTS.LOGIN, payload);
 
         if (response && response.status && Number(response.status.err_code) === 0) {
             this.setSession(response);
@@ -2245,6 +2256,27 @@ const AppVersionAPI = {
 };
 
 // ==========================================
+// FOFITV LOGO API
+// ==========================================
+const FoFiLogoAPI = {
+    getFoFiLogo: async function () {
+        const user = AuthAPI.getUserData();
+        const device = DeviceInfo.getDeviceInfo();
+
+        const payload = {
+            userid: user && user.userid ? user.userid : _getSessionUser().userid,
+            mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
+            ip_address: device.ip_address,
+            mac_address: device.mac_address,
+            app_package: APP_ID
+        };
+
+        console.log("[FoFiLogoAPI] Fetching FoFi TV logo...");
+        return await apiCall(API_ENDPOINTS.FOFITV_LOGO, payload);
+    }
+};
+
+// ==========================================
 // OTT APPS API
 // ==========================================
 const OTTAppsAPI = {
@@ -2481,6 +2513,9 @@ const BBNL_API = {
 
     // Feedback Methods
     submitFeedback: FeedbackAPI.submitFeedback.bind(FeedbackAPI),
+
+    // FoFi Logo Methods
+    getFoFiLogo: FoFiLogoAPI.getFoFiLogo.bind(FoFiLogoAPI),
 
     // App Version Methods
     getAppVersion: AppVersionAPI.getAppVersion.bind(AppVersionAPI),
@@ -2733,6 +2768,15 @@ window.addEventListener('beforeunload', function () {
 
 document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden' && !_isPageUnloading) {
+        // Skip exit if user is in the middle of the login/verify auth flow.
+        // On some Tizen TV models visibilitychange fires before beforeunload during
+        // page navigation, which would exit the app and wipe sessionStorage mid-flow.
+        var _currentPage = window.location.pathname.split('/').pop() || '';
+        if (_currentPage === 'login.html' || _currentPage === 'verify.html') {
+            console.log("[App] Skipping exit - auth flow in progress on:", _currentPage);
+            return;
+        }
+
         console.log("[App] App going to background (HOME pressed) - performing cleanup...");
         _wasBackgrounded = true;
 
