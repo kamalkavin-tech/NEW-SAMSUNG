@@ -53,8 +53,7 @@
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
     <tizen:privilege name="http://tizen.org/privilege/volume.set"/>
     
-    <!-- FTA/DVB Channel Access (for broadcast TV tuner) -->
-    <tizen:privilege name="http://tizen.org/privilege/tv.channel"/>
+    <!-- TV Window display -->
     <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
     
     <!-- Media capture (optional, for future features) -->
@@ -78,6 +77,9 @@
     <!-- For accessing device MAC/IP address -->
     <tizen:privilege name="http://tizen.org/privilege/system"/>
     
+    <!-- Screen size feature (required for Samsung TV Store) -->
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+
     <!-- Application settings -->
     <tizen:setting
         screen-orientation="landscape"

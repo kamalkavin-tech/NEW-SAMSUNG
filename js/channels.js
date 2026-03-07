@@ -1523,7 +1523,7 @@ function handleEnter(el) {
 
         if (!streamUrl || streamUrl.trim() === "") {
             console.warn("No stream URL available for:", channelName);
-            alert("Stream not available for this channel");
+            console.warn("Stream not available for this channel");
             return;
         }
 

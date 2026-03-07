@@ -315,7 +315,7 @@ function initErrorModal() {
             e.preventDefault();
             hideErrorModal();
             // You can add navigation to support page here
-            alert("Please contact support at: support@bbnl.co.in");
+            console.log("Please contact support at: support@bbnl.co.in");
         });
     }
 
@@ -826,8 +826,9 @@ function handleOK() {
                         console.log("[Login] OTP sent successfully via /login");
                         // Keep button disabled and flag set - we're navigating away
 
-                        // Store session from /login response (only API call made)
-                        AuthAPI.setSession(response);
+                        // Store full response for setSession after OTP verification
+                        // Do NOT call setSession here — it sets bbnl_user which triggers early auth redirect
+                        sessionStorage.setItem('_pendingSession', JSON.stringify(response));
 
                         // Store OTP for client-side verification on verify page
                         var serverOTP = "";
@@ -908,9 +909,14 @@ function handleOK() {
             console.log("[Verify] Comparing OTP client-side...");
 
             if (storedOTP && fullOTP === storedOTP) {
-                // OTP matches — session already stored by /login response
+                // OTP matches — now save session (only after OTP verified)
+                var pendingSession = sessionStorage.getItem('_pendingSession');
+                if (pendingSession) {
+                    try { AuthAPI.setSession(JSON.parse(pendingSession)); } catch (e) {}
+                }
                 sessionStorage.removeItem('_pendingOTP');
                 sessionStorage.removeItem('_pendingMobile');
+                sessionStorage.removeItem('_pendingSession');
                 localStorage.setItem('isLoggedIn', 'true');
                 localStorage.setItem('mobile', mobile);
                 localStorage.setItem('loginTime', new Date().toISOString());

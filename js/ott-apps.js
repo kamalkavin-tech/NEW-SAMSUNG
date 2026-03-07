@@ -320,11 +320,11 @@ function handleClick(element) {
             if (pkgId && typeof tizen !== 'undefined') {
                 tizen.application.launch(pkgId);
             } else {
-                alert("Opening " + appName);
+                console.log("Opening " + appName);
             }
         } catch (e) {
             console.error("Failed to launch app:", e);
-            alert("Opening " + appName);
+            console.log("Opening " + appName);
         }
         return;
     }

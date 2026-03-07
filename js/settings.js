@@ -523,11 +523,6 @@ function loadAboutAppInfo() {
                         versionEl.innerText = versionData.appversion || "Unknown";
                     }
 
-                    var messageEl = document.getElementById('version-message');
-                    if (messageEl) {
-                        messageEl.innerText = versionData.verchngmsg || "No message available";
-                    }
-
                     console.log("[Settings] App version loaded:", versionData.appversion);
                 } else {
                     setAboutAppError();
@@ -545,9 +540,6 @@ function loadAboutAppInfo() {
 function setAboutAppError() {
     var versionEl = document.getElementById('software-version');
     if (versionEl) versionEl.innerText = "Error loading";
-
-    var messageEl = document.getElementById('version-message');
-    if (messageEl) messageEl.innerText = "Error loading";
 }
 
 function checkForUpdates() {

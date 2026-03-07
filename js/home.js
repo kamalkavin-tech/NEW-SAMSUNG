@@ -636,7 +636,7 @@ function handleClick(element) {
     if (appType) {
         console.log("Opening app:", appType);
         // Add your app opening logic here
-        alert("Opening " + appType);
+        console.log("Opening " + appType);
         return;
     }
 
@@ -657,13 +657,13 @@ function handleClick(element) {
     if (element.classList.contains('btn-watch')) {
         console.log("Watch Now clicked");
         // Add your watch logic here
-        alert("Starting playback...");
+        console.log("Starting playback...");
         return;
     }
 
     if (element.classList.contains('btn-add')) {
         console.log("Add to list clicked");
-        alert("Added to your list");
+        console.log("Added to your list");
         return;
     }
 
@@ -1343,7 +1343,7 @@ function renderAppsInHomeGrid(apps) {
         // Click handler - can add app launch logic later
         card.addEventListener('click', function () {
             console.log("[HOME] App clicked:", appName);
-            alert("Opening " + appName);
+            console.log("Opening " + appName);
         });
 
         container.appendChild(card);
