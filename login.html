@@ -11,6 +11,12 @@
     <script>
         (function () {
             try {
+                // Always clear FoFi flag on every app launch (login.html is the entry point).
+                // Ensures FoFi auto-plays on re-launch even if TV suspended the app
+                // instead of killing it (sessionStorage would otherwise persist).
+                sessionStorage.removeItem('fofi_autoplay_done');
+                sessionStorage.removeItem('home_init_done');
+
                 if (localStorage.getItem("hasLoggedInOnce") === "true") {
                     var ud = localStorage.getItem("bbnl_user");
                     if (ud && JSON.parse(ud).userid) {

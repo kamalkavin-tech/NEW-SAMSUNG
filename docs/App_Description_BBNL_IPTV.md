@@ -1,0 +1,181 @@
+# App Description Document
+
+## App Name
+
+**BBNL TV**
+
+## Company / Content Provider
+
+**BBNL — Bangalore Broadband Network Pvt. Ltd.**
+
+## Revision History
+
+| Version | Date       | Description               | Author       |
+|---------|------------|---------------------------|--------------|
+| 1.0     | 2026-03-07 | Initial submission        | BBNL Dev Team |
+
+**Reason for changes:**
+Initial document creation for Samsung Tizen TV App Store submission.
+
+---
+
+## Contents
+
+1. UI Structure
+2. Usage Scenario
+3. Menu & Function Description
+4. Key Policy
+5. How to Change Languages
+
+---
+
+## 1. UI Structure
+
+### Whole UI Structure
+
+```
+App Launch
+ │
+ ├── [First Launch] ──► Login Screen
+ │                         ├── Mobile Number Input (+91)
+ │                         └── Get OTP ──► OTP Verification
+ │                                              └── Verified ──► Home Screen
+ │
+ └── [Returning User] ──► Home Screen  ← auto-login, skips login
+          │
+          ├── Left Sidebar Navigation
+          │    ├── Home
+          │    ├── TV Channels
+          │    │    ├── Category Filter Pills (Entertainment, News, Sports, Kids…)
+          │    │    ├── Channel Number Search
+          │    │    └── Channel Card ──► Player
+          │    │                             ├── Full-Screen HLS Video
+          │    │                             ├── Channel Sidebar (Categories + Channel List)
+          │    │                             └── Info Bar Overlay (LCN, Name, Price, Expiry, Time)
+          │    └── Feedback
+          │
+          ├── Top Header
+          │    ├── Channel Number Search Bar
+          │    └── Settings
+          │         ├── About App (Software Version, Check for Update)
+          │         ├── Device Info (TV Model, DUID, Tizen Version, Resolution, IP, MAC, DNS)
+          │         └── Logout
+          │
+          └── Main Content Area
+               ├── Hero Banner (Dynamic Ads / Promotions from API)
+               └── Languages Grid
+                    └── Language Card ──► TV Channels
+```
+
+---
+
+## 2. Usage Scenario
+
+### 2.1 First-Time Login
+
+1. User installs and opens **BBNL IPTV** from Samsung Smart Hub.
+2. The **Login Screen** is displayed showing the device's ID, MAC Address, Gateway IP, and IPv6 address.
+3. User navigates to the **Phone Number** input field using the remote control.
+4. User enters their 10-digit BBNL-registered mobile number (India, +91).
+5. User selects **Get OTP** and presses **ENTER**.
+6. The app sends an OTP to the registered mobile number via SMS.
+7. The screen transitions to the **OTP Verification** screen.
+8. User enters the 6-digit OTP.
+9. On successful verification, the user is taken to the **Home Screen**.
+10. On all future launches, the app automatically skips login and goes directly to the Home Screen.
+
+### 2.2 Browsing and Watching Live TV
+
+1. On the **Home Screen**, the user sees a hero banner and a grid of **Language Cards** (e.g., Hindi, Tamil, Telugu, English, Kannada).
+2. User navigates to a language card using the remote control and presses **ENTER**.
+3. The **TV Channels** page opens, showing all channels for the selected language.
+4. User can filter channels by **Category** using the filter pills at the top (Entertainment, News, Sports, Kids, etc.).
+5. User can jump to a specific channel by typing its channel number in the **Search Bar**.
+6. User navigates to a channel card and presses **ENTER** to start playback.
+7. The **Player** opens in full screen; the video stream begins via HLS/AVPlay.
+8. The **Info Bar** at the bottom shows: Channel Logo, Channel Number (LCN), Channel Name, Price, Expiry, Device ID, User ID, current time, and date.
+9. User can press **LEFT** to open the **Channel Sidebar** to switch categories or select another channel.
+10. User presses **RETURN** to go back to the channel list.
+
+### 2.3 Submitting Feedback
+
+1. From the left sidebar, user selects **Feedback** and presses **ENTER**.
+2. The Feedback form shows the User ID (auto-filled from session), a 5-star rating selector, and a text area.
+3. User selects a star rating using LEFT / RIGHT and presses **ENTER**.
+4. User enters written feedback in the text area.
+5. User selects **Submit** and presses **ENTER** to send feedback to BBNL.
+
+### 2.4 Settings
+
+1. From the top header, user navigates to the **Settings** icon and presses **ENTER**.
+2. The Settings page has two panels accessible via the left sidebar:
+   - **About App**: Displays current software version; user can press **Check** to check for app updates.
+   - **Device Info**: Displays TV model, Device ID (DUID), Tizen version, screen resolution, IPv4, IPv6, Gateway IP, DNS, WiFi MAC, and connection type.
+3. User can press **Logout** to clear the session and return to the Login screen.
+
+### 2.5 Network / Service Lock
+
+1. If the user is not connected through the BBNL network, a **Service Locked** overlay is shown.
+2. The user is prompted to switch to the BBNL network and press **BACK** to retry.
+3. The app resumes normal operation once the BBNL network connection is detected.
+
+---
+
+## 3. Menu & Function Description
+
+| Menu / Screen        | Function |
+|----------------------|----------|
+| Login                | Mobile number entry (+91) for OTP-based authentication. Shows device ID, MAC, and IP info on screen. |
+| OTP Verification     | Accepts the 6-digit OTP sent to the user's mobile number to complete authentication. |
+| Home                 | Main hub displaying a hero banner (ads/promotions loaded from API) and a grid of language-based content categories. |
+| TV Channels          | Lists live TV channels filtered by language and category. Supports channel number direct search. |
+| Player               | Full-screen HLS live stream using Samsung AVPlay. Info bar shows channel details, pricing, user ID, and time. Channel sidebar allows quick switching. |
+| Language Select      | Grid of available content languages to filter the channel list on the TV Channels page. |
+| Feedback             | Star rating selector (1–5 stars) and free-text feedback form submitted to BBNL backend. |
+| Settings – About App | Displays current app software version; provides a button to check for software updates. |
+| Settings – Device Info | Displays TV model, DUID, Tizen version, screen resolution, IP addresses, MAC address, DNS, Gateway, and connection type. |
+| Logout               | Clears user session from local storage and redirects to the Login screen. |
+
+---
+
+## 4. Key Policy
+
+| Button            | Action                                                              | Remarks             |
+|-------------------|---------------------------------------------------------------------|---------------------|
+| ENTER / OK        | Confirm selection / Play channel / Submit form / Activate button    |                     |
+| UP                | Move focus upward in a list, channel grid, or sidebar               |                     |
+| DOWN              | Move focus downward in a list, channel grid, or sidebar             |                     |
+| LEFT              | Move focus left in grid / Open channel sidebar in Player            |                     |
+| RIGHT             | Move focus right in grid / Close channel sidebar in Player          |                     |
+| NUMBER (0–9)      | Direct channel number entry in Search Bar or Player dial input      |                     |
+| RETURN / BACK     | Go to previous screen / Close popup or overlay                      | Samsung mandatory   |
+| EXIT              | Display Exit Confirmation popup; confirm to close the application   | Samsung mandatory   |
+| CH UP / CH DOWN   | Switch to next / previous channel while in the Player               |                     |
+| VOLUME UP / DOWN  | Adjust playback volume                                              |                     |
+| MUTE              | Mute / unmute audio during playback                                 |                     |
+
+> No custom color key (Red / Green / Yellow / Blue) mappings are used.
+
+---
+
+## 5. How to Change Languages
+
+### Channel Language Selection
+
+The application provides TV channels in multiple Indian languages. Users can browse and filter channels by selecting a language. This is a **channel content filter** — it does not change the application interface language.
+
+| Item                | Description |
+|---------------------|-------------|
+| Feature             | Browse and filter live TV channels by language |
+| Available Languages | Hindi, Tamil, Telugu, English, Kannada, Bengali, Malayalam, and others (loaded dynamically from BBNL API) |
+| Method              | Select a language card on the Home screen or use the Language pill on the TV Channels page |
+| Effect              | The TV Channels page displays only channels available in the selected language |
+
+**Steps to browse channels by language:**
+
+1. On the **Home Screen**, navigate to the **Languages** section.
+2. Use **UP / DOWN / LEFT / RIGHT** to highlight the desired language (e.g., Hindi, Tamil, Telugu, English).
+3. Press **ENTER** to open the channel list filtered by that language.
+4. On the **TV Channels** page, use the **Language pill** at the top to switch to a different language.
+
+**Note:** The application UI is displayed in English. There is no option to change the application interface language.

@@ -19,8 +19,8 @@ S9MqQ7j3kg==</DigestValue>
 </Reference>
 <Reference URI="author-signature.xml">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>FqQec7PomMAXk5PROuFz+0cwYNhcQQcscbgKq0Jx+QyChfaJNU7yuuixgQIMQT/Keja9qjPDVF7+
-marjUrpsiw==</DigestValue>
+<DigestValue>a9fD8JvgNphGWxisOug9WzBd8ev2gpjcZTxjj0lPVsvAzDhHRh0xIKD+7UCAfjWmh+5L25DMLs7x
+5G+y+cwmIw==</DigestValue>
 </Reference>
 <Reference URI="channels.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -167,6 +167,11 @@ LL1vSWigwA==</DigestValue>
 <DigestValue>ub/NiWBJlUF6d7ou2sP3ZPuKx5AmB+R7NRPUJJ3nkDkbPsFeHtpDuMbREyMcUwNFKqkmuLErNiU3
 24P7W3e5wg==</DigestValue>
 </Reference>
+<Reference URI="docs%2FApp_Description_BBNL_IPTV.md">
+<DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
+<DigestValue>9CBZVQAbVJ0NA8dEbLZK+WAn3yrqLOO5R7bkR2ZiU16eoUyH2SQmC2N8qTT/OWpvnvryUxGH6wE4
+En7AEn9QBw==</DigestValue>
+</Reference>
 <Reference URI="docs%2FPROJECT_STATUS_SUMMARY.md">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
 <DigestValue>NWt2MGvKCSC1v1u8zM0GcOZgusJzMO9uoWoQaBVVYzl29M8PzU4HPE/oyc2JcXoq2kb4lgIHgwTS
@@ -209,8 +214,8 @@ P7I19n9dAA==</DigestValue>
 </Reference>
 <Reference URI="icon.png">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>9y3EjFVlYJYp5XkHkNHUkFW8T0oTumSmR5eSt/WXlLsr1sdD+V++iSOwP/7gucGz2uBR1ldZaNnf
-+f/vCEPcjw==</DigestValue>
+<DigestValue>l74BXdLSXNaav40AfX1N+8SqTGd0GYhuYTfSLdLY7Rnc1C/xyv0iZyBczRMhQvlbpsyww/IBVU/Y
+xfUdEjalGg==</DigestValue>
 </Reference>
 <Reference URI="images%2Ffofi.jpeg">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -289,8 +294,8 @@ Xg8EX+Pe5A==</DigestValue>
 </Reference>
 <Reference URI="login.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>0TebPUTltKsdORk5wVP7/mEBoNy/Kqvc1S791mTuMvVJT0T8G01hz8SEzpAkGxMfnVJ3G2510xUD
-04mDcFqFyg==</DigestValue>
+<DigestValue>ADDHIjdWQpx7bUJS7+56ZzVJ/wqjS03bfW7sjoY0KmZhU1K/5dRE2OPwIwTCcwpGt76fE92xOmCF
+nQban8zUhw==</DigestValue>
 </Reference>
 <Reference URI="ott-apps.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -322,11 +327,11 @@ GyvKX9Snig==</DigestValue>
 </Reference>
 </SignedInfo>
 <SignatureValue>
-Ra/ZoHfitnnJqKMjEG1Bm2ErF3l4s22aCLI4jfzAU37ht/kk494sVXV7l2VezzPWuCMgiVhMIRot
-8XFwL9yYWdL76aRA/GQUGlmg2cledDYs26lbJveRD7TqdnHBt25IarFftq2i3pwu2Ri4gVP+ZE+S
-apXd516iEVAKUfK+oJ7Zn3c0mSCHdEsOFB4NbG0NfLwcLQKQFzA+DEUe5I98EjyEB1II/ZNVNA/3
-WQV1XfcxgpG/OpREtsjZQZHiNH118f5oss6s1S77deM7HIka19+RawrO1O0uc11xT9p0OYInFaFi
-2QjhEC/EKH7VnHUWZEjNGhZ2VXbM/GhCIMByoQ==
+f1PSmtRd7LQFTQTODpa9YunW/nKUZQkRtxq8U2z7y6ECO/pFTOxanFSfKk6txDSfBsEoeb8xNnMx
+QWwh05HqqmH6cyPTnjyx5kuUAjDg13qG0n+rSmtiHbNa+65V3LILHTk5zNF4cOpSE6TC7YV/H497
+ebh2NXVFIfuXzhHs5BMNJq9Ph6IReki7VGWUvS5ovMKXm/LevmHJRsFfQVnAC9qR9VePZ5KL2Awz
+t+wjxV5pVgLWojzR5Vh57sCwmyBY6H7NjR9k2LnXmqheMvDdH4PPNEkM9Fiso0bn1nWkrAWtcoRg
+nHxESI80LJZLK+JV2F9OmuMDTmMLJkrveZ9VOA==
 </SignatureValue>
 <KeyInfo>
 <X509Data>
