@@ -137,6 +137,9 @@ function showPlayerErrorPopup(title, message) {
             }
         }
 
+        // Keep info bar visible while error popup is shown.
+        showInfoBarForced();
+
         popup.style.display = 'flex';
         playerErrorPopupOpen = true;
         setTimeout(function () {
@@ -154,6 +157,8 @@ function hidePlayerErrorPopup() {
     if (popup) {
         popup.style.display = 'none';
         playerErrorPopupOpen = false;
+        // Start auto-hide timer now that popup is dismissed
+        showOverlay();
     }
 }
 
@@ -1707,14 +1712,15 @@ function showPlayerUI() {
         sidebar.classList.remove('close');
     }
 
-    // Show info bar
+    // Show gradient overlay
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
     }
 
-    // Add sidebar-active class to shift info bar
+    // Show info bar and shift it for sidebar (info bar is now outside player-overlay)
     if (infoBar) {
+        infoBar.classList.remove('info-bar-hidden');
         infoBar.classList.add('sidebar-active');
     }
 
@@ -1744,6 +1750,11 @@ function resetUITimer() {
  * Hide both sidebar and info bar together
  */
 function hidePlayerUI() {
+    if (playerErrorPopupOpen) {
+        // Keep info visible while the error popup is shown.
+        return;
+    }
+
     var sidebar = document.getElementById('playerSidebar');
     var overlay = document.querySelector('.player-overlay');
     var infoBar = document.querySelector('.info-bar-premium');
@@ -1757,14 +1768,15 @@ function hidePlayerUI() {
         }, 300);
     }
 
-    // Hide info bar
+    // Hide gradient overlay
     if (overlay) {
         overlay.classList.remove('visible');
         overlay.classList.add('hidden');
     }
 
-    // Remove sidebar-active class
+    // Hide info bar directly (it is now outside player-overlay in DOM)
     if (infoBar) {
+        infoBar.classList.add('info-bar-hidden');
         infoBar.classList.remove('sidebar-active');
     }
 
@@ -2708,15 +2720,20 @@ function showChannelNotFound(number) {
 // Note: overlayTimeout and OVERLAY_HIDE_DELAY are declared at top with sidebar timers
 
 /**
- * Force show info bar overlay (used when sidebar opens)
- * This version ignores sidebar state
+ * Force show info bar overlay (used when error popup appears)
+ * Info bar is now outside .player-overlay so it stacks in root context at z-index:9998
  */
 function showInfoBarForced() {
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.remove('info-bar-hidden');
+        console.log('[InfoBar] Force shown above popup');
+    }
+    // Also show the gradient overlay (z-index:1002, behind popup but gives readable bg)
     var overlay = document.querySelector('.player-overlay');
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
-        console.log('[InfoBar] Force shown with sidebar');
     }
 }
 
@@ -2734,38 +2751,53 @@ function showOverlay() {
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
-
-        // Clear existing timeout BEFORE setting new one
-        if (overlayTimeout) {
-            clearTimeout(overlayTimeout);
-        }
-
-        // Set new timeout to auto-hide overlay after 5 seconds
-        overlayTimeout = setTimeout(function () {
-            hideOverlay();
-        }, OVERLAY_HIDE_DELAY);
-
-        console.log('[InfoBar] Shown, auto-hide timer reset');
     }
+
+    // Show info bar directly (it is now outside player-overlay in DOM)
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.remove('info-bar-hidden');
+    }
+
+    // Clear existing timeout BEFORE setting new one
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+    }
+
+    // Set new timeout to auto-hide overlay after 5 seconds
+    overlayTimeout = setTimeout(function () {
+        hideOverlay();
+    }, OVERLAY_HIDE_DELAY);
+
+    console.log('[InfoBar] Shown, auto-hide timer reset');
 }
 
 /**
  * Hide info bar overlay
  */
 function hideOverlay() {
+    if (playerErrorPopupOpen) {
+        // Do not hide info bar while error popup is active.
+        return;
+    }
+
     var overlay = document.querySelector('.player-overlay');
     if (overlay) {
         overlay.classList.remove('visible');
         overlay.classList.add('hidden');
-
-        // Clear timeout when hiding
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
             overlayTimeout = null;
         }
-
-        console.log('[InfoBar] Hidden');
     }
+
+    // Hide info bar directly (it is now outside player-overlay in DOM)
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.add('info-bar-hidden');
+    }
+
+    console.log('[InfoBar] Hidden');
 }
 
 /**

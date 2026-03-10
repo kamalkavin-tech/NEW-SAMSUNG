@@ -8,6 +8,7 @@ var exitPopupOpen = false; // Track if exit/logout popup is open
 var homeSearchTimeout = null; // Timer for auto-play channel by number
 var homeAdInterval = null; // Interval for ad rotation
 var homeNetworkInterval = null; // Interval for network status updates
+var homeSearchActivated = false; // Only activate keypad/editing on explicit action
 
 // Clean up background intervals when leaving page
 window.addEventListener('beforeunload', function () {
@@ -152,8 +153,22 @@ window.onload = function () {
     // Initialize numeric-only search input
     var searchInput = document.getElementById('searchInput');
     if (searchInput) {
+        // Keep search non-editable on navigation focus to avoid auto keypad pop-up.
+        searchInput.readOnly = true;
+
+        searchInput.addEventListener('click', function () {
+            homeSearchActivated = true;
+            searchInput.readOnly = false;
+        });
+
+        searchInput.addEventListener('blur', function () {
+            homeSearchActivated = false;
+            searchInput.readOnly = true;
+        });
+
         // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
+            if (searchInput.readOnly) return;
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
@@ -245,6 +260,13 @@ document.addEventListener('keydown', function (e) {
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
         if (e.keyCode === 13) { // ENTER - play channel by number
+            if (document.activeElement.readOnly) {
+                // First OK on focused search opens editing mode/keypad.
+                homeSearchActivated = true;
+                document.activeElement.readOnly = false;
+                e.preventDefault();
+                return;
+            }
             e.preventDefault();
             clearTimeout(homeSearchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
@@ -256,6 +278,7 @@ document.addEventListener('keydown', function (e) {
         }
         if (e.keyCode === 39) { // RIGHT - go to Settings button
             e.preventDefault();
+            document.activeElement.readOnly = true;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleRight();
             }
@@ -263,6 +286,7 @@ document.addEventListener('keydown', function (e) {
         }
         if (e.keyCode === 37) { // LEFT - go to sidebar
             e.preventDefault();
+            document.activeElement.readOnly = true;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleLeft();
             }
@@ -274,6 +298,7 @@ document.addEventListener('keydown', function (e) {
         }
         if (e.keyCode === 40) { // DOWN - leave search, go to cards
             e.preventDefault();
+            document.activeElement.readOnly = true;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleDown();
             }
@@ -1171,10 +1196,11 @@ function renderLanguagesInHomeGrid(languages) {
         item.setAttribute('data-index', index.toString());
 
         if (langLogo && !langLogo.includes('noimage')) {
+            var logoContainer = document.createElement('div');
+            logoContainer.className = 'language-logo-container';
+
             var img = document.createElement('img');
             img.className = 'language-logo';
-            // FIXED: Add loading state and cache logo URLs for faster loads
-            img.style.cssText = 'background: url("data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23444%22 width=%22100%22 height=%22100%22/></svg>");';
             img.src = langLogo;
             img.alt = langName;
             img.onerror = function () {
@@ -1182,9 +1208,10 @@ function renderLanguagesInHomeGrid(languages) {
                 fallback.className = 'language-logo-fallback';
                 fallback.innerText = langName.substring(0, 2).toUpperCase();
                 item.insertBefore(fallback, item.firstChild);
-                img.remove();
+                logoContainer.remove();
             };
-            item.appendChild(img);
+            logoContainer.appendChild(img);
+            item.appendChild(logoContainer);
         } else {
             var fallback = document.createElement('div');
             fallback.className = 'language-logo-fallback';

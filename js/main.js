@@ -211,6 +211,36 @@ function showPublicIP() {
 
     publicIpText.innerText = "Fetching...";
 
+    function isValidGatewayValue(ip) {
+        if (!ip || typeof ip !== 'string') return false;
+        var v = ip.trim();
+
+        // Reject obvious placeholders/loopback/invalid values seen on emulators.
+        if (v === '::1' || v === '0.0.0.0' || v === '0.0.0.1' || v === '127.0.0.1') return false;
+        if (v.indexOf('---') !== -1) return false;
+
+        // Accept IPv4 format only for gateway display in this screen.
+        return /^\d{1,3}(\.\d{1,3}){3}$/.test(v);
+    }
+
+    // Prefer native Samsung gateway API (real gateway value for login screen)
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            var networkType = webapis.network.getActiveConnectionType();
+            if (networkType > 0 && typeof webapis.network.getGateway === 'function') {
+                var gatewayIp = webapis.network.getGateway(networkType);
+                if (isValidGatewayValue(gatewayIp)) {
+                    publicIpText.innerText = gatewayIp;
+                    console.log("[GatewayIP] Native gateway from Tizen API:", gatewayIp);
+                    return;
+                }
+                console.warn("[GatewayIP] Ignoring invalid native gateway value:", gatewayIp);
+            }
+        }
+    } catch (e) {
+        console.warn("[GatewayIP] Native gateway fetch failed, fallback to external services:", e.message);
+    }
+
     // Try multiple public IP services
     var ipServices = [
         'https://api.ipify.org?format=json',
@@ -573,9 +603,20 @@ document.addEventListener("keydown", function (e) {
                     }
                 }
                 return;
-            } else if (e.keyCode === 38 || e.keyCode === 40) {
-                // UP/DOWN arrows - allow to navigate out of OTP row
-                // Falls through to switch statement
+            } else if (e.keyCode === 40) {
+                // DOWN arrow - move downward to Verify button
+                e.preventDefault();
+                var verifyBtnDown = document.getElementById('verifyBtn');
+                if (verifyBtnDown) {
+                    verifyBtnDown.focus();
+                    var verifyIndex = Array.from(focusables).indexOf(verifyBtnDown);
+                    if (verifyIndex >= 0) currentFocus = verifyIndex;
+                }
+                return;
+            } else if (e.keyCode === 38) {
+                // UP arrow - keep current OTP focus (no horizontal jump)
+                e.preventDefault();
+                return;
             } else {
                 // Ignore other keys
                 return;

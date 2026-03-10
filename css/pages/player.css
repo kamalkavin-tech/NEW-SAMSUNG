@@ -84,7 +84,7 @@ video {
 
 .info-bar-premium {
     position: fixed;
-    z-index: 9998; /* FIXED: Increased from 2050 to 9998 - now above all popups and overlays */
+    z-index: 9998; /* Above error popup (2000) — now direct child of body, no parent stacking context trapping it */
     bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
@@ -103,6 +103,12 @@ video {
     transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
     animation: infoBarFadeIn 0.3s ease-out;
     overflow: hidden;
+}
+
+/* Hide info bar without using parent opacity - allows independent z-index stacking */
+.info-bar-premium.info-bar-hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 @keyframes infoBarFadeIn {

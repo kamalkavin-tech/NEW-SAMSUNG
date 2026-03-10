@@ -47,6 +47,8 @@ var allLanguages = [];
 var searchTimeout = null;
 var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages)
 var masterListLoaded = false; // Flag to track if master list is loaded
+var channelLogoCache = {}; // Reuse loaded logos across category switches
+var channelsSearchActivated = false; // Only activate keypad after explicit user action
 
 // Navigation zones: 'sidebar', 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
 var currentZone = 'sidebar';
@@ -697,8 +699,22 @@ function initLanguageDropdown() {
 function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
+        // Keep field non-editable on navigation focus; user must click/OK to activate editing.
+        searchInput.readOnly = true;
+
+        searchInput.addEventListener('click', function () {
+            channelsSearchActivated = true;
+            searchInput.readOnly = false;
+        });
+
+        searchInput.addEventListener('blur', function () {
+            channelsSearchActivated = false;
+            searchInput.readOnly = true;
+        });
+
         // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
+            if (searchInput.readOnly) return;
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
@@ -913,6 +929,7 @@ function initLazyLoading() {
                     var img = entry.target;
                     if (img.dataset.src) {
                         img.src = img.dataset.src;
+                        channelLogoCache[img.dataset.src] = true;
                         img.removeAttribute('data-src');
                     }
                     _lazyObserver.unobserve(img);
@@ -974,9 +991,17 @@ function createChannelCard(ch) {
 
     if (chLogo && !chLogo.includes("chnlnoimage")) {
         const img = document.createElement("img");
-        img.dataset.src = chLogo;  // Lazy load: use data-src, not src
+        // If already loaded in this session, set src directly to avoid visible reload delay.
+        if (channelLogoCache[chLogo]) {
+            img.src = chLogo;
+        } else {
+            img.dataset.src = chLogo;  // Lazy load first time
+        }
         img.alt = chName;
         img.className = "lazy-logo";
+        img.onload = function () {
+            channelLogoCache[chLogo] = true;
+        };
         img.onerror = function() {
             this.style.display = 'none';
         };
@@ -1062,6 +1087,13 @@ document.addEventListener("keydown", function (e) {
     if (isSearchFocused) {
         // ENTER - play the channel number immediately
         if (code === 13) {
+            if (document.activeElement.readOnly) {
+                // First OK activates keypad/editing mode.
+                channelsSearchActivated = true;
+                document.activeElement.readOnly = false;
+                e.preventDefault();
+                return;
+            }
             e.preventDefault();
             clearTimeout(searchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
@@ -1073,12 +1105,14 @@ document.addEventListener("keydown", function (e) {
         // DOWN - leave search input, go to category pills
         if (code === 40) {
             e.preventDefault();
+            document.activeElement.readOnly = true;
             moveToFirstCategoryPill();
             return;
         }
         // LEFT - leave search input, go to back button
         if (code === 37) {
             e.preventDefault();
+            document.activeElement.readOnly = true;
             moveToBackButton();
             return;
         }
@@ -1587,12 +1621,15 @@ function playChannelByLCN(lcn) {
 }
 
 function showSearchNotFound(msg) {
-    // FIXED: Changed from inline message to floating toast notification
+    // Show centered toast consistent with Home page style.
+    var existing = document.getElementById('search-toast');
+    if (existing) existing.remove();
+
     var toast = document.createElement('div');
+    toast.id = 'search-toast';
     toast.className = 'search-toast-notification';
     toast.textContent = msg;
-    // Floating toast style: bottom-right corner, floating above content
-    toast.style.cssText = 'position:fixed;bottom:50px;right:50px;background:rgba(255,68,68,0.95);color:#fff;padding:15px 25px;border-radius:8px;font-size:14px;font-weight:600;z-index:10000;max-width:300px;word-wrap:break-word;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.95);color:#ff4444;font-size:22px;font-weight:600;padding:18px 48px;border-radius:12px;border:2px solid #ff4444;z-index:9999;white-space:nowrap;pointer-events:none;';
     document.body.appendChild(toast);
     
     // Auto-remove after 3 seconds

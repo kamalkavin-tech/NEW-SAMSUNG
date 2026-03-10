@@ -72,46 +72,48 @@
         </div>
 
         <div class="player-overlay visible">
-            <!-- Premium Info Bar - Bottom Overlay -->
-            <div class="info-bar-premium" id="infoBarPremium">
-                <!-- LEFT SECTION: Logo + LCN + Channel Name -->
-                <div class="info-left-section">
-                    <div class="channel-logo-box">
-                        <img src="" alt="Channel Logo" id="ui-channel-logo">
-                    </div>
-                    <span class="channel-lcn" id="ui-channel-number">11</span>
-                    <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
-                </div>
+            <!-- Gradient background only - info bar moved outside for correct z-index stacking -->
+        </div>
+    </div>
 
-                <!-- CENTER SECTION: Channel Information Grid -->
-                <div class="info-center-section">
-                    <div class="info-item">
-                        <span class="info-label">Channel Price</span>
-                        <span class="info-value price-value" id="ui-price">Free</span>
-                    </div>
-                    <div class="info-divider-line"></div>
-                    <div class="info-item">
-                        <span class="info-label">Expires in</span>
-                        <span class="info-value expiry-value" id="ui-expiry">N/A</span>
-                    </div>
-                    <div class="info-divider-line"></div>
-                    <div class="info-item">
-                        <span class="info-label">Device ID</span>
-                        <span class="info-value device-value" id="ui-device-id">Loading...</span>
-                    </div>
-                    <div class="info-divider-line"></div>
-                    <div class="info-item">
-                        <span class="info-label">User ID</span>
-                        <span class="info-value user-value" id="ui-user">Loading...</span>
-                    </div>
-                </div>
-
-                <!-- RIGHT SECTION: Time & Date -->
-                <div class="info-right-section">
-                    <div class="current-time" id="ui-time">9:14 PM</div>
-                    <div class="current-date" id="ui-date">Feb 17, 2026</div>
-                </div>
+    <!-- Premium Info Bar - position:fixed, z-index:9998 in ROOT stacking context (above error popup z-index:2000) -->
+    <div class="info-bar-premium" id="infoBarPremium">
+        <!-- LEFT SECTION: Logo + LCN + Channel Name -->
+        <div class="info-left-section">
+            <div class="channel-logo-box">
+                <img src="" alt="Channel Logo" id="ui-channel-logo">
             </div>
+            <span class="channel-lcn" id="ui-channel-number">11</span>
+            <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
+        </div>
+
+        <!-- CENTER SECTION: Channel Information Grid -->
+        <div class="info-center-section">
+            <div class="info-item">
+                <span class="info-label">Channel Price</span>
+                <span class="info-value price-value" id="ui-price">Free</span>
+            </div>
+            <div class="info-divider-line"></div>
+            <div class="info-item">
+                <span class="info-label">Expires in</span>
+                <span class="info-value expiry-value" id="ui-expiry">N/A</span>
+            </div>
+            <div class="info-divider-line"></div>
+            <div class="info-item">
+                <span class="info-label">Device ID</span>
+                <span class="info-value device-value" id="ui-device-id">Loading...</span>
+            </div>
+            <div class="info-divider-line"></div>
+            <div class="info-item">
+                <span class="info-label">User ID</span>
+                <span class="info-value user-value" id="ui-user">Loading...</span>
+            </div>
+        </div>
+
+        <!-- RIGHT SECTION: Time & Date -->
+        <div class="info-right-section">
+            <div class="current-time" id="ui-time">9:14 PM</div>
+            <div class="current-date" id="ui-date">Feb 17, 2026</div>
         </div>
     </div>
 
