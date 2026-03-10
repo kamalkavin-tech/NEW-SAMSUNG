@@ -599,7 +599,7 @@ input:checked + .slider:before {
 
 /* IPv6 value - handle long addresses */
 #device-ipv6 {
-    font-size: 14px;
+    font-size: 20px; /* FIXED: Changed from 14px to 20px to match other values */
     word-break: break-all;
     line-height: 1.4;
     max-width: 280px;

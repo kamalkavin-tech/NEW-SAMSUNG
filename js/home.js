@@ -903,6 +903,15 @@ function renderAdsInHeroBanner(ads) {
 function loadHomeChannels() {
     console.log("[HOME] Loading channels...");
 
+    // FIXED: Clear cache if user just completed subscription
+    if (sessionStorage.getItem('subscription_completed') === 'true') {
+        console.log("[HOME] Subscription completed - clearing channel cache");
+        if (typeof CacheManager !== 'undefined') {
+            CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
+        }
+        sessionStorage.removeItem('subscription_completed');
+    }
+
     // Check sessionStorage cache first
     try {
         var cachedChannels = sessionStorage.getItem('home_channels_cache');
@@ -1164,6 +1173,8 @@ function renderLanguagesInHomeGrid(languages) {
         if (langLogo && !langLogo.includes('noimage')) {
             var img = document.createElement('img');
             img.className = 'language-logo';
+            // FIXED: Add loading state and cache logo URLs for faster loads
+            img.style.cssText = 'background: url("data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23444%22 width=%22100%22 height=%22100%22/></svg>");';
             img.src = langLogo;
             img.alt = langName;
             img.onerror = function () {

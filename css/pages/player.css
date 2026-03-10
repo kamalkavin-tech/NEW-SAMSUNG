@@ -84,7 +84,7 @@ video {
 
 .info-bar-premium {
     position: fixed;
-    z-index: 2050; /* Above error popup (2000), below sidebar (2100) */
+    z-index: 9998; /* FIXED: Increased from 2050 to 9998 - now above all popups and overlays */
     bottom: 40px;
     left: 50%;
     transform: translateX(-50%);

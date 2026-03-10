@@ -808,6 +808,17 @@ async function loadChannels(options = {}) {
     hideErrorPopups();
 
     try {
+        // FIXED: Clear channel cache if user just completed subscription
+        // Check if subscription was just completed (sessionStorage flag from subscription page)
+        if (sessionStorage.getItem('subscription_completed') === 'true') {
+            console.log("[Channels] Subscription completed - clearing channel cache for fresh load");
+            if (typeof CacheManager !== 'undefined') {
+                CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
+                CacheManager.remove(CacheManager.KEYS.CATEGORIES);
+            }
+            sessionStorage.removeItem('subscription_completed');
+        }
+
         const apiOptions = {
             grid: options.grid || "",
             langid: options.langid || "",
@@ -1576,23 +1587,17 @@ function playChannelByLCN(lcn) {
 }
 
 function showSearchNotFound(msg) {
-    var searchInput = document.getElementById('searchInput');
-    if (!searchInput) return;
-    var bar = searchInput.closest('.search-bar');
-    if (!bar) return;
-    // Remove any existing message
-    var existing = bar.querySelector('.search-not-found');
-    if (existing) existing.remove();
-    // Show message below search bar
-    var msgEl = document.createElement('div');
-    msgEl.className = 'search-not-found';
-    msgEl.textContent = msg;
-    msgEl.style.cssText = 'position:absolute;top:100%;left:0;right:0;text-align:center;color:#ff4444;font-size:14px;font-weight:600;padding:8px 0;white-space:nowrap;';
-    bar.style.position = 'relative';
-    bar.appendChild(msgEl);
+    // FIXED: Changed from inline message to floating toast notification
+    var toast = document.createElement('div');
+    toast.className = 'search-toast-notification';
+    toast.textContent = msg;
+    // Floating toast style: bottom-right corner, floating above content
+    toast.style.cssText = 'position:fixed;bottom:50px;right:50px;background:rgba(255,68,68,0.95);color:#fff;padding:15px 25px;border-radius:8px;font-size:14px;font-weight:600;z-index:10000;max-width:300px;word-wrap:break-word;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+    document.body.appendChild(toast);
+    
     // Auto-remove after 3 seconds
     setTimeout(function () {
-        if (msgEl.parentNode) msgEl.remove();
+        if (toast.parentNode) toast.remove();
     }, 3000);
 }
 

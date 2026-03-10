@@ -236,7 +236,8 @@ function showPublicIP() {
         var service = ipServices[index];
         console.log("[PublicIP] Trying service:", service);
 
-        fetchWithTimeout(service, 5000)
+        // FIXED: Increased timeout from 5s to 15s for Samsung TV network reliability
+        fetchWithTimeout(service, 15000)
             .then(function (response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 return response.json();
@@ -1122,6 +1123,18 @@ function handleResendOTP() {
 
             if (response && response.status && Number(response.status.err_code) === 0) {
                 console.log("[Verify] OTP resent successfully via /loginOtp");
+
+                // FIXED: Store the new OTP from the response (replace old OTP)
+                var newOTP = "";
+                if (response.body && response.body.length > 0 && response.body[0].otpcode) {
+                    newOTP = String(response.body[0].otpcode);
+                }
+                // Clear old OTP first, then store new one
+                sessionStorage.removeItem('_pendingOTP');
+                if (newOTP) {
+                    sessionStorage.setItem('_pendingOTP', newOTP);
+                    console.log("[Verify] New OTP stored (old OTP cleared)");
+                }
 
                 // Clear OTP inputs for fresh entry
                 clearOTPInputs();
