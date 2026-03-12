@@ -397,6 +397,7 @@ var allChannels = [];          // ALL channels — used for channel up/down navi
 var _allChannelsUnfiltered = []; // ALL channels (subscribed + unsubscribed) — for sidebar display
 var currentIndex = -1;
 var _lastAttemptedChannel = null; // Tracks the current channel for retry
+var _playerLogoRequestToken = 0;
 var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
 
 async function loadChannelList(lookupName = null) {
@@ -500,6 +501,70 @@ async function loadChannelList(lookupName = null) {
     }
 }
 
+function getChannelLogoUrl(channel) {
+    if (!channel) return "";
+    return channel.logo_url || channel.chlogo || channel.logo || "";
+}
+
+function updatePlayerChannelLogo(channel) {
+    var uiLogo = document.getElementById("ui-channel-logo");
+    if (!uiLogo) return;
+
+    var normalizedLogo = String(getChannelLogoUrl(channel) || "").trim();
+    var requestToken = ++_playerLogoRequestToken;
+
+    uiLogo.onload = null;
+    uiLogo.onerror = null;
+
+    if (!normalizedLogo) {
+        uiLogo.style.display = 'none';
+        uiLogo.removeAttribute('src');
+        uiLogo.dataset.logoUrl = '';
+        return;
+    }
+
+    if (uiLogo.dataset.logoUrl === normalizedLogo && uiLogo.getAttribute('src')) {
+        uiLogo.style.display = '';
+        return;
+    }
+
+    if (_logoCache[normalizedLogo]) {
+        uiLogo.src = normalizedLogo;
+        uiLogo.dataset.logoUrl = normalizedLogo;
+        uiLogo.style.display = '';
+        uiLogo.onerror = function () {
+            if (requestToken !== _playerLogoRequestToken) return;
+            uiLogo.style.display = 'none';
+            uiLogo.removeAttribute('src');
+        };
+        return;
+    }
+
+    uiLogo.style.display = 'none';
+    uiLogo.removeAttribute('src');
+    uiLogo.dataset.logoUrl = normalizedLogo;
+
+    var preloader = new Image();
+    preloader.onload = function () {
+        if (requestToken !== _playerLogoRequestToken) return;
+        _logoCache[normalizedLogo] = true;
+        uiLogo.src = normalizedLogo;
+        uiLogo.dataset.logoUrl = normalizedLogo;
+        uiLogo.style.display = '';
+        uiLogo.onerror = function () {
+            if (requestToken !== _playerLogoRequestToken) return;
+            uiLogo.style.display = 'none';
+            uiLogo.removeAttribute('src');
+        };
+    };
+    preloader.onerror = function () {
+        if (requestToken !== _playerLogoRequestToken) return;
+        uiLogo.style.display = 'none';
+        uiLogo.removeAttribute('src');
+    };
+    preloader.src = normalizedLogo;
+}
+
 /**
  * Update expiry display with real data from expiringchnl_list API
  */
@@ -588,22 +653,8 @@ function setupPlayer(channel) {
     const uiNum = document.getElementById("ui-channel-number");
     if (uiNum) uiNum.innerText = channelNum;
 
-    // Channel Logo - show only API logo, no fallbacks
-    const logo = channel.logo_url || channel.chlogo || channel.logo || "";
-    const uiLogo = document.getElementById("ui-channel-logo");
-    if (uiLogo) {
-        uiLogo.onerror = null;
-        if (logo && logo.trim() !== "") {
-            uiLogo.src = logo;
-            uiLogo.style.display = '';
-            uiLogo.onerror = function () {
-                uiLogo.style.display = 'none';
-            };
-        } else {
-            uiLogo.src = '';
-            uiLogo.style.display = 'none';
-        }
-    }
+    // Channel Logo - clear stale artwork immediately, then reuse cache or preload.
+    updatePlayerChannelLogo(channel);
 
     // Expiry Date - use shared function
     updateExpiryDisplay(channel);
@@ -678,12 +729,7 @@ function setupPlayer(channel) {
     const uiDeviceId = document.getElementById("ui-device-id");
     if (uiDeviceId) {
         try {
-            if (typeof webapis !== 'undefined' && webapis.productinfo) {
-                var duid = webapis.productinfo.getDuid();
-                uiDeviceId.innerText = duid || "Unknown";
-            } else {
-                uiDeviceId.innerText = "Emulator / Web";
-            }
+            uiDeviceId.innerText = DeviceInfo.getDeviceIdLabel();
         } catch (e) {
             uiDeviceId.innerText = "Not available";
         }
@@ -1613,8 +1659,23 @@ function openSidebar() {
     sidebar.classList.add('open');
     sidebar.classList.remove('close');
 
-    // IMPORTANT: Hide info bar when sidebar opens via LEFT
-    hideOverlay();
+    // Keep info bar visible when sidebar is open; shrink/shift it beside menu.
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+    }
+
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.remove('info-bar-hidden');
+        infoBar.classList.add('sidebar-active');
+    }
+
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+        overlayTimeout = null;
+    }
 
     // Start at categories level
     sidebarState.currentLevel = 'categories';
@@ -1659,6 +1720,26 @@ function closeSidebar() {
     }, 300);
 
     clearSidebarInactivityTimer();
+
+    // Restore full-width info bar and continue normal auto-hide timer after menu closes.
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (infoBar) {
+        infoBar.classList.remove('sidebar-active');
+        infoBar.classList.remove('info-bar-hidden');
+    }
+
+    var overlay = document.querySelector('.player-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+    }
+
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+    }
+    overlayTimeout = setTimeout(function () {
+        hideOverlay();
+    }, OVERLAY_HIDE_DELAY);
 
     console.log("[Sidebar] Closed");
 }
@@ -2719,6 +2800,17 @@ function showChannelNotFound(number) {
 // ==========================================
 // Note: overlayTimeout and OVERLAY_HIDE_DELAY are declared at top with sidebar timers
 
+function syncInfoBarSidebarState() {
+    var infoBar = document.querySelector('.info-bar-premium');
+    if (!infoBar) return;
+
+    if (sidebarState && sidebarState.isOpen) {
+        infoBar.classList.add('sidebar-active');
+    } else {
+        infoBar.classList.remove('sidebar-active');
+    }
+}
+
 /**
  * Force show info bar overlay (used when error popup appears)
  * Info bar is now outside .player-overlay so it stacks in root context at z-index:9998
@@ -2727,6 +2819,7 @@ function showInfoBarForced() {
     var infoBar = document.querySelector('.info-bar-premium');
     if (infoBar) {
         infoBar.classList.remove('info-bar-hidden');
+        syncInfoBarSidebarState();
         console.log('[InfoBar] Force shown above popup');
     }
     // Also show the gradient overlay (z-index:1002, behind popup but gives readable bg)
@@ -2744,6 +2837,7 @@ function showInfoBarForced() {
 function showOverlay() {
     // Don't show info bar if sidebar is open (sidebar handles timing)
     if (sidebarState.isOpen) {
+        syncInfoBarSidebarState();
         return;
     }
 
@@ -2757,6 +2851,7 @@ function showOverlay() {
     var infoBar = document.querySelector('.info-bar-premium');
     if (infoBar) {
         infoBar.classList.remove('info-bar-hidden');
+        syncInfoBarSidebarState();
     }
 
     // Clear existing timeout BEFORE setting new one
@@ -2795,6 +2890,7 @@ function hideOverlay() {
     var infoBar = document.querySelector('.info-bar-premium');
     if (infoBar) {
         infoBar.classList.add('info-bar-hidden');
+        syncInfoBarSidebarState();
     }
 
     console.log('[InfoBar] Hidden');

@@ -127,12 +127,8 @@ function showDeviceId() {
     if (!deviceIdText) return; // Not on login page
 
     try {
-        if (typeof webapis !== 'undefined' && webapis.productinfo) {
-            var duid = webapis.productinfo.getDuid();
-            deviceIdText.innerText = duid;
-        } else {
-            deviceIdText.innerText = "Emulator / Web";
-        }
+        // Always use the single shared resolver — works on real TV, emulator, and browser
+        deviceIdText.innerText = DeviceInfo.getDeviceIdLabel();
     } catch (e) {
         deviceIdText.innerText = "Not available";
     }
@@ -197,6 +193,8 @@ function showMacAddress() {
 function showIPv6() {
     var ipv6Text = document.getElementById("ipv6Text");
     if (!ipv6Text) return;
+    // Force fresh probe each time login info panel renders.
+    DEVICE_INFO.ipv6 = "";
     DeviceInfo.detectIPv6().then(function (addr) {
         ipv6Text.innerText = addr || "Not Available";
     });
@@ -468,6 +466,8 @@ function setupNumberOnlyInputs() {
     // OTP Inputs - only allow numbers + auto-advance
     var otpInputs = document.querySelectorAll(".otp-input");
     otpInputs.forEach(function (input, idx) {
+        input.readOnly = true;
+
         // Block non-numeric keypress
         input.addEventListener("keypress", function (e) {
             var charCode = e.which || e.keyCode;
@@ -491,12 +491,13 @@ function setupNumberOnlyInputs() {
                 if (currentIdx < 4) {
                     var next = document.getElementById('otp' + (currentIdx + 1));
                     if (next) {
-                        next.focus();
+                        activateOTPInput(next);
                         // Update currentFocus to keep in sync
                         var focusIndex = Array.from(focusables).indexOf(next);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
                 } else {
+                    deactivateOTPInputEditing();
                     // After 4th digit, focus verify button
                     var verifyBtn = document.getElementById('verifyBtn');
                     if (verifyBtn) {
@@ -510,6 +511,20 @@ function setupNumberOnlyInputs() {
 
         console.log("OTP input " + (idx + 1) + ": number-only validation + auto-advance enabled");
     });
+}
+
+function deactivateOTPInputEditing() {
+    var otpInputs = document.querySelectorAll('.otp-input');
+    otpInputs.forEach(function (input) {
+        input.readOnly = true;
+    });
+}
+
+function activateOTPInput(input) {
+    if (!input) return;
+    deactivateOTPInputEditing();
+    input.readOnly = false;
+    input.focus();
 }
 
 /* REMOTE CONTROL KEYS */
@@ -534,7 +549,7 @@ document.addEventListener("keydown", function (e) {
                 if (active.value.length === 0 && idx > 1) {
                     var prev = document.getElementById('otp' + (idx - 1));
                     if (prev) {
-                        prev.focus();
+                        activateOTPInput(prev);
                         var focusIndex = Array.from(focusables).indexOf(prev);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
@@ -561,6 +576,8 @@ document.addEventListener("keydown", function (e) {
                     // Focus verify button and trigger verification
                     var vBtn = document.getElementById('verifyBtn');
                     if (vBtn) {
+                        deactivateOTPInputEditing();
+                        if (typeof active.blur === 'function') active.blur();
                         vBtn.focus();
                         var vIdx = Array.from(focusables).indexOf(vBtn);
                         if (vIdx >= 0) currentFocus = vIdx;
@@ -576,7 +593,7 @@ document.addEventListener("keydown", function (e) {
                 if (idx > 1) {
                     var prev = document.getElementById('otp' + (idx - 1));
                     if (prev) {
-                        prev.focus();
+                        activateOTPInput(prev);
                         var focusIndex = Array.from(focusables).indexOf(prev);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
@@ -590,11 +607,12 @@ document.addEventListener("keydown", function (e) {
                 if (idx < 4) {
                     var next = document.getElementById('otp' + (idx + 1));
                     if (next) {
-                        next.focus();
+                        activateOTPInput(next);
                         var focusIndex = Array.from(focusables).indexOf(next);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
                 } else {
+                    deactivateOTPInputEditing();
                     var verifyBtn = document.getElementById('verifyBtn');
                     if (verifyBtn) {
                         verifyBtn.focus();
@@ -606,6 +624,9 @@ document.addEventListener("keydown", function (e) {
             } else if (e.keyCode === 40) {
                 // DOWN arrow - move downward to Verify button
                 e.preventDefault();
+                deactivateOTPInputEditing();
+                // Explicitly blur OTP input so TV keypad does not remain active.
+                if (typeof active.blur === 'function') active.blur();
                 var verifyBtnDown = document.getElementById('verifyBtn');
                 if (verifyBtnDown) {
                     verifyBtnDown.focus();
@@ -614,8 +635,9 @@ document.addEventListener("keydown", function (e) {
                 }
                 return;
             } else if (e.keyCode === 38) {
-                // UP arrow - keep current OTP focus (no horizontal jump)
+                // UP arrow - do not navigate within OTP fields or leave keypad active.
                 e.preventDefault();
+                deactivateOTPInputEditing();
                 return;
             } else {
                 // Ignore other keys
@@ -743,7 +765,7 @@ document.addEventListener("keydown", function (e) {
                     if (idx < 4) {
                         var next = document.getElementById('otp' + (idx + 1));
                         if (next) {
-                            next.focus();
+                            activateOTPInput(next);
                             // Update currentFocus to keep in sync
                             var focusIndex = Array.from(focusables).indexOf(next);
                             if (focusIndex >= 0) currentFocus = focusIndex;
@@ -752,6 +774,7 @@ document.addEventListener("keydown", function (e) {
                         // After 4th digit, focus verify button
                         var verifyBtn = document.getElementById('verifyBtn');
                         if (verifyBtn) {
+                            deactivateOTPInputEditing();
                             verifyBtn.focus();
                             var focusIndex = Array.from(focusables).indexOf(verifyBtn);
                             if (focusIndex >= 0) currentFocus = focusIndex;
@@ -963,6 +986,12 @@ function handleOK() {
                 localStorage.setItem('mobile', mobile);
                 localStorage.setItem('loginTime', new Date().toISOString());
                 localStorage.setItem('hasLoggedInOnce', 'true');
+
+                // Prime static assets once per session to reduce first navigation latency.
+                if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
+                    AppPerformanceCache.primeAfterLogin(true);
+                }
+
                 console.log("[Verify] OTP verified successfully - navigating to home");
                 window.location.replace("home.html");
             } else {
@@ -1059,12 +1088,15 @@ function initOTPPage() {
     // Add input handlers to OTP inputs for auto-advance
     var otpInputs = document.querySelectorAll('.otp-input');
     otpInputs.forEach(function (input, index) {
+        input.readOnly = true;
+
         // Handle native keyboard input (and remote keys that trigger input)
         input.addEventListener('input', function () {
             if (input.value.length === 1) {
                 if (index < otpInputs.length - 1) {
-                    otpInputs[index + 1].focus();
+                    activateOTPInput(otpInputs[index + 1]);
                 } else {
+                    deactivateOTPInputEditing();
                     document.getElementById('verifyBtn').focus();
                 }
             }
@@ -1075,7 +1107,7 @@ function initOTPPage() {
             if (e.keyCode === 8) { // Backspace
                 if (input.value.length === 0 && index > 0) {
                     e.preventDefault();
-                    otpInputs[index - 1].focus();
+                    activateOTPInput(otpInputs[index - 1]);
                 }
             }
         });
@@ -1083,7 +1115,7 @@ function initOTPPage() {
         // Click to focus
         input.addEventListener('click', function () {
             currentOtpIndex = index;
-            input.focus();
+            activateOTPInput(input);
         });
     });
 
@@ -1105,6 +1137,7 @@ function clearOTPInputs() {
     var firstInput = document.getElementById('otp1');
     if (firstInput) {
         setTimeout(function () {
+            deactivateOTPInputEditing();
             firstInput.focus();
             console.log("[OTP] Focus reset to first input");
         }, 100);

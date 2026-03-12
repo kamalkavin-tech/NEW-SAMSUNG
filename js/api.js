@@ -436,6 +436,141 @@ const CacheManager = {
 // Make CacheManager globally available
 window.CacheManager = CacheManager;
 
+// ==========================================
+// APP PERFORMANCE CACHE
+// Prefetches static assets once per login session and persists page state
+// across page navigation to improve perceived performance.
+// ==========================================
+const AppPerformanceCache = {
+    FLAGS: {
+        ASSETS_PRIMED: '_bbnl_assets_primed'
+    },
+
+    KEYS: {
+        PAGE_STATE_PREFIX: 'bbnl_page_state_'
+    },
+
+    _safeSessionGet: function (key) {
+        try { return sessionStorage.getItem(key); } catch (e) { return null; }
+    },
+
+    _safeSessionSet: function (key, value) {
+        try { sessionStorage.setItem(key, value); } catch (e) {}
+    },
+
+    _buildStaticAssetList: function () {
+        return [
+            'home.html', 'channels.html', 'favorites.html', 'settings.html', 'player.html', 'feedback.html', 'ott-apps.html', 'language-select.html',
+            'css/style.css', 'css/colors.css', 'css/base/reset.css', 'css/base/responsive.css', 'css/base/variable.css',
+            'css/layout/header.css', 'css/layout/sidebar.css', 'css/layout/home-layout.css',
+            'css/pages/homepages.css', 'css/pages/channels.css', 'css/pages/player.css', 'css/pages/settings.css', 'css/pages/favorites.css',
+            'css/pages/favorites-enhanced.css', 'css/pages/language-select.css', 'css/pages/feedback.css', 'css/pages/ott-apps.css',
+            'css/componentes/buttons.css', 'css/componentes/cards.css', 'css/componentes/forms.css', 'css/componentes/remote.css', 'css/componentes/error-popups.css',
+            'js/api.js', 'js/main.js', 'js/home.js', 'js/channels.js', 'js/player.js', 'js/settings.js', 'js/favorites.js', 'js/feedback.js',
+            'js/ott-apps.js', 'js/language-select.js', 'js/avplayer.js', 'js/home-navigation.js',
+            'images/error-network.png', 'images/error-invalid-input.png', 'images/error-login-failed.png', 'images/error-channel-unavailable.png',
+            'images/error-coming-soon-ott.png', 'images/error-customer-care.png', 'images/error-feedback-success.png'
+        ];
+    },
+
+    _primeInMemoryAssets: function () {
+        var self = this;
+
+        // Prime currently referenced assets from DOM first.
+        try {
+            var domAssets = [];
+            var links = document.querySelectorAll('link[href]');
+            var scripts = document.querySelectorAll('script[src]');
+            var imgs = document.querySelectorAll('img[src]');
+
+            links.forEach(function (el) { domAssets.push(el.getAttribute('href')); });
+            scripts.forEach(function (el) { domAssets.push(el.getAttribute('src')); });
+            imgs.forEach(function (el) { domAssets.push(el.getAttribute('src')); });
+
+            domAssets.forEach(function (url) {
+                if (!url || url.indexOf('http') === 0 || url.indexOf('$WEBAPIS') === 0) return;
+                try {
+                    var link = document.createElement('link');
+                    link.rel = 'prefetch';
+                    link.href = url;
+                    document.head.appendChild(link);
+                } catch (e) {}
+            });
+        } catch (e) {}
+
+        // Prime app-wide known static assets.
+        this._buildStaticAssetList().forEach(function (path) {
+            if (!path) return;
+
+            if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(path)) {
+                try {
+                    var img = new Image();
+                    img.decoding = 'async';
+                    img.src = path;
+                } catch (e) {}
+                return;
+            }
+
+            try {
+                var link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.href = path;
+                document.head.appendChild(link);
+            } catch (e) {}
+
+            // Fetch API helps warm HTTP/file cache where supported.
+            try {
+                fetch(path, { method: 'GET', cache: 'force-cache' }).catch(function () {});
+            } catch (e) {}
+        });
+    },
+
+    primeAfterLogin: function (force) {
+        try {
+            if (!force && this._safeSessionGet(this.FLAGS.ASSETS_PRIMED) === '1') {
+                return;
+            }
+            this._primeInMemoryAssets();
+            this._safeSessionSet(this.FLAGS.ASSETS_PRIMED, '1');
+            console.log('[AppPerformanceCache] Static assets primed for session');
+        } catch (e) {
+            console.warn('[AppPerformanceCache] Prime failed:', e.message);
+        }
+    },
+
+    savePageState: function (pageKey, state) {
+        if (!pageKey) return;
+        try {
+            var payload = {
+                ts: CacheManager._now(),
+                state: state || {}
+            };
+            this._safeSessionSet(this.KEYS.PAGE_STATE_PREFIX + pageKey, JSON.stringify(payload));
+        } catch (e) {}
+    },
+
+    getPageState: function (pageKey, maxAgeMs) {
+        if (!pageKey) return null;
+        try {
+            var raw = this._safeSessionGet(this.KEYS.PAGE_STATE_PREFIX + pageKey);
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            var age = CacheManager._now() - (parsed.ts || 0);
+            if (maxAgeMs && age > maxAgeMs) return null;
+            return parsed.state || null;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    clearPageState: function (pageKey) {
+        if (!pageKey) return;
+        try { sessionStorage.removeItem(this.KEYS.PAGE_STATE_PREFIX + pageKey); } catch (e) {}
+    }
+};
+
+window.AppPerformanceCache = AppPerformanceCache;
+
 // API Endpoints
 const API_ENDPOINTS = {
     // Auth endpoints (old base URL)
@@ -705,6 +840,71 @@ const DeviceInfo = {
         this._detectPublicIP();
     },
 
+    getDeviceId: function () {
+        // Priority 1: Real Samsung TV / Emulator DUID via Tizen WebAPIs
+        // getDuid() returns the real hardware ID on TV and the emulator's fixed ID on simulator.
+        // We trust whatever getDuid() returns — do NOT filter or replace it.
+        try {
+            if (typeof webapis !== 'undefined' && webapis.productinfo && webapis.productinfo.getDuid) {
+                var duid = webapis.productinfo.getDuid();
+                if (duid && typeof duid === 'string' && duid.trim()) {
+                    var resolvedDuid = duid.trim();
+                    DEVICE_INFO.devslno = resolvedDuid;
+                    DEFAULT_HEADERS["devslno"] = resolvedDuid;
+                    DEFAULT_HEADERS["deviceID"] = resolvedDuid;
+                    console.log("[DeviceInfo] Device ID from getDuid():", resolvedDuid);
+                    return resolvedDuid;
+                }
+            }
+        } catch (e) {
+            console.warn("[DeviceInfo] getDuid() failed:", e);
+        }
+
+        // Priority 2: Tizen system capability (real TV only, getDuid missed)
+        try {
+            if (typeof tizen !== 'undefined' && tizen.systeminfo && tizen.systeminfo.getCapability) {
+                var tizenId = tizen.systeminfo.getCapability("http://tizen.org/system/tizenid");
+                if (tizenId && typeof tizenId === 'string' && tizenId.trim()) {
+                    var resolvedTizenId = tizenId.trim();
+                    DEVICE_INFO.devslno = resolvedTizenId;
+                    DEFAULT_HEADERS["devslno"] = resolvedTizenId;
+                    DEFAULT_HEADERS["deviceID"] = resolvedTizenId;
+                    console.log("[DeviceInfo] Device ID from tizenid:", resolvedTizenId);
+                    return resolvedTizenId;
+                }
+            }
+        } catch (e2) {
+            console.warn("[DeviceInfo] tizenid fallback failed:", e2);
+        }
+
+        // Priority 3: Use already-cached devslno from initializeDeviceInfo
+        if (DEVICE_INFO.devslno) {
+            return DEVICE_INFO.devslno;
+        }
+
+        // Priority 4: Pure browser session (no Tizen APIs at all) — generate per-session ID
+        // This only runs in a desktop browser, never on the real TV or emulator.
+        var cached;
+        try { cached = sessionStorage.getItem('_dynamicDeviceId'); } catch (e3) {}
+        if (cached) return cached;
+
+        var seed = ['WEB', Date.now(), Math.random().toString(36).slice(2, 10),
+            (typeof screen !== 'undefined' ? screen.width + 'x' + screen.height : 'na'),
+            (typeof navigator !== 'undefined' ? (navigator.userAgent || '') : '')
+        ].join('|');
+        var hash = 0;
+        for (var ci = 0; ci < seed.length; ci++) { hash = ((hash << 5) - hash) + seed.charCodeAt(ci); hash |= 0; }
+        var browserId = 'WEB-' + Math.abs(hash).toString(36).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+        try { sessionStorage.setItem('_dynamicDeviceId', browserId); } catch (e4) {}
+        console.log("[DeviceInfo] Device ID generated for browser session:", browserId);
+        return browserId;
+    },
+
+    getDeviceIdLabel: function () {
+        var deviceId = this.getDeviceId();
+        return deviceId || "Not available";
+    },
+
     /**
      * Check if an IP address is private/local (not routable on internet)
      */
@@ -867,6 +1067,16 @@ const DeviceInfo = {
         if (str === '' || str === 'undefined' || str === 'null') return false;
         if (str.indexOf(':') === -1) return false;
         if (str === '::' || str === '::0' || str === '0::0' || str === '::1') return false;
+
+        var lower = str.toLowerCase();
+
+        // Reject documentation/test prefix (RFC 3849) - this is often a static placeholder in emulators.
+        if (lower.indexOf('2001:db8') === 0) return false;
+
+        // Reject local-only IPv6 ranges for this UI field (we want a routable, dynamic network IPv6).
+        if (lower.indexOf('fe80:') === 0) return false; // Link-local
+        if (lower.indexOf('fc') === 0 || lower.indexOf('fd') === 0) return false; // ULA
+
         var cleaned = str.replace(/:/g, '').replace(/0/g, '');
         return cleaned !== '';
     },
@@ -1200,7 +1410,8 @@ const AuthAPI = {
             otpcode: otpcode,
             mac_address: device.mac_address,
             device_type: device.device_type,
-            device_id: device.device_id,
+            device_id: DeviceInfo.getDeviceId(),
+            devslno: DeviceInfo.getDeviceId(),
             ip_address: device.ip_address,
             ipv6_address: ipv6,
             getuserdet: "",
@@ -1858,6 +2069,8 @@ const ChannelsAPI = {
 // ✅ No CORS issues on Samsung TV
 // ==========================================
 const AdsAPI = {
+    _iptvAdsCache: {},
+
     /**
      * Get IPTV Ads from server
      *
@@ -1897,6 +2110,22 @@ const AdsAPI = {
      *   AdsAPI.getIPTVAds({ displayarea: 'chnllist' })  // Get channel list ads
      */
     getIPTVAds: async function (options = {}) {
+        var cacheKey = [options.adclient || 'fofi', options.srctype || 'image', options.displayarea || 'homepage', options.displaytype || 'multiple'].join('|');
+
+        if (this._iptvAdsCache[cacheKey]) {
+            console.log('[AdsAPI] IPTV ads cache hit:', cacheKey);
+            return this._iptvAdsCache[cacheKey];
+        }
+
+        try {
+            var cachedAds = sessionStorage.getItem('_iptv_ads_' + cacheKey);
+            if (cachedAds) {
+                this._iptvAdsCache[cacheKey] = JSON.parse(cachedAds);
+                console.log('[AdsAPI] IPTV ads session cache hit:', cacheKey);
+                return this._iptvAdsCache[cacheKey];
+            }
+        } catch (e) {}
+
         const user = AuthAPI.getUserData();
 
         // Debug: Log user data to see what fields exist
@@ -1990,6 +2219,9 @@ const AdsAPI = {
                             console.log("[AdsAPI]   Ad " + (index + 1) + ": " + ad.adpath);
                         }
                     });
+
+                    this._iptvAdsCache[cacheKey] = data.body;
+                    try { sessionStorage.setItem('_iptv_ads_' + cacheKey, JSON.stringify(data.body)); } catch (e) {}
 
                     return data.body;
                 } else {
@@ -2259,7 +2491,23 @@ const AppVersionAPI = {
 // FOFITV LOGO API
 // ==========================================
 const FoFiLogoAPI = {
+    _cachedResponse: null,
+
     getFoFiLogo: async function () {
+        if (this._cachedResponse) {
+            console.log('[FoFiLogoAPI] Returning in-memory cached logo response');
+            return this._cachedResponse;
+        }
+
+        try {
+            var cached = sessionStorage.getItem('_fofi_logo_response');
+            if (cached) {
+                this._cachedResponse = JSON.parse(cached);
+                console.log('[FoFiLogoAPI] Returning session cached logo response');
+                return this._cachedResponse;
+            }
+        } catch (e) {}
+
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -2272,7 +2520,12 @@ const FoFiLogoAPI = {
         };
 
         console.log("[FoFiLogoAPI] Fetching FoFi TV logo...");
-        return await apiCall(API_ENDPOINTS.FOFITV_LOGO, payload);
+        var response = await apiCall(API_ENDPOINTS.FOFITV_LOGO, payload);
+        if (response && !response.error) {
+            this._cachedResponse = response;
+            try { sessionStorage.setItem('_fofi_logo_response', JSON.stringify(response)); } catch (e) {}
+        }
+        return response;
     }
 };
 
@@ -2280,12 +2533,28 @@ const FoFiLogoAPI = {
 // OTT APPS API
 // ==========================================
 const OTTAppsAPI = {
+    _cachedResponse: null,
+
     /**
      * Get allowed OTT apps from BBNL server
      *
      * @returns {Promise<Object>} API response with apps array
      */
     getAllowedApps: async function () {
+        if (this._cachedResponse) {
+            console.log('[OTTAppsAPI] Returning in-memory cached apps response');
+            return this._cachedResponse;
+        }
+
+        try {
+            var cached = sessionStorage.getItem('_ott_apps_response');
+            if (cached) {
+                this._cachedResponse = JSON.parse(cached);
+                console.log('[OTTAppsAPI] Returning session cached apps response');
+                return this._cachedResponse;
+            }
+        } catch (e) {}
+
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -2299,10 +2568,17 @@ const OTTAppsAPI = {
 
         console.log("[OTTAppsAPI] Getting allowed apps:", payload);
 
-        return await apiCall(API_ENDPOINTS.OTT_APPS, payload, {
+        var response = await apiCall(API_ENDPOINTS.OTT_APPS, payload, {
             "devmac": device.mac_address,
             "devslno": device.devslno
         });
+
+        if (response && !response.error) {
+            this._cachedResponse = response;
+            try { sessionStorage.setItem('_ott_apps_response', JSON.stringify(response)); } catch (e) {}
+        }
+
+        return response;
     }
 };
 

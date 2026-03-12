@@ -929,10 +929,20 @@ body.channels-page {
     box-shadow: none;
 }
 
-.menu-btn:focus,
-.search-input:focus {
+.menu-btn:focus {
     border: 2px solid #FFFFFF;
     box-shadow: none;
+}
+
+/* Search input must not draw an inner focus rectangle.
+   The outer .search-bar handles focus highlight. */
+.search-bar .search-input:focus,
+.search-bar .search-input.focusable:focus {
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background: transparent !important;
 }
 
 .channel-card:focus,

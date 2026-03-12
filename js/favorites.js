@@ -28,6 +28,7 @@
 var focusables = [];
 var currentFocus = 0;
 var allChannels = [];
+var comingSoonPopupOpen = false;
 
 window.onload = function () {
     console.log("=== BBNL Favorites Page Initialized ===");
@@ -85,11 +86,14 @@ function showComingSoonPopup() {
             img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
         }
         popup.style.display = "flex";
+        comingSoonPopupOpen = true;
 
         // Focus the Go Back button
         var goBackBtn = document.getElementById("goBackBtn");
         if (goBackBtn) {
             goBackBtn.focus();
+            focusables = [goBackBtn];
+            currentFocus = 0;
         }
     }
 }
@@ -234,6 +238,15 @@ function refreshFocusables() {
 
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
+
+    // Lock remote navigation to popup controls only.
+    if (comingSoonPopupOpen) {
+        e.preventDefault();
+        if (code === 13 || code === 10009) {
+            window.location.href = "home.html";
+        }
+        return;
+    }
 
     if (code === 10009) { // Back
         e.preventDefault();

@@ -58,12 +58,16 @@ function showConfirmPopup(message, onYes) {
         if (confirm(message) && onYes) onYes();
         return;
     }
+    settingsPopupOpen = true;
+    disableSettingsBackgroundFocusables();
     msgEl.textContent = message;
     overlay.style.display = 'flex';
     noBtn.focus(); // Default focus on No (safer for logout)
 
     function closePopup(confirmed) {
         overlay.style.display = 'none';
+        settingsPopupOpen = false;
+        restoreSettingsBackgroundFocusables();
         yesBtn.removeEventListener('click', onYesClick);
         noBtn.removeEventListener('click', onNoClick);
         document.removeEventListener('keydown', onPopupKey);
@@ -74,14 +78,15 @@ function showConfirmPopup(message, onYes) {
     function onNoClick() { closePopup(false); }
 
     function onPopupKey(e) {
+        // Fully isolate popup interaction from background page.
+        e.preventDefault();
+        e.stopPropagation();
         if (e.keyCode === 13 || e.keyCode === 65376) {
-            e.preventDefault();
             // Let the focused button handle Enter via click
             var focused = document.activeElement;
             if (focused === yesBtn) closePopup(true);
             else closePopup(false);
         } else if (e.keyCode === 10009 || e.keyCode === 461) { // Back key
-            e.preventDefault();
             closePopup(false);
         } else if (e.keyCode === 37) { // Left → focus Yes
             yesBtn.focus();
@@ -93,6 +98,36 @@ function showConfirmPopup(message, onYes) {
     yesBtn.addEventListener('click', onYesClick);
     noBtn.addEventListener('click', onNoClick);
     document.addEventListener('keydown', onPopupKey);
+}
+
+// When the confirmation popup is open, background controls must stay disabled.
+var settingsPopupOpen = false;
+
+function disableSettingsBackgroundFocusables() {
+    var focusables = document.querySelectorAll('.focusable');
+    focusables.forEach(function (el) {
+        if (el.id === 'settings-popup-yes' || el.id === 'settings-popup-no') return;
+        if (!el.hasAttribute('data-prev-tabindex')) {
+            var prev = el.getAttribute('tabindex');
+            el.setAttribute('data-prev-tabindex', prev !== null ? prev : 'none');
+        }
+        el.tabIndex = -1;
+    });
+}
+
+function restoreSettingsBackgroundFocusables() {
+    var focusables = document.querySelectorAll('.focusable');
+    focusables.forEach(function (el) {
+        if (el.id === 'settings-popup-yes' || el.id === 'settings-popup-no') return;
+        var prev = el.getAttribute('data-prev-tabindex');
+        if (prev === null) return;
+        if (prev === 'none') {
+            el.removeAttribute('tabindex');
+        } else {
+            el.setAttribute('tabindex', prev);
+        }
+        el.removeAttribute('data-prev-tabindex');
+    });
 }
 
 // Navigation state
@@ -108,6 +143,10 @@ var settingsNav = {
 
 window.onload = function () {
     console.log("=== BBNL Settings Page Initialized ===");
+
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
+        AppPerformanceCache.primeAfterLogin(false);
+    }
 
     // Initialize Dark Mode
     initDarkMode();
@@ -151,7 +190,42 @@ window.onload = function () {
             console.log("Not on Tizen");
         }
     }
+
+    // Restore previous Settings navigation state for faster return UX.
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.getPageState) {
+        var cachedState = AppPerformanceCache.getPageState('settings', 60 * 60 * 1000);
+        if (cachedState) {
+            if (typeof cachedState.zone === 'string') settingsNav.zone = cachedState.zone;
+            if (typeof cachedState.sidebarIndex === 'number') settingsNav.sidebarIndex = cachedState.sidebarIndex;
+            if (typeof cachedState.contentIndex === 'number') settingsNav.contentIndex = cachedState.contentIndex;
+
+            setTimeout(function () {
+                try {
+                    if (settingsNav.zone === 'sidebar') {
+                        var items = getSidebarItems();
+                        if (items[settingsNav.sidebarIndex]) items[settingsNav.sidebarIndex].focus();
+                    } else {
+                        refreshContentFocusables();
+                        if (settingsNav.contentFocusables[settingsNav.contentIndex]) {
+                            settingsNav.contentFocusables[settingsNav.contentIndex].focus();
+                        }
+                    }
+                } catch (e) {}
+            }, 0);
+        }
+    }
 };
+
+window.addEventListener('beforeunload', function () {
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
+        AppPerformanceCache.savePageState('settings', {
+            zone: settingsNav.zone,
+            sidebarIndex: settingsNav.sidebarIndex,
+            contentIndex: settingsNav.contentIndex,
+            scrollTop: window.scrollY || 0
+        });
+    }
+});
 
 // ==========================================
 // HELPERS - Get elements
@@ -222,6 +296,11 @@ function focusBackButton() {
 // ==========================================
 
 document.addEventListener("keydown", function (e) {
+    // While logout popup is open, only popup key handler should process keys.
+    if (settingsPopupOpen) {
+        return;
+    }
+
     var code = e.keyCode;
     e.preventDefault();
 
@@ -628,11 +707,7 @@ function loadDeviceId(deviceInfo, isTizen) {
     if (!deviceIdEl) return;
 
     try {
-        if (isTizen && webapis.productinfo && webapis.productinfo.getDuid) {
-            deviceIdEl.innerText = webapis.productinfo.getDuid() || 'N/A';
-        } else {
-            deviceIdEl.innerText = 'Emulator / Web';
-        }
+        deviceIdEl.innerText = DeviceInfo.getDeviceIdLabel();
     } catch (e) {
         deviceIdEl.innerText = 'Not available';
     }
@@ -661,9 +736,14 @@ function loadAppVersion() {
 }
 
 function loadNetworkInfo(deviceInfo, isTizen) {
+    // Re-check webapis availability directly (might not be available at page load)
+    var hasWebapis = (typeof webapis !== 'undefined') && webapis && webapis.network;
+    console.log("[Settings] isTizen param:", isTizen, "| Direct webapis.network check:", hasWebapis);
+    
     try {
-        if (isTizen && webapis.network) {
+        if (hasWebapis) {
             var networkType = webapis.network.getActiveConnectionType();
+            console.log("[Settings] Network Type:", networkType);
 
             setElementText('device-connection-type', getConnectionTypeName(networkType));
             
@@ -674,9 +754,27 @@ function loadNetworkInfo(deviceInfo, isTizen) {
             }
 
             if (networkType > 0) {
-                setElementText('device-ipv4', safeCall(function () {
-                    return webapis.network.getIp(networkType);
-                }, 'N/A'));
+                try {
+                    var localIp = webapis.network.getIp(networkType);
+                    console.log("[Settings] Local IP from webapis.network.getIp("+networkType+"):", localIp);
+                    if (localIp && localIp.trim()) {
+                        setElementText('device-ipv4', localIp);
+                    } else {
+                        console.warn("[Settings] getIp returned empty/null, trying getIpv4...");
+                        // Fallback: try getIpv4 method if available
+                        if (typeof webapis.network.getIpv4 === 'function') {
+                            var localIpv4 = webapis.network.getIpv4(networkType);
+                            console.log("[Settings] Local IP from getIpv4:", localIpv4);
+                            setElementText('device-ipv4', localIpv4 || 'N/A');
+                        } else {
+                            setElementText('device-ipv4', 'N/A');
+                        }
+                    }
+                } catch (ipError) {
+                    console.error("[Settings] Error getting local IP:", ipError);
+                    console.log("[Settings] Available webapis.network methods:", Object.keys(webapis.network || {}));
+                    setElementText('device-ipv4', 'N/A');
+                }
 
                 // Load Public IP and show it in Gateway IP field
                 loadPublicIPForGateway();
@@ -689,18 +787,51 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 setElementText('device-ipv6', 'N/A');
             }
 
-            setElementText('device-dns', safeCall(function () {
-                return webapis.network.getDns(networkType);
-            }, 'N/A'));
+            try {
+                var dnsValue = webapis.network.getDns(networkType);
+                console.log("[Settings] DNS:", dnsValue);
+                setElementText('device-dns', dnsValue || 'N/A');
+            } catch (dnsError) {
+                console.error("[Settings] Error getting DNS:", dnsError);
+                setElementText('device-dns', 'N/A');
+            }
 
-            setElementText('device-wifi-mac', formatMacAddress(safeCall(function () {
-                return webapis.network.getMac(1);
-            }, null)) || 'N/A');
+            try {
+                var macValue = webapis.network.getMac(1);
+                console.log("[Settings] MAC Address from webapis:", macValue);
+                var formattedMac = formatMacAddress(macValue);
+                setElementText('device-wifi-mac', formattedMac || 'N/A');
+            } catch (macError) {
+                console.error("[Settings] Error getting MAC:", macError);
+                setElementText('device-wifi-mac', 'N/A');
+            }
 
         } else {
-            // Browser/Emulator mode - use external APIs for IP addresses
+            // Browser/Emulator mode - no native webapis.network available
+            console.log("[Settings] webapis.network not available - browser/emulator mode");
+            console.log("[Settings] typeof webapis:", typeof webapis);
+            if (typeof webapis !== 'undefined') {
+                console.log("[Settings] webapis available but no network:", Object.keys(webapis || {}));
+            }
+
+            function isIPv4(value) {
+                return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(value || '').trim());
+            }
+
+            function isPrivateIPv4(value) {
+                var ip = String(value || '').trim();
+                if (!isIPv4(ip)) return false;
+                if (ip.indexOf('10.') === 0) return true;
+                if (ip.indexOf('192.168.') === 0) return true;
+                var m = ip.match(/^172\.(\d{1,3})\./);
+                if (!m) return false;
+                var second = parseInt(m[1], 10);
+                return second >= 16 && second <= 31;
+            }
+            
             setElementText('device-connection-type', 'Browser/Emulator');
-            setElementText('device-dns', 'N/A');
+            setElementText('device-ipv4', 'N/A (Browser Mode)');
+            setElementText('device-dns', 'N/A (Browser Restricted)');
             setElementText('device-wifi-mac', 'N/A');
 
             var connectionStatus = document.getElementById('device-connection-status');
@@ -708,8 +839,55 @@ function loadNetworkInfo(deviceInfo, isTizen) {
                 connectionStatus.innerText = 'Emulator Mode';
             }
 
-            // Load IP addresses from external APIs
-            loadIPv4FromExternalAPI();
+            // Fallback 1: Use private local IP from deviceInfo cache (if available)
+            try {
+                var cachedIp = (deviceInfo && (deviceInfo.local_ip || deviceInfo.ip_address)) || '';
+                if (isPrivateIPv4(cachedIp)) {
+                    console.log('[Settings] Local IPv4 from deviceInfo fallback:', cachedIp);
+                    setElementText('device-ipv4', cachedIp);
+                }
+            } catch (fallbackErr) {
+                console.warn('[Settings] deviceInfo local IP fallback failed:', fallbackErr.message);
+            }
+
+            // Fallback 2: Try Tizen systeminfo NETWORK API even if webapis.network is absent
+            try {
+                if (typeof tizen !== 'undefined' && tizen.systeminfo && typeof tizen.systeminfo.getPropertyValue === 'function') {
+                    tizen.systeminfo.getPropertyValue('NETWORK', function (network) {
+                        var netIp = network && (network.ipAddress || network.ipv4Address || network.ipv4 || '');
+                        var netIpText = String(netIp || '').trim();
+
+                        if (isPrivateIPv4(netIpText)) {
+                            console.log('[Settings] Local IPv4 from tizen.systeminfo NETWORK:', netIpText);
+                            setElementText('device-ipv4', netIpText);
+                            setElementText('device-connection-type', 'Tizen/SystemInfo');
+                            var statusEl = document.getElementById('device-connection-status');
+                            if (statusEl) statusEl.innerText = 'Connected';
+                        }
+
+                        var netDns = network && (network.dns || network.dnsServer || network.dnsAddress || '');
+                        if (isIPv4(netDns)) {
+                            setElementText('device-dns', netDns);
+                        }
+                    }, function (err) {
+                        console.warn('[Settings] tizen.systeminfo NETWORK fallback failed:', err && err.message ? err.message : err);
+                    });
+                }
+            } catch (sysErr) {
+                console.warn('[Settings] tizen.systeminfo fallback exception:', sysErr.message);
+            }
+
+            // Fallback 3: Browser local IPv4 best-effort via WebRTC.
+            detectBrowserLocalIPv4(3000).then(function (browserIp) {
+                if (isPrivateIPv4(browserIp)) {
+                    console.log('[Settings] Local IPv4 from browser WebRTC fallback:', browserIp);
+                    setElementText('device-ipv4', browserIp);
+                } else {
+                    console.warn('[Settings] Browser WebRTC local IP not available in this runtime');
+                }
+            });
+
+            // Only load gateway (public IP) - local IP not available in browser
             loadPublicIPForGateway();
             loadIPv6Display();
         }
@@ -788,6 +966,63 @@ function formatMacAddress(mac) {
     return cleaned.match(/.{1,2}/g).join(':');
 }
 
+// Browser-only fallback for local IPv4 (best effort via ICE candidates).
+// Some environments hide local IP and return mDNS hostnames instead.
+function detectBrowserLocalIPv4(timeoutMs) {
+    return new Promise(function (resolve) {
+        try {
+            var RTCPeer = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+            if (!RTCPeer) {
+                resolve('');
+                return;
+            }
+
+            var done = false;
+            var foundIp = '';
+            var regex = /(\d{1,3}(?:\.\d{1,3}){3})/;
+            var pc = new RTCPeer({ iceServers: [] });
+
+            function isPrivate(ip) {
+                if (!ip) return false;
+                if (ip.indexOf('10.') === 0) return true;
+                if (ip.indexOf('192.168.') === 0) return true;
+                var m = ip.match(/^172\.(\d{1,3})\./);
+                if (!m) return false;
+                var second = parseInt(m[1], 10);
+                return second >= 16 && second <= 31;
+            }
+
+            function finish(ip) {
+                if (done) return;
+                done = true;
+                try { pc.close(); } catch (e) {}
+                resolve(ip || '');
+            }
+
+            pc.createDataChannel('bbnl-ip-probe');
+            pc.onicecandidate = function (evt) {
+                if (!evt || !evt.candidate || !evt.candidate.candidate) return;
+                var candidate = evt.candidate.candidate;
+                var match = candidate.match(regex);
+                if (!match) return;
+                var ip = match[1];
+                if (isPrivate(ip)) {
+                    foundIp = ip;
+                    finish(foundIp);
+                }
+            };
+
+            pc.createOffer()
+                .then(function (offer) { return pc.setLocalDescription(offer); })
+                .catch(function () { finish(''); });
+
+            setTimeout(function () { finish(foundIp); }, timeoutMs || 3000);
+        } catch (e) {
+            resolve('');
+        }
+    });
+}
+
 function initDarkMode() {
     var isDarkMode = localStorage.getItem('darkMode') !== 'false';
     if (isDarkMode) {
@@ -797,72 +1032,7 @@ function initDarkMode() {
     }
 }
 
-/**
- * Load IPv4 Address from external API services (for browser/emulator)
- */
-function loadIPv4FromExternalAPI() {
-    var ipv4El = document.getElementById('device-ipv4');
-    if (!ipv4El) return;
-    
-    console.log("[Settings] Loading IPv4 from external API...");
-    ipv4El.innerText = 'Loading...';
-    
-    var ipv4Services = [
-        'https://api.ipify.org?format=json',
-        'https://ipinfo.io/json',
-        'https://ipv4.icanhazip.com'
-    ];
-    
-    function fetchWithTimeout(url, timeoutMs) {
-        var timeoutPromise = new Promise(function(_, reject) {
-            setTimeout(function() { reject(new Error('Timeout')); }, timeoutMs);
-        });
-        return Promise.race([fetch(url), timeoutPromise]);
-    }
 
-    function tryService(index) {
-        if (index >= ipv4Services.length) {
-            ipv4El.innerText = 'N/A';
-            console.log("[Settings] All IPv4 services failed");
-            return;
-        }
-
-        var service = ipv4Services[index];
-        console.log("[Settings] Trying IPv4 service:", service);
-
-        fetchWithTimeout(service, 5000)
-            .then(function(response) {
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                var contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    return response.json();
-                } else {
-                    return response.text();
-                }
-            })
-            .then(function(data) {
-                var ip = null;
-                if (typeof data === 'string') {
-                    ip = data.trim();
-                } else {
-                    ip = data.ip || data.IP || null;
-                }
-                
-                if (ip) {
-                    ipv4El.innerText = ip;
-                    console.log("[Settings] IPv4 found:", ip);
-                } else {
-                    tryService(index + 1);
-                }
-            })
-            .catch(function(error) {
-                console.log("[Settings] IPv4 service error:", error);
-                tryService(index + 1);
-            });
-    }
-    
-    tryService(0);
-}
 
 /**
  * Load Public IP and display it in the Gateway IP field
@@ -871,8 +1041,34 @@ function loadPublicIPForGateway() {
     var gatewayEl = document.getElementById('device-gateway');
     if (!gatewayEl) return;
 
-    console.log("[Settings] Loading Public IP for Gateway field...");
+    console.log("[Settings] Loading Gateway IP...");
     gatewayEl.innerText = 'Loading...';
+
+    function isValidGatewayValue(ip) {
+        if (!ip || typeof ip !== 'string') return false;
+        var v = ip.trim();
+        if (v === '::1' || v === '0.0.0.0' || v === '0.0.0.1' || v === '127.0.0.1') return false;
+        if (v.indexOf('---') !== -1) return false;
+        return /^\d{1,3}(\.\d{1,3}){3}$/.test(v);
+    }
+
+    // Prefer native Samsung gateway API for Device Info (same approach as login screen).
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            var networkType = webapis.network.getActiveConnectionType();
+            if (networkType > 0 && typeof webapis.network.getGateway === 'function') {
+                var gatewayIp = webapis.network.getGateway(networkType);
+                if (isValidGatewayValue(gatewayIp)) {
+                    gatewayEl.innerText = gatewayIp;
+                    console.log('[Settings] Native gateway IP:', gatewayIp);
+                    return;
+                }
+                console.warn('[Settings] Ignoring invalid native gateway:', gatewayIp);
+            }
+        }
+    } catch (e) {
+        console.warn('[Settings] Native gateway fetch failed, fallback to external:', e.message);
+    }
 
     var ipServices = [
         'https://api.ipify.org?format=json',
@@ -895,7 +1091,7 @@ function loadPublicIPForGateway() {
         }
 
         var service = ipServices[index];
-        fetchWithTimeout(service, 5000)
+        fetchWithTimeout(service, 15000)
             .then(function(response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 return response.json();

@@ -9,11 +9,23 @@ var homeSearchTimeout = null; // Timer for auto-play channel by number
 var homeAdInterval = null; // Interval for ad rotation
 var homeNetworkInterval = null; // Interval for network status updates
 var homeSearchActivated = false; // Only activate keypad/editing on explicit action
+var homeLanguageLogoCache = {}; // URL -> true
+var homeLanguageLogoPrefetchInFlight = {}; // URL -> true
 
 // Clean up background intervals when leaving page
 window.addEventListener('beforeunload', function () {
     if (homeAdInterval) clearInterval(homeAdInterval);
     if (homeNetworkInterval) clearInterval(homeNetworkInterval);
+
+    // Persist basic UI state so returning to Home feels instant.
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
+        var searchEl = document.getElementById('searchInput');
+        AppPerformanceCache.savePageState('home', {
+            focusIndex: currentFocus,
+            searchText: searchEl ? searchEl.value : '',
+            scrollTop: window.scrollY || 0
+        });
+    }
 });
 
 // ==========================================
@@ -82,6 +94,10 @@ var fofiShouldAutoPlay = false;
 window.onload = function () {
     console.log("=== BBNL IPTV Home Page Initialized ===");
 
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
+        AppPerformanceCache.primeAfterLogin(false);
+    }
+
     // Get all focusable elements
     focusables = document.querySelectorAll('.focusable');
     console.log("Found focusable elements:", focusables.length);
@@ -90,6 +106,26 @@ window.onload = function () {
     if (focusables.length > 0) {
         currentFocus = 0;
         focusables[0].focus();
+    }
+
+    // Restore cached UI state from same login session.
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.getPageState) {
+        var cachedState = AppPerformanceCache.getPageState('home', 60 * 60 * 1000);
+        if (cachedState) {
+            var sInput = document.getElementById('searchInput');
+            if (sInput && cachedState.searchText) {
+                sInput.value = String(cachedState.searchText);
+            }
+            if (typeof cachedState.focusIndex === 'number' && cachedState.focusIndex >= 0 && cachedState.focusIndex < focusables.length) {
+                currentFocus = cachedState.focusIndex;
+                setTimeout(function () {
+                    try { focusables[currentFocus].focus(); } catch (e) {}
+                }, 0);
+            }
+            if (typeof cachedState.scrollTop === 'number') {
+                setTimeout(function () { window.scrollTo(0, cachedState.scrollTop); }, 0);
+            }
+        }
     }
 
     // Add mouse support
@@ -1156,6 +1192,29 @@ function loadHomeLanguages() {
  * Render languages in home page grid - MINIMAL LOGO ONLY DESIGN
  * @param {Array} languages - Array of language objects
  */
+function prefetchHomeLanguageLogos(languages, maxCount) {
+    if (!Array.isArray(languages) || languages.length === 0) return;
+    var limit = Math.min(maxCount || 13, languages.length);
+
+    for (var i = 0; i < limit; i++) {
+        var lang = languages[i] || {};
+        var logoUrl = lang.langlogo || '';
+        if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
+        if (homeLanguageLogoCache[logoUrl] || homeLanguageLogoPrefetchInFlight[logoUrl]) continue;
+
+        homeLanguageLogoPrefetchInFlight[logoUrl] = true;
+        var pre = new Image();
+        pre.onload = function () {
+            homeLanguageLogoCache[this.src] = true;
+            delete homeLanguageLogoPrefetchInFlight[this.src];
+        };
+        pre.onerror = function () {
+            delete homeLanguageLogoPrefetchInFlight[this.src];
+        };
+        pre.src = logoUrl;
+    }
+}
+
 function renderLanguagesInHomeGrid(languages) {
     var container = document.getElementById('home-languages-container');
 
@@ -1183,11 +1242,14 @@ function renderLanguagesInHomeGrid(languages) {
     // Take first 13 languages (+ View All = 14 items = 2 rows of 7)
     var displayLanguages = languages.slice(0, 13);
 
+    // Prefetch first two rows so category logos appear quickly on Home.
+    prefetchHomeLanguageLogos(displayLanguages, 14);
+
     displayLanguages.forEach(function (lang, index) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
         var langLogo = lang.langlogo || "";
-
+            prefetchHomeLanguageLogos(displayLanguages, 13);
         var item = document.createElement('div');
         item.className = 'language-item focusable';
         item.tabIndex = 0;
@@ -1201,8 +1263,16 @@ function renderLanguagesInHomeGrid(languages) {
 
             var img = document.createElement('img');
             img.className = 'language-logo';
+            img.decoding = 'async';
+            img.loading = (index < 7) ? 'eager' : 'lazy';
             img.src = langLogo;
             img.alt = langName;
+            if (homeLanguageLogoCache[langLogo]) {
+                img.style.transition = 'none';
+            }
+            img.onload = function () {
+                homeLanguageLogoCache[langLogo] = true;
+            };
             img.onerror = function () {
                 var fallback = document.createElement('div');
                 fallback.className = 'language-logo-fallback';
@@ -2061,14 +2131,15 @@ document.addEventListener('DOMContentLoaded', function () {
  * @param {Number} lcn - The LCN number to play
  */
 function showSearchNotFound(msg) {
-    // Remove any existing toast
+    // Match the improved Channels page validation toast for better TV readability.
     var existing = document.getElementById('search-toast');
     if (existing) existing.remove();
 
     var toast = document.createElement('div');
     toast.id = 'search-toast';
+    toast.className = 'search-toast-notification';
     toast.textContent = msg;
-    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.95);color:#ff4444;font-size:22px;font-weight:600;padding:18px 48px;border-radius:12px;border:2px solid #ff4444;z-index:9999;white-space:nowrap;pointer-events:none;';
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(18,18,18,0.98);color:#ffffff;font-size:23px;font-weight:700;padding:18px 50px;border-radius:12px;border:2px solid #ff6b6b;z-index:9999;white-space:nowrap;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.8);box-shadow:0 8px 24px rgba(0,0,0,0.45);';
     document.body.appendChild(toast);
 
     setTimeout(function () {

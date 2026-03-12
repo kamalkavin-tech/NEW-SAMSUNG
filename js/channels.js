@@ -49,6 +49,21 @@ var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages
 var masterListLoaded = false; // Flag to track if master list is loaded
 var channelLogoCache = {}; // Reuse loaded logos across category switches
 var channelsSearchActivated = false; // Only activate keypad after explicit user action
+var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
+var channelsResultCache = {}; // Reuse channel API responses per filter/category
+
+window.addEventListener('beforeunload', function () {
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
+        var searchEl = document.getElementById('searchInput');
+        AppPerformanceCache.savePageState('channels', {
+            focusIndex: currentFocus,
+            searchText: searchEl ? searchEl.value : '',
+            currentCategory: currentCategory,
+            currentLanguage: currentLanguage,
+            scrollTop: window.scrollY || 0
+        });
+    }
+});
 
 // Navigation zones: 'sidebar', 'topControls' (back, search), 'tabs' (category pills), 'cards' (channel cards)
 var currentZone = 'sidebar';
@@ -57,6 +72,10 @@ var sidebarCategoryIndex = 0; // Track focused category in sidebar
 
 window.onload = function () {
     console.log("=== BBNL Channels Page Initialized ===");
+
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
+        AppPerformanceCache.primeAfterLogin(false);
+    }
 
     // Initialize Dark Mode from localStorage
     initDarkMode();
@@ -75,6 +94,23 @@ window.onload = function () {
 
     // Initialize search functionality
     initSearchFunctionality();
+
+    // Restore lightweight UI state for smoother return navigation.
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.getPageState) {
+        var cachedState = AppPerformanceCache.getPageState('channels', 60 * 60 * 1000);
+        if (cachedState) {
+            var searchInput = document.getElementById('searchInput');
+            if (searchInput && cachedState.searchText) {
+                searchInput.value = String(cachedState.searchText);
+            }
+            if (typeof cachedState.focusIndex === 'number') {
+                currentFocus = cachedState.focusIndex;
+            }
+            if (typeof cachedState.scrollTop === 'number') {
+                setTimeout(function () { window.scrollTo(0, cachedState.scrollTop); }, 0);
+            }
+        }
+    }
 
     // Add zone tracking listeners
     addZoneTrackingListeners();
@@ -763,6 +799,66 @@ function isNetworkDisconnected() {
     return !navigator.onLine;
 }
 
+function setChannelsLoadingState(isLoading) {
+    var container = document.getElementById('channel-grid-container');
+    if (!container) return;
+    if (isLoading) {
+        container.classList.add('channels-loading');
+    } else {
+        container.classList.remove('channels-loading');
+    }
+}
+
+function buildChannelsCacheKey(options) {
+    var o = options || {};
+    return [
+        o.grid || '',
+        o.langid || '',
+        o.search || '',
+        o.subscribed || ''
+    ].join('|');
+}
+
+function getCachedChannels(options) {
+    var key = buildChannelsCacheKey(options);
+    var cached = channelsResultCache[key];
+    return Array.isArray(cached) ? cached : null;
+}
+
+function setCachedChannels(options, channels) {
+    if (!Array.isArray(channels)) return;
+    var key = buildChannelsCacheKey(options);
+    // Keep an immutable snapshot to avoid accidental mutations.
+    channelsResultCache[key] = channels.slice();
+}
+
+function clearChannelsResultCache() {
+    channelsResultCache = {};
+}
+
+function primeChannelLogoCache(channels, maxCount) {
+    if (!Array.isArray(channels) || channels.length === 0) return;
+    var limit = Math.min(maxCount || 36, channels.length);
+
+    for (var i = 0; i < limit; i++) {
+        var ch = channels[i] || {};
+        var logoUrl = ch.chlogo || ch.logo_url || '';
+            if (!logoUrl) continue;
+        if (channelLogoCache[logoUrl] || _channelLogoPrefetchInFlight[logoUrl]) continue;
+
+        _channelLogoPrefetchInFlight[logoUrl] = true;
+        var img = new Image();
+        img.onload = function () {
+            channelLogoCache[this.src] = true;
+            delete _channelLogoPrefetchInFlight[this.src];
+        };
+        img.onerror = function () {
+            delete _channelLogoPrefetchInFlight[this.src];
+        };
+        img.src = logoUrl;
+    }
+}
+
 // ==========================================
 // ERROR POPUP FUNCTIONALITY
 // ==========================================
@@ -819,7 +915,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
 async function loadChannels(options = {}) {
     const container = document.getElementById("channel-grid-container");
-    container.innerHTML = '<div class="loading-spinner">Loading Channels...</div>';
+    if (!container) return;
+
+    const apiOptions = {
+        grid: options.grid || "",
+        langid: options.langid || "",
+        search: options.search || "",
+        subscribed: options.subscribed || ""
+    };
+
+    // Fast path: render from in-memory cache when user switches back to an already loaded category.
+    var cachedChannels = getCachedChannels(apiOptions);
+    if (cachedChannels && cachedChannels.length > 0) {
+        console.log("[Channels Page] Cache hit for", buildChannelsCacheKey(apiOptions), "-", cachedChannels.length, "channels");
+        allChannels = cachedChannels.slice();
+        renderAllChannels(allChannels);
+        setChannelsLoadingState(false);
+        return;
+    }
+
+    // Keep existing cards visible during filter changes to avoid abrupt flash/reload effect.
+    if (!container.querySelector('.channels-grid')) {
+        container.innerHTML = '<div class="loading-spinner">Loading Channels...</div>';
+    }
+    setChannelsLoadingState(true);
 
     hideErrorPopups();
 
@@ -832,15 +951,9 @@ async function loadChannels(options = {}) {
                 CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
                 CacheManager.remove(CacheManager.KEYS.CATEGORIES);
             }
+            clearChannelsResultCache();
             sessionStorage.removeItem('subscription_completed');
         }
-
-        const apiOptions = {
-            grid: options.grid || "",
-            langid: options.langid || "",
-            search: options.search || "",
-            subscribed: options.subscribed || ""
-        };
 
         let response = await BBNL_API.getChannelList(apiOptions);
 
@@ -855,9 +968,11 @@ async function loadChannels(options = {}) {
             console.log("[Channels Page] Loaded " + response.length + " channels");
 
             allChannels = response;
+            setCachedChannels(apiOptions, allChannels);
 
             if (allChannels.length === 0) {
                 container.innerHTML = '<div class="loading-spinner">No channels found</div>';
+                setChannelsLoadingState(false);
                 if (isNetworkDisconnected()) {
                     showErrorPopup('channels');
                 }
@@ -865,9 +980,11 @@ async function loadChannels(options = {}) {
             }
 
             renderAllChannels(allChannels);
+            setChannelsLoadingState(false);
         } else {
             container.innerHTML = '';
             console.error("Channel Load Failed", response);
+            setChannelsLoadingState(false);
             if (isNetworkDisconnected()) {
                 showErrorPopup('channels');
             }
@@ -875,6 +992,7 @@ async function loadChannels(options = {}) {
     } catch (e) {
         console.error("[Channels Page] Exception:", e);
         container.innerHTML = '';
+        setChannelsLoadingState(false);
         if (isNetworkDisconnected()) {
             showErrorPopup('internet');
         }
@@ -883,7 +1001,6 @@ async function loadChannels(options = {}) {
 
 function renderAllChannels(channels) {
     const container = document.getElementById("channel-grid-container");
-    container.innerHTML = "";
 
     // Store currently displayed channels for LCN search
     currentDisplayedChannels = channels;
@@ -895,14 +1012,21 @@ function renderAllChannels(channels) {
     }
 
     const grid = document.createElement("div");
-    grid.className = "channels-grid";
+    grid.className = "channels-grid channels-grid-smooth";
+
+    // Prefetch visible logos to reduce perceived delay when switching categories.
+    primeChannelLogoCache(channels, 40);
 
     channels.forEach(ch => {
         const card = createChannelCard(ch);
         grid.appendChild(card);
     });
 
+    container.innerHTML = "";
     container.appendChild(grid);
+    requestAnimationFrame(function () {
+        grid.classList.add('is-visible');
+    });
     refreshFocusables();
     initLazyLoading();
 }
@@ -989,7 +1113,7 @@ function createChannelCard(ch) {
     const logoDiv = document.createElement("div");
     logoDiv.className = "channel-logo-container";
 
-    if (chLogo && !chLogo.includes("chnlnoimage")) {
+    if (chLogo) {
         const img = document.createElement("img");
         // If already loaded in this session, set src directly to avoid visible reload delay.
         if (channelLogoCache[chLogo]) {
@@ -1629,7 +1753,7 @@ function showSearchNotFound(msg) {
     toast.id = 'search-toast';
     toast.className = 'search-toast-notification';
     toast.textContent = msg;
-    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,0.95);color:#ff4444;font-size:22px;font-weight:600;padding:18px 48px;border-radius:12px;border:2px solid #ff4444;z-index:9999;white-space:nowrap;pointer-events:none;';
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(18,18,18,0.98);color:#ffffff;font-size:23px;font-weight:700;padding:18px 50px;border-radius:12px;border:2px solid #ff6b6b;z-index:9999;white-space:nowrap;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.8);box-shadow:0 8px 24px rgba(0,0,0,0.45);';
     document.body.appendChild(toast);
     
     // Auto-remove after 3 seconds
