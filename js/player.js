@@ -94,6 +94,8 @@ function fixLocalhostUrl(url) {
 // Track if we've hidden the loading indicator for current stream
 var hasHiddenLoadingIndicator = false;
 var playerErrorPopupOpen = false;
+var playerErrorActionMode = 'retry'; // retry | paynow
+var PAYMENT_GATEWAY_URL = 'https://bbnl.in/renew';
 
 /**
  * Check if the network is disconnected
@@ -119,19 +121,32 @@ function showPlayerErrorPopup(title, message) {
     if (popup) {
         var titleEl = document.getElementById('playerErrorTitle');
         var msgEl = document.getElementById('playerErrorMessage');
+        var actionBtn = document.getElementById('playerRetryBtn');
         if (titleEl) titleEl.textContent = title || 'Playback Error';
         if (msgEl) msgEl.textContent = message || 'Please Check your network and try again';
+
+        var titleLower = String(title || '').toLowerCase();
+        var msgLower = String(message || '').toLowerCase();
+        var isSubscriptionPopup = titleLower.indexOf('subscription not available') !== -1 ||
+            msgLower.indexOf('please subscribe to watch this channel') !== -1;
+        playerErrorActionMode = isSubscriptionPopup ? 'paynow' : 'retry';
+        if (actionBtn) actionBtn.textContent = isSubscriptionPopup ? 'Pay Now' : 'Try Again';
 
         // Set error image from API based on error type
         var img = document.getElementById('errorImg_player');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
-            var key = 'NO_INTERNET_CONNECTION';
-            if (title && (title.toLowerCase().includes('not available') || title.toLowerCase().includes('subscription') || title.toLowerCase().includes('not subscribed'))) {
+            var key = 'PLAYBACK_ERROR';
+            if (title && (title.toLowerCase().includes('subscription not available') || title.toLowerCase().includes('not subscribed'))) {
                 key = 'NO_CHANNELS_AVAILABLE';
             } else if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
                 key = 'SIGNAL_UNAVAILABLE';
+            } else if (title && title.toLowerCase().includes('network')) {
+                key = 'NO_INTERNET_CONNECTION';
             }
             var imgUrl = ErrorImagesAPI.getImageUrl(key);
+            if (!imgUrl && key === 'PLAYBACK_ERROR') {
+                imgUrl = ErrorImagesAPI.getImageUrl('SIGNAL_UNAVAILABLE') || ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE') || ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+            }
             if (imgUrl) {
                 img.src = imgUrl;
             }
@@ -265,10 +280,10 @@ window.onload = function () {
 
                         if (currentChannel && !isSubs && chPrice > 0) {
                             // Paid channel that user is not subscribed to
-                            showPlayerErrorPopup('Channel Not Available', 'This is a paid channel (₹' + chPrice.toFixed(2) + '). Please subscribe to watch this channel.');
+                            showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
                         } else if (currentChannel && !isSubs) {
                             // Unsubscribed channel (free or unknown price)
-                            showPlayerErrorPopup('Channel Not Available', 'This channel is not available. Please check your subscription or try another channel.');
+                            showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
                         } else {
                             // General playback error (subscribed but stream failed)
                             showPlayerErrorPopup('Playback Error', 'Unable to play this channel. Please try again or switch to another channel.');
@@ -350,6 +365,12 @@ window.onload = function () {
     var playerRetryBtn = document.getElementById('playerRetryBtn');
     if (playerRetryBtn) {
         playerRetryBtn.addEventListener('click', function () {
+            if (playerErrorActionMode === 'paynow') {
+                hidePlayerErrorPopup();
+                window.location.href = 'payment.html';
+                return;
+            }
+
             hidePlayerErrorPopup();
             if (!_lastAttemptedChannel) return;
 
@@ -848,7 +869,7 @@ function setupPlayer(channel) {
         console.warn("[Player] Channel not subscribed, blocking playback:", chName, "subscribed:", channel.subscribed);
         // Stop any background playback
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
-        showPlayerErrorPopup(chName + ' - Subscription not available', 'Please subscribe to watch this channel.');
+        showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
         return;
     }
 
@@ -879,11 +900,11 @@ function setupPlayer(channel) {
                 var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
 
                 if (ch && !isSubs && price > 0) {
-                    showPlayerErrorPopup('Channel Not Available', 'This is a paid channel (\u20B9' + price.toFixed(2) + '). Please subscribe to watch this channel.');
+                    showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
                 } else if (isNetworkDisconnected()) {
                     showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
                 } else {
-                    showPlayerErrorPopup('Channel Not Available', 'Unable to play this channel. The stream may not be available.');
+                    showPlayerErrorPopup('Playback Error', 'Unable to play this channel. The stream may not be available.');
                 }
             }
         }, 15000);

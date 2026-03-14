@@ -30,6 +30,7 @@
 var focusables = [];
 var currentFocus = 0;
 var currentZone = 'apps'; // 'header' or 'apps'
+var ottComingSoonPopupOpen = false;
 
 window.onload = function () {
     console.log("=== BBNL OTT Apps Page Initialized ===");
@@ -103,6 +104,15 @@ function addZoneTrackingListeners() {
 // Keyboard navigation
 document.addEventListener('keydown', function (e) {
     console.log("Key pressed - Code:", e.keyCode, "Key:", e.key, "Zone:", currentZone);
+
+    // While coming-soon popup is open, lock navigation to popup action only.
+    if (ottComingSoonPopupOpen) {
+        e.preventDefault();
+        if (e.keyCode === 13 || e.keyCode === 10009) {
+            window.location.href = 'home.html';
+        }
+        return;
+    }
 
     switch (e.keyCode) {
         case 37: // LEFT
@@ -579,6 +589,7 @@ function showComingSoonPopup() {
         }
 
         popup.style.display = "flex";
+        ottComingSoonPopupOpen = true;
 
         // Focus the Go Back button
         setTimeout(function() {

@@ -28,6 +28,9 @@
 var focusables = [];
 var currentFocus = 0;
 var allLanguages = [];
+var languageLogoCache = {};
+var languageLogoPrefetchInFlight = {};
+var _languageLazyObserver = null;
 
 window.onload = function () {
     console.log("=== BBNL Language Select Page Initialized ===");
@@ -66,6 +69,7 @@ async function initPage() {
                 return nameA.localeCompare(nameB);
             });
             allLanguages = langResponse;
+            primeLanguageLogos(langResponse, 18);
             renderLanguages(langResponse);
         } else {
             showError();
@@ -108,8 +112,18 @@ function renderLanguages(languages) {
 
         if (langLogo && !langLogo.includes('noimage')) {
             const img = document.createElement('img');
-            img.src = langLogo;
+            img.className = 'lazy-language-logo';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            if (languageLogoCache[langLogo]) {
+                img.src = langLogo;
+            } else {
+                img.dataset.src = langLogo;
+            }
             img.alt = langName;
+            img.onload = function () {
+                languageLogoCache[langLogo] = true;
+            };
             iconDiv.appendChild(img);
         } else {
             // Fallback to text icon
@@ -155,6 +169,67 @@ function renderLanguages(languages) {
     });
 
     refreshFocusables();
+    initLanguageLazyLoading();
+}
+
+function primeLanguageLogos(languages, maxCount) {
+    if (!Array.isArray(languages) || languages.length === 0) return;
+    var limit = Math.min(maxCount || 16, languages.length);
+
+    for (var i = 0; i < limit; i++) {
+        var lang = languages[i] || {};
+        var logoUrl = String(lang.langlogo || '').trim();
+        if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
+        if (languageLogoCache[logoUrl] || languageLogoPrefetchInFlight[logoUrl]) continue;
+
+        languageLogoPrefetchInFlight[logoUrl] = true;
+        var pre = new Image();
+        pre.onload = function () {
+            languageLogoCache[this.src] = true;
+            delete languageLogoPrefetchInFlight[this.src];
+        };
+        pre.onerror = function () {
+            delete languageLogoPrefetchInFlight[this.src];
+        };
+        pre.src = logoUrl;
+    }
+}
+
+function initLanguageLazyLoading() {
+    if (_languageLazyObserver) {
+        _languageLazyObserver.disconnect();
+    }
+
+    var lazyImages = document.querySelectorAll('img.lazy-language-logo');
+    if (lazyImages.length === 0) return;
+
+    if ('IntersectionObserver' in window) {
+        _languageLazyObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+
+                var img = entry.target;
+                if (img.dataset && img.dataset.src) {
+                    img.src = img.dataset.src;
+                    languageLogoCache[img.dataset.src] = true;
+                    img.removeAttribute('data-src');
+                }
+                _languageLazyObserver.unobserve(img);
+            });
+        }, { rootMargin: '200px' });
+
+        lazyImages.forEach(function (img) {
+            _languageLazyObserver.observe(img);
+        });
+    } else {
+        lazyImages.forEach(function (img) {
+            if (img.dataset && img.dataset.src) {
+                img.src = img.dataset.src;
+                languageLogoCache[img.dataset.src] = true;
+                img.removeAttribute('data-src');
+            }
+        });
+    }
 }
 
 // ==========================================

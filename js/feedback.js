@@ -29,7 +29,7 @@ var focusables = [];
 var currentFocus = 0;
 
 // ==========================================
-// CUSTOM POPUP - Replaces native alert()
+// CUSTOM POPUP - Replaces native browser popup
 // Header shows: "Fo-Fi TV Feedback"
 // ==========================================
 function showPopup(message, callback) {

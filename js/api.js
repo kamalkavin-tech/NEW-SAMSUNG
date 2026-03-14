@@ -571,6 +571,103 @@ const AppPerformanceCache = {
 
 window.AppPerformanceCache = AppPerformanceCache;
 
+// ==========================================
+// API MEMORY CACHE (session-persistent)
+// Reuses first API response in-memory and across page navigation.
+// ==========================================
+var _API_MEMORY_CACHE = {};
+var _API_MEMORY_CACHE_KEY = 'bbnl_api_memory_cache_v1';
+
+function _hydrateApiMemoryCache() {
+    try {
+        var raw = sessionStorage.getItem(_API_MEMORY_CACHE_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+            _API_MEMORY_CACHE = parsed;
+        }
+    } catch (e) {}
+}
+
+function _persistApiMemoryCache() {
+    try {
+        sessionStorage.setItem(_API_MEMORY_CACHE_KEY, JSON.stringify(_API_MEMORY_CACHE));
+    } catch (e) {}
+}
+
+function _isEndpointCacheable(endpoint) {
+    if (!endpoint) return false;
+    return /chnl_data|chnl_categlist|chnl_langlist|expiringchnl_list|iptvads|streamAds|allowedapps|errorimages|fofitv_logo|appversion/i.test(String(endpoint));
+}
+
+function _buildApiCacheKey(endpoint, payload) {
+    var body = '';
+    try { body = JSON.stringify(payload || {}); } catch (e) { body = String(payload || ''); }
+    return String(endpoint) + '::' + body;
+}
+
+function _cloneCachedData(data) {
+    try { return JSON.parse(JSON.stringify(data)); } catch (e) { return data; }
+}
+
+_hydrateApiMemoryCache();
+
+// ==========================================
+// GLOBAL IMAGE CACHE (session-persistent preload list)
+// Ensures image assets are requested once and reused.
+// ==========================================
+var _IMAGE_CACHE_MAP = {};
+var _IMAGE_CACHE_KEY = 'bbnl_image_cache_urls_v1';
+
+function _hydrateImageCache() {
+    try {
+        var raw = sessionStorage.getItem(_IMAGE_CACHE_KEY);
+        if (!raw) return;
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+            _IMAGE_CACHE_MAP = parsed;
+        }
+    } catch (e) {}
+}
+
+function _persistImageCache() {
+    try {
+        sessionStorage.setItem(_IMAGE_CACHE_KEY, JSON.stringify(_IMAGE_CACHE_MAP));
+    } catch (e) {}
+}
+
+function _isImageUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /\.(png|jpg|jpeg|gif|webp|svg)(\?|#|$)/i.test(url) || /^https?:\/\//i.test(url) || /^images\//i.test(url);
+}
+
+function _preloadImage(url) {
+    if (!_isImageUrl(url)) return;
+    if (_IMAGE_CACHE_MAP[url]) return;
+
+    _IMAGE_CACHE_MAP[url] = 1;
+    _persistImageCache();
+
+    try {
+        var img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+    } catch (e) {}
+}
+
+function _preloadImageBatch(list) {
+    if (!Array.isArray(list) || list.length === 0) return;
+    for (var i = 0; i < list.length; i++) {
+        _preloadImage(list[i]);
+    }
+}
+
+_hydrateImageCache();
+
+try {
+    _preloadImageBatch(Object.keys(_IMAGE_CACHE_MAP));
+} catch (e) {}
+
 // API Endpoints
 const API_ENDPOINTS = {
     // Auth endpoints (old base URL)
@@ -628,6 +725,12 @@ const DEVICE_INFO = {
 async function apiCall(endpoint, payload, customHeaders) {
     const url = endpoint;
     const headers = Object.assign({}, DEFAULT_HEADERS, customHeaders || {});
+    const cacheable = _isEndpointCacheable(url);
+    const cacheKey = cacheable ? _buildApiCacheKey(url, payload) : '';
+
+    if (cacheable && _API_MEMORY_CACHE[cacheKey]) {
+        return _cloneCachedData(_API_MEMORY_CACHE[cacheKey]);
+    }
 
     console.log(`[API] Request: ${url}`, payload);
 
@@ -661,6 +764,11 @@ async function apiCall(endpoint, payload, customHeaders) {
 
         const data = await response.json();
         console.log(`[API] Response: ${url}`, data);
+
+        if (cacheable) {
+            _API_MEMORY_CACHE[cacheKey] = data;
+            _persistApiMemoryCache();
+        }
 
         return data;
     } catch (error) {
@@ -1788,6 +1896,15 @@ const ChannelsAPI = {
         if (channels.length > 0) {
             CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
             console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
+
+            // Prime channel logos once so they do not reload on page switches.
+            var channelImages = [];
+            for (var ci = 0; ci < channels.length; ci++) {
+                var ch = channels[ci] || {};
+                var logo = ch.chnllogo || ch.logo || ch.channel_logo || ch.image || ch.img || '';
+                if (logo) channelImages.push(logo);
+            }
+            _preloadImageBatch(channelImages);
         }
 
         // Merge expiry dates from expiringchnl_list API (NON-BLOCKING)
@@ -2016,6 +2133,15 @@ const ChannelsAPI = {
         if (languages.length > 0) {
             CacheManager.set(CacheManager.KEYS.LANGUAGES, languages, CacheManager.EXPIRY.LANGUAGES);
             console.log("[ChannelsAPI] 💾 Cached " + languages.length + " languages");
+
+            // Prime language logos once so they do not reload on page switches.
+            var languageImages = [];
+            for (var li = 0; li < languages.length; li++) {
+                var lang = languages[li] || {};
+                var lLogo = lang.chnllanglogo || lang.langlogo || lang.logo || lang.image || lang.img || '';
+                if (lLogo) languageImages.push(lLogo);
+            }
+            _preloadImageBatch(languageImages);
         }
 
         return languages;
@@ -2720,6 +2846,8 @@ const ErrorImagesAPI = {
                     localStorage.setItem(this._STORAGE_KEY, JSON.stringify(images));
                 } catch (e) { }
 
+                _preloadImageBatch(Object.keys(images).map(function (k) { return images[k]; }));
+
                 console.log("[ErrorImagesAPI] Loaded " + Object.keys(images).length + " error images from API");
             }
         } catch (e) {
@@ -2861,6 +2989,13 @@ if (typeof window !== 'undefined') {
     window.ErrorImagesAPI = ErrorImagesAPI;
     window.DeviceInfo = DeviceInfo;
     console.log("[BBNL_API] Successfully initialized and exposed globally");
+
+    // Register service worker for image caching where supported.
+    try {
+        if ('serviceWorker' in navigator && String(window.location.protocol).indexOf('http') === 0) {
+            navigator.serviceWorker.register('sw.js').catch(function () {});
+        }
+    } catch (e) {}
 }
 
 // Auto-initialize device info on load

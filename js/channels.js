@@ -740,7 +740,7 @@ function initSearchFunctionality() {
 
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
-            searchInput.readOnly = false;
+            searchInput.readOnly = true;
         });
 
         searchInput.addEventListener('blur', function () {
@@ -750,7 +750,6 @@ function initSearchFunctionality() {
 
         // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
-            if (searchInput.readOnly) return;
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
@@ -842,8 +841,8 @@ function primeChannelLogoCache(channels, maxCount) {
 
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
-        var logoUrl = ch.chlogo || ch.logo_url || '';
-            if (!logoUrl) continue;
+        var logoUrl = getChannelCardLogo(ch);
+        if (!logoUrl) continue;
         if (channelLogoCache[logoUrl] || _channelLogoPrefetchInFlight[logoUrl]) continue;
 
         _channelLogoPrefetchInFlight[logoUrl] = true;
@@ -857,6 +856,27 @@ function primeChannelLogoCache(channels, maxCount) {
         };
         img.src = logoUrl;
     }
+}
+
+function getChannelCardLogo(ch) {
+    if (!ch || typeof ch !== 'object') return '';
+    var candidates = [
+        ch.chlogo,
+        ch.logo_url,
+        ch.logo,
+        ch.logo_path,
+        ch.default_logo,
+        ch.defaultimage,
+        ch.image
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+        var value = candidates[i];
+        if (value === null || value === undefined) continue;
+        var str = String(value).trim();
+        if (str) return str;
+    }
+    return '';
 }
 
 // ==========================================
@@ -1080,11 +1100,11 @@ function initLazyLoading() {
 }
 
 function createChannelCard(ch) {
-    const chName = ch.chtitle || ch.channel_name || "Channel";
-    const chLogo = ch.chlogo || ch.logo_url || "";
+    const chName = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
+    const chLogo = getChannelCardLogo(ch);
     const streamLink = ch.streamlink || ch.channel_url || "";
-    const chNo = ch.channelno || ch.urno || ch.chno || ch.ch_no || "";
-    const chPrice = ch.chprice || ch.price || "0";
+    const chNo = String(ch.channelno || ch.urno || ch.chno || ch.ch_no || "").trim();
+    const chPrice = String(ch.chprice || ch.price || ch.channel_price || "").trim();
     const isSubscribed = ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1;
 
     const card = document.createElement("div");
@@ -1100,13 +1120,21 @@ function createChannelCard(ch) {
     // LCN Badge - Top Left
     const lcnBadge = document.createElement("div");
     lcnBadge.className = "card-lcn-badge";
-    lcnBadge.textContent = chNo || "--";
+    if (chNo) {
+        lcnBadge.textContent = chNo;
+    } else {
+        lcnBadge.style.display = 'none';
+    }
     card.appendChild(lcnBadge);
 
     // Price Badge - Top Right
     const priceBadge = document.createElement("div");
     priceBadge.className = "card-price-badge";
-    priceBadge.textContent = "₹" + chPrice;
+    if (chPrice) {
+        priceBadge.textContent = chPrice.indexOf('₹') === -1 ? ("₹" + chPrice) : chPrice;
+    } else {
+        priceBadge.style.display = 'none';
+    }
     card.appendChild(priceBadge);
 
     // Logo Container - Center
@@ -1136,7 +1164,11 @@ function createChannelCard(ch) {
     // Channel Name - Bottom
     const nameDiv = document.createElement("div");
     nameDiv.className = "card-channel-name";
-    nameDiv.textContent = chName;
+    if (chName) {
+        nameDiv.textContent = chName;
+    } else {
+        nameDiv.style.display = 'none';
+    }
     card.appendChild(nameDiv);
 
     card.addEventListener("click", () => handleEnter(card));
@@ -1211,19 +1243,29 @@ document.addEventListener("keydown", function (e) {
     if (isSearchFocused) {
         // ENTER - play the channel number immediately
         if (code === 13) {
-            if (document.activeElement.readOnly) {
-                // First OK activates keypad/editing mode.
-                channelsSearchActivated = true;
-                document.activeElement.readOnly = false;
-                e.preventDefault();
-                return;
-            }
             e.preventDefault();
             clearTimeout(searchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
             if (query.length > 0) {
                 playChannelByLCN(parseInt(query, 10));
             }
+            return;
+        }
+        if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+            e.preventDefault();
+            var numOnSearch = (code >= 96) ? (code - 96) : (code - 48);
+            if (document.activeElement.value.length < 4) {
+                document.activeElement.value += numOnSearch.toString();
+                var inputEvt = new Event('input', { bubbles: true });
+                document.activeElement.dispatchEvent(inputEvt);
+            }
+            return;
+        }
+        if (code === 8) {
+            e.preventDefault();
+            document.activeElement.value = document.activeElement.value.slice(0, -1);
+            var backEvt = new Event('input', { bubbles: true });
+            document.activeElement.dispatchEvent(backEvt);
             return;
         }
         // DOWN - leave search input, go to category pills

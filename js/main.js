@@ -81,6 +81,23 @@ window.onload = function () {
         // Handle mouse clicks
         el.addEventListener("click", function (e) {
             console.log("Click detected on:", el.id || el.className);
+            if (el.classList && el.classList.contains('otp-input')) {
+                currentFocus = index;
+                activateOTPInput(el);
+                return;
+            }
+            if (el.id === 'phoneInput') {
+                currentFocus = index;
+                el.readOnly = false;
+                el.focus();
+                try {
+                    if (typeof el.setSelectionRange === 'function') {
+                        var end = (el.value || '').length;
+                        el.setSelectionRange(end, end);
+                    }
+                } catch (err) {}
+                return;
+            }
             e.preventDefault();
             handleOK();
         });
@@ -421,6 +438,31 @@ function setupNumberOnlyInputs() {
     var getOtpBtn = document.getElementById("getOtpBtn");
     
     if (phoneInput) {
+        // Keep phone field in controlled numeric mode (remote digits only).
+        phoneInput.readOnly = true;
+
+        phoneInput.addEventListener('focus', function () {
+            // On Samsung TV, focused tel input must be editable for keypad to appear on OK.
+            phoneInput.readOnly = false;
+            try {
+                if (typeof phoneInput.setSelectionRange === 'function') {
+                    var end = (phoneInput.value || '').length;
+                    phoneInput.setSelectionRange(end, end);
+                }
+            } catch (err) {}
+        });
+
+        phoneInput.addEventListener('click', function () {
+            // Enable editing on click/OK so Samsung numeric keypad appears immediately.
+            phoneInput.readOnly = false;
+            try {
+                if (typeof phoneInput.setSelectionRange === 'function') {
+                    var end = (phoneInput.value || '').length;
+                    phoneInput.setSelectionRange(end, end);
+                }
+            } catch (err) {}
+        });
+
         // Block non-numeric keypress
         phoneInput.addEventListener("keypress", function (e) {
             var charCode = e.which || e.keyCode;
@@ -467,6 +509,7 @@ function setupNumberOnlyInputs() {
     var otpInputs = document.querySelectorAll(".otp-input");
     otpInputs.forEach(function (input, idx) {
         input.readOnly = true;
+        input.removeAttribute('maxlength');
 
         // Block non-numeric keypress
         input.addEventListener("keypress", function (e) {
@@ -480,8 +523,8 @@ function setupNumberOnlyInputs() {
 
         // Filter and auto-advance on input
         input.addEventListener("input", function (e) {
-            // Remove non-numeric characters
-            this.value = this.value.replace(/[^0-9]/g, '');
+            // Keep OTP strictly single-digit to prevent native "box is full" behavior.
+            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 1);
 
             // If digit entered, auto-advance to next input
             if (this.value.length === 1) {
@@ -525,6 +568,13 @@ function activateOTPInput(input) {
     deactivateOTPInputEditing();
     input.readOnly = false;
     input.focus();
+    // Select existing digit so next numeric key replaces it instead of appending.
+    try {
+        if (typeof input.setSelectionRange === 'function') {
+            var len = (input.value || '').length;
+            input.setSelectionRange(0, len);
+        }
+    } catch (e) {}
 }
 
 /* REMOTE CONTROL KEYS */
@@ -555,12 +605,15 @@ document.addEventListener("keydown", function (e) {
                     }
                 } else {
                     active.value = '';
+                    var backspaceEvent = new Event('input', { bubbles: true });
+                    active.dispatchEvent(backspaceEvent);
+                    activateOTPInput(active);
                 }
                 return;
             } else if (e.keyCode === 13) {
-                // Enter on OTP input - prevent form submit and trigger verification
-                e.preventDefault();
-                e.stopImmediatePropagation();
+                // Enter/OK on OTP input should activate keypad immediately.
+                activateOTPInput(active);
+
                 // Check if all 4 OTP digits are filled, then auto-verify
                 var allFilled = true;
                 var fullOTP = "";
@@ -574,6 +627,8 @@ document.addEventListener("keydown", function (e) {
                 }
                 if (allFilled && fullOTP.length === 4) {
                     // Focus verify button and trigger verification
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
                     var vBtn = document.getElementById('verifyBtn');
                     if (vBtn) {
                         deactivateOTPInputEditing();
@@ -670,23 +725,24 @@ document.addEventListener("keydown", function (e) {
 
             // Backspace - clear last digit
             if (e.keyCode === 8) {
-                return; // Let default handle it
+                e.preventDefault();
+                active.value = active.value.slice(0, -1);
+                var backEvt = new Event('input', { bubbles: true });
+                active.dispatchEvent(backEvt);
+                return;
             }
 
-            // Enter - submit OTP request (only if 10 digits and not already in progress)
+            // Enter/OK on phone input should open Samsung numeric keypad.
             if (e.keyCode === 13) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                var getOtpBtn = document.getElementById('getOtpBtn');
-                var cooldownOk = (Date.now() - lastOtpRequestTime) >= 10000;
-                if (getOtpBtn && !getOtpBtn.disabled && !otpRequestInProgress && cooldownOk && active.value.length === 10) {
-                    console.log("[Login] Enter pressed on phone input - triggering OTP request");
-                    // Disable button immediately to prevent any race condition
-                    getOtpBtn.disabled = true;
-                    currentFocus = Array.from(focusables).indexOf(getOtpBtn);
-                    getOtpBtn.focus();
-                    handleOK();
-                }
+                active.readOnly = false;
+                active.focus();
+                try {
+                    if (typeof active.setSelectionRange === 'function') {
+                        var end = (active.value || '').length;
+                        active.setSelectionRange(end, end);
+                    }
+                } catch (err) {}
+                // Do not prevent default here; Samsung keyboard service needs it.
                 return;
             }
         } else {
@@ -1032,6 +1088,10 @@ function handleNumberPadInput(value) {
         } else if (value === 'backspace') {
             active.value = active.value.slice(0, -1);
         } else {
+            // OTP boxes always hold exactly one digit; replace existing value directly.
+            if (active.classList.contains('otp-input')) {
+                active.value = String(value).replace(/[^0-9]/g, '').slice(0, 1);
+            } else {
             // Enforce length limit without relying on maxlength attribute
             // (maxlength triggers a Tizen TV system popup "The box is full")
             var maxLen = active.classList.contains('otp-input') ? 1
@@ -1041,6 +1101,7 @@ function handleNumberPadInput(value) {
                 return;
             }
             active.value += value;
+            }
 
             // Auto-advance for OTP - Updated for 4 digits
             if (active.classList.contains('otp-input') && active.value.length === 1) {
@@ -1048,9 +1109,10 @@ function handleNumberPadInput(value) {
                 var idx = parseInt(currentId.replace('otp', ''));
                 if (idx < 4) {  // Changed from 6 to 4
                     var next = document.getElementById('otp' + (idx + 1));
-                    if (next) next.focus();
+                    if (next) activateOTPInput(next);
                 } else {
                     // After 4th digit, auto-focus verify button
+                    deactivateOTPInputEditing();
                     document.getElementById('verifyBtn').focus();
                 }
             }
@@ -1089,9 +1151,11 @@ function initOTPPage() {
     var otpInputs = document.querySelectorAll('.otp-input');
     otpInputs.forEach(function (input, index) {
         input.readOnly = true;
+        input.removeAttribute('maxlength');
 
         // Handle native keyboard input (and remote keys that trigger input)
         input.addEventListener('input', function () {
+            input.value = String(input.value || '').replace(/[^0-9]/g, '').slice(0, 1);
             if (input.value.length === 1) {
                 if (index < otpInputs.length - 1) {
                     activateOTPInput(otpInputs[index + 1]);
@@ -1118,6 +1182,15 @@ function initOTPPage() {
             activateOTPInput(input);
         });
     });
+
+    var firstOtpInput = document.getElementById('otp1');
+    if (firstOtpInput) {
+        setTimeout(function () {
+            firstOtpInput.focus();
+            var firstIdx = Array.from(focusables).indexOf(firstOtpInput);
+            if (firstIdx >= 0) currentFocus = firstIdx;
+        }, 60);
+    }
 
 }
 

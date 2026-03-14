@@ -194,7 +194,7 @@ window.onload = function () {
 
         searchInput.addEventListener('click', function () {
             homeSearchActivated = true;
-            searchInput.readOnly = false;
+            searchInput.readOnly = true;
         });
 
         searchInput.addEventListener('blur', function () {
@@ -204,7 +204,6 @@ window.onload = function () {
 
         // Filter out non-numeric characters and limit to 4 digits
         searchInput.addEventListener('input', function () {
-            if (searchInput.readOnly) return;
             var cleaned = searchInput.value.replace(/[^0-9]/g, '');
             if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
             if (cleaned !== searchInput.value) {
@@ -296,13 +295,6 @@ document.addEventListener('keydown', function (e) {
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
         if (e.keyCode === 13) { // ENTER - play channel by number
-            if (document.activeElement.readOnly) {
-                // First OK on focused search opens editing mode/keypad.
-                homeSearchActivated = true;
-                document.activeElement.readOnly = false;
-                e.preventDefault();
-                return;
-            }
             e.preventDefault();
             clearTimeout(homeSearchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
@@ -310,6 +302,23 @@ document.addEventListener('keydown', function (e) {
                 console.log("[HOME] Playing LCN:", query);
                 playChannelByLCNFromHome(parseInt(query, 10));
             }
+            return;
+        }
+        if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
+            e.preventDefault();
+            var num = (e.keyCode >= 96) ? (e.keyCode - 96) : (e.keyCode - 48);
+            if (document.activeElement.value.length < 4) {
+                document.activeElement.value += num.toString();
+                var inputEvent = new Event('input', { bubbles: true });
+                document.activeElement.dispatchEvent(inputEvent);
+            }
+            return;
+        }
+        if (e.keyCode === 8) { // BACKSPACE
+            e.preventDefault();
+            document.activeElement.value = document.activeElement.value.slice(0, -1);
+            var backEvent = new Event('input', { bubbles: true });
+            document.activeElement.dispatchEvent(backEvent);
             return;
         }
         if (e.keyCode === 39) { // RIGHT - go to Settings button

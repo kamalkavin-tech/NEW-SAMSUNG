@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, user-scalable=no">
+    <title>Fo-Fi TV - Payment</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+    <style>
+        body {
+            background: #0a0a1a;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Dim background page */
+        .payment-bg {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, #12122a 0%, #0a0a1a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .payment-bg-text {
+            font-size: 38px;
+            color: #1e2a3a;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+
+        /* Popup overlay - hidden initially */
+        .payment-popup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            transition: background 0.3s ease, opacity 0.3s ease;
+        }
+
+        .payment-popup-overlay.visible {
+            background: rgba(0, 0, 0, 0.78);
+            opacity: 1;
+        }
+
+        /* Popup box - starts scaled down */
+        .payment-popup-box {
+            background: linear-gradient(145deg, #1a1a2e, #16213e);
+            border: 2px solid #00aaff55;
+            border-radius: 20px;
+            padding: 60px 80px;
+            text-align: center;
+            max-width: 820px;
+            width: 88%;
+            box-shadow: 0 0 80px rgba(0, 170, 255, 0.18);
+            transform: scale(0.82) translateY(40px);
+            opacity: 0;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        }
+
+        .payment-popup-overlay.visible .payment-popup-box {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+
+        .payment-popup-icon {
+            font-size: 76px;
+            margin-bottom: 24px;
+            display: block;
+        }
+
+        .payment-popup-title {
+            font-size: 40px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 18px 0;
+            letter-spacing: 1px;
+        }
+
+        .payment-popup-note {
+            font-size: 24px;
+            color: #00aaff;
+            margin: 0 0 48px 0;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        .payment-popup-btn {
+            background: linear-gradient(135deg, #00aaff, #0077cc);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            padding: 20px 64px;
+            font-size: 28px;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            transition: transform 0.15s, box-shadow 0.15s;
+            letter-spacing: 0.5px;
+        }
+
+        .payment-popup-btn:focus,
+        .payment-popup-btn.focused {
+            transform: scale(1.06);
+            box-shadow: 0 0 0 4px #00aaff88, 0 8px 30px rgba(0, 170, 255, 0.5);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Background (visible behind popup) -->
+    <div class="payment-bg">
+        <span class="payment-bg-text">Payment Gateway</span>
+    </div>
+
+    <!-- Popup shown dynamically on load -->
+    <div class="payment-popup-overlay" id="paymentPopupOverlay">
+        <div class="payment-popup-box" id="paymentPopupBox">
+            <span class="payment-popup-icon">💳</span>
+            <h2 class="payment-popup-title" id="paymentPopupTitle">Payment Gateway</h2>
+            <p class="payment-popup-note" id="paymentPopupNote">This feature can be implemented in a later version.</p>
+            <button class="payment-popup-btn" id="paymentBackBtn" tabindex="0">Go Back</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            function showPaymentPopup(options) {
+                var overlay = document.getElementById('paymentPopupOverlay');
+                var titleEl = document.getElementById('paymentPopupTitle');
+                var noteEl = document.getElementById('paymentPopupNote');
+
+                // Allow dynamic title/message overrides via URL params
+                var params = new URLSearchParams(window.location.search);
+                if (titleEl) titleEl.textContent = params.get('title') || (options && options.title) || 'Payment Gateway';
+                if (noteEl) noteEl.textContent = params.get('message') || (options && options.message) || 'This feature can be implemented in a later version.';
+
+                // Trigger animation on next frame
+                requestAnimationFrame(function () {
+                    requestAnimationFrame(function () {
+                        if (overlay) overlay.classList.add('visible');
+                        setTimeout(function () {
+                            var btn = document.getElementById('paymentBackBtn');
+                            if (btn) btn.focus();
+                        }, 200);
+                    });
+                });
+            }
+
+            function goBack() {
+                var overlay = document.getElementById('paymentPopupOverlay');
+                if (overlay) overlay.classList.remove('visible');
+                setTimeout(function () {
+                    if (window.history.length > 1) {
+                        window.history.back();
+                    } else {
+                        window.location.href = 'home.html';
+                    }
+                }, 250);
+            }
+
+            var backBtn = document.getElementById('paymentBackBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', goBack);
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (e.keyCode === 13 || e.keyCode === 10009 || e.keyCode === 27) {
+                    e.preventDefault();
+                    goBack();
+                }
+            });
+
+            // Show popup dynamically on page load
+            showPaymentPopup();
+        });
+    </script>
+
+</body>
+
+</html>
