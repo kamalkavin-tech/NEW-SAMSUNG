@@ -32,6 +32,24 @@ var languageLogoCache = {};
 var languageLogoPrefetchInFlight = {};
 var _languageLazyObserver = null;
 
+function getLanguageLogoUrl(lang) {
+    if (!lang || typeof lang !== 'object') return '';
+    var candidates = [
+        lang.chnllanglogo,
+        lang.langlogo,
+        lang.logo,
+        lang.image,
+        lang.img
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+        var value = candidates[i];
+        if (value === null || value === undefined) continue;
+        var str = String(value).trim();
+        if (str) return str;
+    }
+    return '';
+}
+
 window.onload = function () {
     console.log("=== BBNL Language Select Page Initialized ===");
 
@@ -97,7 +115,7 @@ function renderLanguages(languages) {
         const langName = lang.langtitle || 'Unknown';
         const langId = lang.langid || '';
         const langDetails = lang.langdetails || '';
-        const langLogo = lang.langlogo || '';
+        const langLogo = getLanguageLogoUrl(lang);
 
         // Create language card
         const card = document.createElement('div');
@@ -123,6 +141,14 @@ function renderLanguages(languages) {
             img.alt = langName;
             img.onload = function () {
                 languageLogoCache[langLogo] = true;
+            };
+            img.onerror = function () {
+                // Image failed to load — replace with text icon fallback
+                img.style.display = 'none';
+                var fallback = document.createElement('div');
+                fallback.className = 'language-icon-text';
+                fallback.textContent = getLanguageInitial(langName);
+                iconDiv.appendChild(fallback);
             };
             iconDiv.appendChild(img);
         } else {
@@ -178,7 +204,7 @@ function primeLanguageLogos(languages, maxCount) {
 
     for (var i = 0; i < limit; i++) {
         var lang = languages[i] || {};
-        var logoUrl = String(lang.langlogo || '').trim();
+        var logoUrl = String(getLanguageLogoUrl(lang) || '').trim();
         if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
         if (languageLogoCache[logoUrl] || languageLogoPrefetchInFlight[logoUrl]) continue;
 
@@ -257,9 +283,9 @@ function handleLanguageSelect(langId, langName) {
 function getLanguageInitial(langName) {
     if (!langName) return '?';
 
-    // Special cases
-    if (langName.toLowerCase().includes('subscribed')) return '📺';
-    if (langName.toLowerCase().includes('all')) return '🌐';
+    // Special cases - use text symbols compatible with Samsung TV
+    if (langName.toLowerCase().includes('subscribed')) return 'SUB';
+    if (langName.toLowerCase().includes('all')) return 'ALL';
 
     // Return first character
     return langName.charAt(0).toUpperCase();

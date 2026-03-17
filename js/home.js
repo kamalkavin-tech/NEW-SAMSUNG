@@ -12,6 +12,24 @@ var homeSearchActivated = false; // Only activate keypad/editing on explicit act
 var homeLanguageLogoCache = {}; // URL -> true
 var homeLanguageLogoPrefetchInFlight = {}; // URL -> true
 
+function getHomeLanguageLogoUrl(lang) {
+    if (!lang || typeof lang !== 'object') return '';
+    var candidates = [
+        lang.chnllanglogo,
+        lang.langlogo,
+        lang.logo,
+        lang.image,
+        lang.img
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+        var value = candidates[i];
+        if (value === null || value === undefined) continue;
+        var str = String(value).trim();
+        if (str) return str;
+    }
+    return '';
+}
+
 // Clean up background intervals when leaving page
 window.addEventListener('beforeunload', function () {
     if (homeAdInterval) clearInterval(homeAdInterval);
@@ -194,7 +212,14 @@ window.onload = function () {
 
         searchInput.addEventListener('click', function () {
             homeSearchActivated = true;
-            searchInput.readOnly = true;
+            searchInput.readOnly = false;
+            searchInput.focus();
+            try {
+                if (typeof searchInput.setSelectionRange === 'function') {
+                    var end = (searchInput.value || '').length;
+                    searchInput.setSelectionRange(end, end);
+                }
+            } catch (err) {}
         });
 
         searchInput.addEventListener('blur', function () {
@@ -295,6 +320,20 @@ document.addEventListener('keydown', function (e) {
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
         if (e.keyCode === 13) { // ENTER - play channel by number
+            if (!homeSearchActivated || document.activeElement.readOnly) {
+                e.preventDefault();
+                homeSearchActivated = true;
+                document.activeElement.readOnly = false;
+                document.activeElement.focus();
+                try {
+                    if (typeof document.activeElement.setSelectionRange === 'function') {
+                        var end = (document.activeElement.value || '').length;
+                        document.activeElement.setSelectionRange(end, end);
+                    }
+                } catch (err) {}
+                return;
+            }
+
             e.preventDefault();
             clearTimeout(homeSearchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
@@ -1207,7 +1246,7 @@ function prefetchHomeLanguageLogos(languages, maxCount) {
 
     for (var i = 0; i < limit; i++) {
         var lang = languages[i] || {};
-        var logoUrl = lang.langlogo || '';
+        var logoUrl = getHomeLanguageLogoUrl(lang);
         if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
         if (homeLanguageLogoCache[logoUrl] || homeLanguageLogoPrefetchInFlight[logoUrl]) continue;
 
@@ -1257,8 +1296,7 @@ function renderLanguagesInHomeGrid(languages) {
     displayLanguages.forEach(function (lang, index) {
         var langName = lang.langtitle || "Language";
         var langId = lang.langid || "";
-        var langLogo = lang.langlogo || "";
-            prefetchHomeLanguageLogos(displayLanguages, 13);
+        var langLogo = getHomeLanguageLogoUrl(lang);
         var item = document.createElement('div');
         item.className = 'language-item focusable';
         item.tabIndex = 0;

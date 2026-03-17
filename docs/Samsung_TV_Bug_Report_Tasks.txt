@@ -1,0 +1,157 @@
+﻿Samsung TV Application
+Bug Report & Development Task Tracker
+Prepared: 15 March 2026   |   Status: Open   |   Target: Next Release
+
+0.  Mandatory Agent Instructions (Read Before Any Work)
+These instructions are mandatory for every bug fix and feature task in this tracker.
+
+Scope and Change Control:
+Fix only the requested issue.
+Do not change any unrelated functionality, UI layout, styles, navigation, or other business logic.
+Do not refactor, rename, or restructure existing modules unless explicitly requested.
+
+No Repeat Policy:
+Before closing any task, verify that the same issue cannot be reproduced again.
+Add regression checks for the exact scenario so the issue does not reappear in future builds.
+
+Project Analysis Requirement:
+Before implementing any fix, read and analyze the project flow end-to-end.
+Understand the execution path, event flow, page transitions, API calls, and state/session handling for the impacted screen.
+Document root cause and impacted files/functions before changing code.
+
+Documentation-First Requirement:
+Read all relevant .md files in the project before starting implementation.
+Use those markdown documents as execution guidance for architecture, coding rules, testing flow, and release notes.
+If an .md instruction conflicts with a proposed fix, resolve the conflict by following project documentation and recording the decision in task notes.
+
+Validation Requirement:
+After each fix, run targeted validation for the affected flow and confirm no side effects on adjacent flows.
+Re-test remote key handling (OK/Back/Arrow keys) for Samsung TV screens where applicable.
+
+1.  Executive Summary
+
+2.  Issue Analysis
+Each issue below includes the observed behaviour, expected behaviour, and the specific fix tasks required to resolve it.
+A.  Select Language Screen
+BUG-001  Images not displaying on Select Language screen   [High]
+Screen: Select Language
+Observed: Images are completely absent on the Select Language screen â€” only text is visible to the user.
+Expected: Language option images should render correctly alongside their text labels.
+Fix Tasks:
+Audit the image-loading logic and CDN/asset path configuration for the Select Language screen.
+Check whether this is related to the image-loading slowness reported on the Home Page (see BUG-007). If so, apply a unified fix.
+Implement a fallback placeholder (e.g. skeleton loader or icon) so the UI remains usable while images load.
+Write a regression test to assert images are present after screen render.
+
+
+B.  Enter Verification Code (OTP) Screen
+BUG-002  Focus auto-moves to Verify button after 4th OTP digit   [High]
+Screen: Enter Verification Code
+Observed: After the 4th digit is entered, focus automatically jumps to the Verify button. Pressing Up on the remote brings focus back to the 4th OTP field. Pressing OK on the 4th OTP field then triggers validation instead of opening the number keypad.
+Expected: Pressing OK on any OTP input field should open the number keypad. Focus must never auto-shift to the Verify button. Validation should only be triggered when the user explicitly selects the Verify button and presses OK.
+Fix Tasks:
+Remove the auto-focus shift that moves focus to Verify after the 4th digit is entered.
+Ensure pressing OK on any OTP input field opens the number keypad (not triggers validation).
+Restrict OTP validation logic to fire only when the Verify button is focused and OK is pressed.
+Test Up/Down/Left/Right navigation across all 4 OTP fields and the Verify button to ensure no unexpected focus jumps.
+Test with correct OTP: login should proceed only via Verify button confirmation.
+Test with incorrect OTP: Invalid OTP popup should appear only via Verify button confirmation.
+
+
+C.  Home Page
+BUG-003  OK button on Search field does not open numeric keypad   [Medium]
+Screen: Home Page
+Observed: Pressing OK on the Search field remote button does not display the number pad or numeric keypad.
+Expected: Pressing OK on the Search field should open the numeric keypad to allow channel/number input.
+Fix Tasks:
+Implement OK-press handler on the Search field to trigger the numeric keypad overlay.
+Verify the same handler exists in the TV Channel Search field (BUG-005) and consolidate if appropriate.
+Test keypad open/close, digit entry, and search-submit behaviour with the remote.
+
+
+BUG-004  Select Language category â€” images not displaying (Home Page)   [High]
+Screen: Home Page â€” Select Language category
+Observed: In the Select Language category on the Home Page, images are not displaying and only text is visible.
+Expected: Language images should display. Requires root-cause investigation to determine whether this is the same defect as BUG-001 or the previously reported image-loading slowness.
+Fix Tasks:
+Confirm whether BUG-004 shares the same root cause as BUG-001 (Select Language screen) or the image-loading slowness issue.
+If same root cause, resolve under a single fix and close both tickets.
+If different, isolate and fix the Home Page image-loading pipeline separately.
+Add a loading indicator / skeleton for images while they load to prevent blank-text-only state.
+
+
+D.  TV Channel Screen
+BUG-005  OK button on TV Channel Search field does not open numeric keypad   [Medium]
+Screen: TV Channel
+Observed: Pressing OK on the Search field in the TV Channel screen does not display the numeric keypad.
+Expected: Pressing OK on the Search field should open the numeric keypad.
+Fix Tasks:
+Implement the same numeric keypad trigger used in BUG-003 fix (or reuse shared component).
+Ensure consistent keypad behaviour across Home Page and TV Channel search fields.
+
+
+E.  Player Screen â€” Bugs
+BUG-006  Image loading slowness in Category section â€” images reload on every category change   [High]
+Screen: Player Screen
+Observed: Each time the category is changed, all category images reload from scratch, causing visible slowness and flickering.
+Expected: Category images should be cached and loaded once; switching categories should not trigger a full image reload.
+Fix Tasks:
+Implement client-side image caching for category thumbnails (e.g. in-memory cache or service worker cache).
+Use lazy loading with placeholder skeletons to prevent blank states during load.
+Investigate whether image URLs change on category switch (cache-busting params) and fix if so.
+Profile image load time before and after fix; target under 300 ms for a category switch.
+
+
+BUG-007  Long channel names truncated and not fully visible   [Medium]
+Screen: Player Screen
+Observed: Lengthy channel names are being cut off (truncated) in the UI and the full name is not visible to the user.
+Expected: Full channel names should be visible. Use marquee/ticker scrolling, tooltip on focus, or text wrapping â€” whichever is appropriate per the design spec.
+Fix Tasks:
+Discuss with design: choose between marquee scroll, multi-line wrap, or truncation with tooltip on focus.
+Implement the agreed approach for the channel name display component.
+Test with the longest channel names in the dataset to verify no overflow or clipping.
+
+
+3.  New Feature Tasks â€” Player Screen (Next Version)
+The following tasks implement new remote-control interaction behaviour requested for the next release of the Player Screen.
+FEAT-001  Up / Down button â€” Info Bar + Channel Change behaviour   [Medium]
+Screen: Player Screen
+Observed: N/A â€” New feature.
+Expected: First press of Up or Down while a channel is playing: show the Info Bar. Second press while Info Bar is visible: change channel (Up = next channel, Down = previous channel).
+Fix Tasks:
+Implement an Info Bar visibility state (hidden/visible) tied to the remote Up/Down handler.
+On first Up/Down press: set state to visible, render Info Bar overlay, start an auto-hide timer (e.g. 5 s).
+On second Up/Down press (while Info Bar is visible): cancel timer, trigger channel change in the pressed direction.
+Ensure Info Bar auto-hides if no further remote input within the timeout period.
+Write unit tests for state transitions: hidden â†’ show, show â†’ channel change, auto-hide.
+
+
+FEAT-002  OK button â€” Open Menu / Channel Category; Left / Right switch categories   [Medium]
+Screen: Player Screen
+Observed: N/A â€” New feature.
+Expected: Pressing OK while a channel is playing opens the Menu/Channel Category overlay. While the menu is open, pressing Right moves to the next category and Left moves to the previous category.
+Fix Tasks:
+Implement a Menu/Channel Category overlay component triggered by the OK button.
+Wire Left/Right remote buttons to cycle through categories when the menu is open.
+Ensure menu closes on Back or after a configurable inactivity timeout.
+Handle edge cases: first category (no previous) and last category (no next) â€” wrap around or disable navigation as per design.
+Test menu open/close, category cycling, and correct content loading per category.
+
+
+FEAT-003  Left / Right button (Info Bar visible) â€” Show number pad for direct channel entry   [Medium]
+Screen: Player Screen
+Observed: N/A â€” New feature.
+Expected: When only the Info Bar is visible, pressing Left or Right opens the number pad so the user can type a channel number directly. After entry, navigate to the channel if valid, or show an appropriate error popup if invalid.
+Fix Tasks:
+When Info Bar is visible, intercept Left/Right presses and open the numeric keypad overlay instead of default scroll behaviour.
+Capture digit entries and form a channel number string in real time, displaying it in the Info Bar.
+On confirmation (OK / auto-submit after last digit): validate channel number against the channel list.
+If valid: navigate to that channel and dismiss the keypad.
+If invalid: show an error popup (e.g. 'Channel not found') and return focus to the Info Bar.
+Set a timeout to auto-dismiss the keypad if no input is received within a set interval.
+
+
+4.  Complete Task List
+All tasks across bugs and new features, ready for sprint assignment. Est. = estimated days.
+
+Total Estimated Effort:  13.5 developer-days  |  Recommended Sprint: 2 weeks (1 developer)

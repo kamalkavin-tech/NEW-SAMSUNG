@@ -164,11 +164,7 @@
                 var overlay = document.getElementById('paymentPopupOverlay');
                 if (overlay) overlay.classList.remove('visible');
                 setTimeout(function () {
-                    if (window.history.length > 1) {
-                        window.history.back();
-                    } else {
-                        window.location.href = 'home.html';
-                    }
+                    window.location.href = 'player.html?resume=paynow';
                 }, 250);
             }
 
@@ -178,9 +174,19 @@
             }
 
             document.addEventListener('keydown', function (e) {
-                if (e.keyCode === 13 || e.keyCode === 10009 || e.keyCode === 27) {
+                // BACK / ESC always goes back
+                if (e.keyCode === 10009 || e.keyCode === 27) {
                     e.preventDefault();
                     goBack();
+                    return;
+                }
+                // OK (Enter) only goes back when the Go Back button is focused
+                if (e.keyCode === 13) {
+                    var focused = document.activeElement;
+                    if (focused && focused.id === 'paymentBackBtn') {
+                        e.preventDefault();
+                        goBack();
+                    }
                 }
             });
 

@@ -78,13 +78,15 @@
 
     <!-- Premium Info Bar - position:fixed, z-index:9998 in ROOT stacking context (above error popup z-index:2000) -->
     <div class="info-bar-premium" id="infoBarPremium">
-        <!-- LEFT SECTION: Logo + LCN + Channel Name -->
+        <!-- LEFT SECTION: Logo + Channel Number & Name stacked -->
         <div class="info-left-section">
             <div class="channel-logo-box">
                 <img src="" alt="Channel Logo" id="ui-channel-logo">
             </div>
-            <span class="channel-lcn" id="ui-channel-number">11</span>
-            <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
+            <div class="channel-info-stack">
+                <span class="channel-lcn" id="ui-channel-number">11</span>
+                <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
+            </div>
         </div>
 
         <!-- CENTER SECTION: Channel Information Grid -->
@@ -124,7 +126,16 @@
                 <img id="errorImg_player" src="" alt="Playback error">
             </div>
             <h2 class="error-popup-title" id="playerErrorTitle">Playback Error</h2>
+            <p class="error-popup-channel-name" id="popupChannelName"></p>
             <p class="error-popup-message" id="playerErrorMessage">Please Check your network and try again</p>
+            <div class="error-popup-info-row">
+                <span class="error-popup-info-label">Device ID:</span>
+                <span class="error-popup-info-value" id="popupDeviceId">--</span>
+            </div>
+            <div class="error-popup-info-row">
+                <span class="error-popup-info-label">User ID:</span>
+                <span class="error-popup-info-value" id="popupUserId">--</span>
+            </div>
             <button class="error-popup-btn focusable" id="playerRetryBtn" tabindex="0">Try Again</button>
         </div>
     </div>

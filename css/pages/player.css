@@ -85,22 +85,23 @@ video {
 .info-bar-premium {
     position: fixed;
     z-index: 9998; /* Above error popup (2000) — now direct child of body, no parent stacking context trapping it */
-    bottom: 40px;
+    bottom: 36px;
     left: 50%;
     transform: translateX(-50%);
     --sidebar-width: 420px;
     width: calc(100% - 80px);
     max-width: 1800px;
-    height: 130px;
-    background: rgba(20, 20, 20, 0.85);
-    border-radius: 12px;
-    padding: 0 30px;
+    height: 120px;
+    background: rgba(15, 15, 15, 0.90);
+    border-radius: 14px;
+    padding: 0 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    gap: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
     animation: infoBarFadeIn 0.3s ease-out;
     overflow: hidden;
@@ -131,13 +132,23 @@ video {
     z-index: 2050; /* Keep visible, but below sidebar (2100) so menu does not get covered */
 }
 
-/* LEFT SECTION: Logo + LCN + Channel Name */
+/* LEFT SECTION: Logo + Channel Number & Name stacked */
 .info-left-section {
     display: flex;
     align-items: center;
     gap: 14px;
     flex-shrink: 0;
-    max-width: 340px;
+    max-width: 380px;
+    overflow: hidden;
+}
+
+/* Stack: channel number on top, channel name below */
+.channel-info-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
     overflow: hidden;
 }
 
@@ -161,23 +172,22 @@ video {
 }
 
 .info-bar-premium .channel-lcn {
-    color: #ffffff;
-    font-size: 28px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 22px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0.5px;
-    flex-shrink: 0;
 }
 
 .info-bar-premium .channel-name {
     color: #ffffff;
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 180px;
+    max-width: 220px;
 }
 
 /* CENTER SECTION: Channel Information Grid */
@@ -185,7 +195,7 @@ video {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 12px;
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -195,22 +205,22 @@ video {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
     flex-shrink: 1;
 }
 
 .info-label {
-    color: rgba(255, 255, 255, 0.70);
-    font-size: 15px;
+    color: rgba(255, 255, 255, 0.60);
+    font-size: 13px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
     white-space: nowrap;
 }
 
 .info-value {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
@@ -287,8 +297,8 @@ video {
 /* Vertical divider line between info items */
 .info-divider-line {
     width: 1px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.20);
+    height: 36px;
+    background: rgba(255, 255, 255, 0.15);
     flex-shrink: 0;
 }
 
@@ -772,10 +782,15 @@ video {
     font-weight: 600;
     color: #ffffff;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-overflow: unset;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
     line-height: 1.3;
+    max-height: calc(1.3em * 2);
+    word-break: break-word;
     margin-bottom: 4px;
 }
 

@@ -61,13 +61,49 @@
     letter-spacing: -0.3px;
 }
 
+/* Channel name - highlighted in orange/yellow to stand out */
+.error-popup-channel-name {
+    color: #f59e0b;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    letter-spacing: 0.3px;
+}
+
 /* Message */
 .error-popup-message {
     color: rgba(255, 255, 255, 0.5);
     font-size: 15px;
     font-weight: 400;
-    margin: 0 0 28px 0;
+    margin: 0 0 14px 0;
     line-height: 1.4;
+}
+
+/* Device ID / User ID info rows */
+.error-popup-info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px 0;
+}
+
+.error-popup-info-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.error-popup-info-value {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+/* Spacing: last info row before the action button */
+.error-popup-info-row:last-of-type {
+    margin-bottom: 22px;
 }
 
 /* Try Again Button - White theme to match overall design */

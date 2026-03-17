@@ -672,13 +672,23 @@ function handleCategoryFilter(category, gridId) {
 
     currentCategory = category;
 
+    var options = {};
     if (gridId === '' || !gridId) {
-        loadChannels();
+        options = {};
     } else if (gridId === 'subs') {
-        loadChannels({ subscribed: 'yes' });
+        options = { subscribed: 'yes' };
     } else {
-        loadChannels({ grid: gridId });
+        options = { grid: gridId };
     }
+
+    // Pre-warm logo cache from cached channel data for this category so images
+    // appear instantly when the grid renders instead of lazy-loading from blank.
+    var previewChannels = getCachedChannels(options);
+    if (previewChannels && previewChannels.length > 0) {
+        primeChannelLogoCache(previewChannels, 60);
+    }
+
+    loadChannels(options);
 }
 
 // ==========================================
@@ -740,7 +750,14 @@ function initSearchFunctionality() {
 
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
-            searchInput.readOnly = true;
+            searchInput.readOnly = false;
+            searchInput.focus();
+            try {
+                if (typeof searchInput.setSelectionRange === 'function') {
+                    var end = (searchInput.value || '').length;
+                    searchInput.setSelectionRange(end, end);
+                }
+            } catch (err) {}
         });
 
         searchInput.addEventListener('blur', function () {
@@ -1243,6 +1260,20 @@ document.addEventListener("keydown", function (e) {
     if (isSearchFocused) {
         // ENTER - play the channel number immediately
         if (code === 13) {
+            if (!channelsSearchActivated || document.activeElement.readOnly) {
+                e.preventDefault();
+                channelsSearchActivated = true;
+                document.activeElement.readOnly = false;
+                document.activeElement.focus();
+                try {
+                    if (typeof document.activeElement.setSelectionRange === 'function') {
+                        var end = (document.activeElement.value || '').length;
+                        document.activeElement.setSelectionRange(end, end);
+                    }
+                } catch (err) {}
+                return;
+            }
+
             e.preventDefault();
             clearTimeout(searchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();

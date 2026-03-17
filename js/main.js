@@ -539,15 +539,6 @@ function setupNumberOnlyInputs() {
                         var focusIndex = Array.from(focusables).indexOf(next);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
-                } else {
-                    deactivateOTPInputEditing();
-                    // After 4th digit, focus verify button
-                    var verifyBtn = document.getElementById('verifyBtn');
-                    if (verifyBtn) {
-                        verifyBtn.focus();
-                        var focusIndex = Array.from(focusables).indexOf(verifyBtn);
-                        if (focusIndex >= 0) currentFocus = focusIndex;
-                    }
                 }
             }
         });
@@ -613,32 +604,6 @@ document.addEventListener("keydown", function (e) {
             } else if (e.keyCode === 13) {
                 // Enter/OK on OTP input should activate keypad immediately.
                 activateOTPInput(active);
-
-                // Check if all 4 OTP digits are filled, then auto-verify
-                var allFilled = true;
-                var fullOTP = "";
-                for (var oi = 1; oi <= 4; oi++) {
-                    var otpVal = document.getElementById('otp' + oi);
-                    if (otpVal && otpVal.value) {
-                        fullOTP += otpVal.value;
-                    } else {
-                        allFilled = false;
-                    }
-                }
-                if (allFilled && fullOTP.length === 4) {
-                    // Focus verify button and trigger verification
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    var vBtn = document.getElementById('verifyBtn');
-                    if (vBtn) {
-                        deactivateOTPInputEditing();
-                        if (typeof active.blur === 'function') active.blur();
-                        vBtn.focus();
-                        var vIdx = Array.from(focusables).indexOf(vBtn);
-                        if (vIdx >= 0) currentFocus = vIdx;
-                        handleOK();
-                    }
-                }
                 return;
             } else if (e.keyCode === 37) {
                 // LEFT arrow - move to previous OTP input
@@ -1110,10 +1075,6 @@ function handleNumberPadInput(value) {
                 if (idx < 4) {  // Changed from 6 to 4
                     var next = document.getElementById('otp' + (idx + 1));
                     if (next) activateOTPInput(next);
-                } else {
-                    // After 4th digit, auto-focus verify button
-                    deactivateOTPInputEditing();
-                    document.getElementById('verifyBtn').focus();
                 }
             }
         }
@@ -1159,9 +1120,6 @@ function initOTPPage() {
             if (input.value.length === 1) {
                 if (index < otpInputs.length - 1) {
                     activateOTPInput(otpInputs[index + 1]);
-                } else {
-                    deactivateOTPInputEditing();
-                    document.getElementById('verifyBtn').focus();
                 }
             }
         });
