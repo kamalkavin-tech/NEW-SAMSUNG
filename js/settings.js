@@ -62,7 +62,7 @@ function showConfirmPopup(message, onYes) {
     disableSettingsBackgroundFocusables();
     msgEl.textContent = message;
     overlay.style.display = 'flex';
-    noBtn.focus(); // Default focus on No (safer for logout)
+    yesBtn.focus();
 
     function closePopup(confirmed) {
         overlay.style.display = 'none';

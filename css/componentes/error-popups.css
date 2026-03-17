@@ -55,7 +55,7 @@
 /* Title */
 .error-popup-title {
     color: #ffffff;
-    font-size: 26px;
+    font-size: 34px;
     font-weight: 700;
     margin: 0 0 10px 0;
     letter-spacing: -0.3px;
@@ -64,7 +64,7 @@
 /* Channel name - highlighted in orange/yellow to stand out */
 .error-popup-channel-name {
     color: #f59e0b;
-    font-size: 18px;
+    font-size: 24px;
     font-weight: 700;
     margin: 0 0 8px 0;
     letter-spacing: 0.3px;
@@ -73,7 +73,7 @@
 /* Message */
 .error-popup-message {
     color: rgba(255, 255, 255, 0.5);
-    font-size: 15px;
+    font-size: 21px;
     font-weight: 400;
     margin: 0 0 14px 0;
     line-height: 1.4;
@@ -83,22 +83,27 @@
 .error-popup-info-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     margin: 0 0 6px 0;
+    white-space: nowrap;
 }
 
 .error-popup-info-label {
     color: rgba(255, 255, 255, 0.5);
-    font-size: 13px;
+    font-size: 18px;
     font-weight: 500;
     white-space: nowrap;
 }
 
 .error-popup-info-value {
     color: rgba(255, 255, 255, 0.85);
-    font-size: 13px;
+    font-size: 18px;
     font-weight: 600;
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
 }
 
 /* Spacing: last info row before the action button */
@@ -113,19 +118,19 @@
     border: 3px solid transparent;
     border-radius: 25px;
     padding: 12px 40px;
-    font-size: 16px;
+    font-size: 22px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
     outline: none;
-    min-width: 160px;
+    min-width: 220px;
 }
 
 .error-popup-btn:hover,
 .error-popup-btn:focus {
     border: 3px solid #ffffff;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.65);
 }
 
 .error-popup-btn:active {

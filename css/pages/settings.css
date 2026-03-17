@@ -749,7 +749,8 @@ input:checked + .slider:before {
 }
 
 .tv-popup-ok:focus {
-    border: 2px solid #888 !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }
 
@@ -767,7 +768,8 @@ input:checked + .slider:before {
 }
 
 .tv-popup-cancel:focus {
-    border: 2px solid #fff !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }
 

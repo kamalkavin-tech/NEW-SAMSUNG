@@ -40,7 +40,7 @@ window.addEventListener('beforeunload', function () {
         var searchEl = document.getElementById('searchInput');
         AppPerformanceCache.savePageState('home', {
             focusIndex: currentFocus,
-            searchText: searchEl ? searchEl.value : '',
+            searchText: '',
             scrollTop: window.scrollY || 0
         });
     }
@@ -130,10 +130,6 @@ window.onload = function () {
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.getPageState) {
         var cachedState = AppPerformanceCache.getPageState('home', 60 * 60 * 1000);
         if (cachedState) {
-            var sInput = document.getElementById('searchInput');
-            if (sInput && cachedState.searchText) {
-                sInput.value = String(cachedState.searchText);
-            }
             if (typeof cachedState.focusIndex === 'number' && cachedState.focusIndex >= 0 && cachedState.focusIndex < focusables.length) {
                 currentFocus = cachedState.focusIndex;
                 setTimeout(function () {
@@ -207,6 +203,12 @@ window.onload = function () {
     // Initialize numeric-only search input
     var searchInput = document.getElementById('searchInput');
     if (searchInput) {
+        searchInput.value = '';
+        searchInput.setAttribute('type', 'tel');
+        searchInput.setAttribute('inputmode', 'numeric');
+        searchInput.setAttribute('pattern', '[0-9]*');
+        searchInput.setAttribute('autocomplete', 'off');
+
         // Keep search non-editable on navigation focus to avoid auto keypad pop-up.
         searchInput.readOnly = true;
 
@@ -2273,19 +2275,30 @@ function autoTuneDefaultChannel() {
  */
 function loadFoFiLogo() {
     BBNL_API.getFoFiLogo().then(function (response) {
-        if (response && response.status && Number(response.status.err_code) === 0
-            && response.body && response.body.logo_path) {
-            var logoImg = document.getElementById('fofitv-logo');
-            var fallbackText = document.getElementById('brand-text-fallback');
-            if (logoImg) {
-                logoImg.src = response.body.logo_path;
-                logoImg.style.display = 'block';
-                logoImg.onerror = function () {
-                    logoImg.style.display = 'none';
-                    if (fallbackText) fallbackText.style.display = 'block';
-                };
-                if (fallbackText) fallbackText.style.display = 'none';
-            }
+        var logoImg = document.getElementById('fofitv-logo');
+        var fallbackText = document.getElementById('brand-text-fallback');
+        if (!logoImg) return;
+
+        var logoPath = '';
+        var body = response && response.body;
+        if (body && typeof body === 'object' && !Array.isArray(body)) {
+            logoPath = body.logo_path || body.logo || body.logopath || '';
+        } else if (Array.isArray(body) && body.length > 0) {
+            var first = body[0] || {};
+            logoPath = first.logo_path || first.logo || first.logopath || '';
+        }
+
+        if (logoPath) {
+            logoImg.src = logoPath;
+            logoImg.style.display = 'block';
+            logoImg.onerror = function () {
+                logoImg.style.display = 'none';
+                if (fallbackText) fallbackText.style.display = 'block';
+            };
+            if (fallbackText) fallbackText.style.display = 'none';
+        } else {
+            logoImg.style.display = 'none';
+            if (fallbackText) fallbackText.style.display = 'block';
         }
     }).catch(function () {
         console.warn("[HOME] FoFi logo fetch failed, using fallback text.");

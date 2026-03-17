@@ -148,7 +148,7 @@ function showPlayerErrorPopup(title, message) {
         if (popupUserId) {
             try {
                 var ud = AuthAPI.getUserData();
-                popupUserId.textContent = (ud && (ud.mobile || ud.userid || ud.userId || ud.username)) || '--';
+                popupUserId.textContent = (ud && (ud.userid || ud.userId || ud.username || ud.mobile)) || '--';
             } catch (e) {
                 popupUserId.textContent = '--';
             }
@@ -160,6 +160,7 @@ function showPlayerErrorPopup(title, message) {
             msgLower.indexOf('please subscribe to watch this channel') !== -1;
         playerErrorActionMode = isSubscriptionPopup ? 'paynow' : 'retry';
         if (actionBtn) actionBtn.textContent = isSubscriptionPopup ? 'Pay Now' : 'Try Again';
+        popup.classList.toggle('subscription-popup', !!isSubscriptionPopup);
 
         // Set error image from API based on error type
         var img = document.getElementById('errorImg_player');
@@ -1172,7 +1173,7 @@ var _sidebarLazyObserver = null;
 
 function prefetchSidebarChannelLogos(channels, maxCount) {
     if (!Array.isArray(channels) || channels.length === 0) return;
-    var limit = Math.min(maxCount || 180, channels.length);
+    var limit = Math.min(maxCount || channels.length, channels.length);
 
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
@@ -1489,13 +1490,38 @@ function buildCategoriesForLanguage() {
  * Used so the sidebar opens with focus on the current channel, not the first one.
  */
 function findCurrentChannelInSidebar() {
-    if (!_lastAttemptedChannel || sidebarState.channels.length === 0) return 0;
-    var chId = _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || "";
+    if (sidebarState.channels.length === 0) return 0;
+    var chId = getCurrentPlayingChannelId();
     if (!chId) return 0;
     var idx = sidebarState.channels.findIndex(function (ch) {
-        return (ch.channelno || ch.urno || ch.chid || "") === chId;
+        return String(ch.channelno || ch.urno || ch.chid || "") === String(chId);
     });
     return idx >= 0 ? idx : 0;
+}
+
+function getCurrentPlayingChannelId() {
+    if (!_lastAttemptedChannel) return '';
+    return _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || '';
+}
+
+function getCurrentPlayingCategoryIndex() {
+    var currentId = String(getCurrentPlayingChannelId() || '');
+    if (!currentId || !Array.isArray(sidebarState.categories) || sidebarState.categories.length === 0) {
+        return -1;
+    }
+
+    var langFiltered = getFilteredChannelsByLanguage();
+    for (var i = 0; i < sidebarState.categories.length; i++) {
+        var catName = sidebarState.categories[i] && sidebarState.categories[i].name;
+        if (!catName) continue;
+        var found = langFiltered.some(function (ch) {
+            var cid = String(ch.channelno || ch.urno || ch.chid || '');
+            var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
+            return cid === currentId && chCat === catName;
+        });
+        if (found) return i;
+    }
+    return -1;
 }
 
 /**
@@ -1578,7 +1604,6 @@ function selectCategory(index) {
     if (index < 0 || index >= sidebarState.categories.length) return;
 
     sidebarState.categoryIndex = index;
-    sidebarState.channelIndex = 0;
 
     // Update active category highlight
     var categories = document.querySelectorAll('.category-item');
@@ -1592,6 +1617,7 @@ function selectCategory(index) {
 
     // Filter channels by language and category
     filterChannelsByCategory();
+    sidebarState.channelIndex = findCurrentChannelInSidebar();
 
     // Update channels section title
     updateChannelsSectionTitle();
@@ -1647,7 +1673,7 @@ function loadSidebarChannels() {
     sidebarState.allChannelsCache = channelsForSidebar;
 
     // Preload channel logos once to avoid visible reload/flicker while switching categories.
-    prefetchSidebarChannelLogos(channelsForSidebar, 220);
+    prefetchSidebarChannelLogos(channelsForSidebar, channelsForSidebar.length);
 
     // Build categories for current language
     buildCategoriesForLanguage();
@@ -1803,10 +1829,19 @@ function openSidebar() {
             focusChannelItem(currentChIdx);
         }
     } else {
-        var firstCat = document.querySelector('.category-item');
-        if (firstCat) {
-            firstCat.focus();
-            sidebarState.categoryIndex = 0;
+        var currentCategoryIndex = getCurrentPlayingCategoryIndex();
+        if (currentCategoryIndex >= 0) {
+            selectCategory(currentCategoryIndex);
+            sidebarState.currentLevel = 'channels';
+            var currentChannelIndex = findCurrentChannelInSidebar();
+            sidebarState.channelIndex = currentChannelIndex;
+            focusChannelItem(currentChannelIndex);
+        } else {
+            var firstCat = document.querySelector('.category-item');
+            if (firstCat) {
+                firstCat.focus();
+                sidebarState.categoryIndex = 0;
+            }
         }
     }
 
@@ -2449,7 +2484,7 @@ function handleKeydown(e) {
                 console.log('[Player] RETURN pressed - closing sidebar (popup open)');
             } else {
                 hidePlayerErrorPopup();
-                window.location.href = 'channels.html';
+                showOverlay();
             }
         } else if (code === 13) {
             // ENTER - click Try Again button
@@ -2463,15 +2498,15 @@ function handleKeydown(e) {
             // DOWN / CH- / PageDown - switch to previous channel
             hidePlayerErrorPopup();
             changeChannel(-1);
-        } else if (code === 37 || code === 39) {
-            // LEFT / RIGHT - show channel number pad when sidebar is closed
+        } else if (code === 37) {
+            // LEFT - show channel number pad when sidebar is closed
             if (!sidebarState.isOpen) {
                 openDirectChannelEntryPrompt();
-                console.log('[Player] LEFT/RIGHT pressed - showing number pad (popup open)');
-            } else if (code === 39) {
-                closeSidebar();
-                console.log('[Player] RIGHT pressed - closing sidebar (popup open)');
+                console.log('[Player] LEFT pressed - showing number pad (popup open)');
             }
+        } else if (code === 39) {
+            // RIGHT - show info bar while channel is playing
+            showOverlay();
         } else if (code === 10253 || code === 77) {
             // Menu - toggle sidebar
             toggleSidebar();
@@ -2504,11 +2539,17 @@ function handleKeydown(e) {
         return;
     }
 
-    // LEFT/RIGHT when sidebar is closed: always open direct channel entry prompt
-    // (regardless of whether info bar is visible or not).
-    if ((code === 37 || code === 39) && !sidebarState.isOpen) {
+    // LEFT when sidebar is closed: open direct channel entry prompt.
+    if (code === 37 && !sidebarState.isOpen) {
         e.preventDefault();
         openDirectChannelEntryPrompt();
+        return;
+    }
+
+    // RIGHT when sidebar is closed: show info bar.
+    if (code === 39 && !sidebarState.isOpen) {
+        e.preventDefault();
+        showOverlay();
         return;
     }
 

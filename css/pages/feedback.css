@@ -268,9 +268,9 @@ body {
 
 .submit-btn:hover,
 .submit-btn:focus {
-    border: 2px solid #FFFFFF;
+    border: 3px solid #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
-    box-shadow: none;
 }
 
 .cancel-btn {
@@ -291,8 +291,9 @@ body {
 .cancel-btn:focus {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
+    border: 3px solid #FFFFFF;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     transform: scale(1.03);
 }
 

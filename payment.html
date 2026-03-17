@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
-    <title>Fo-Fi TV - Payment</title>
+    <title>Fo-Fi TV - Subscription</title>
     <link rel="stylesheet" href="css/style.css">
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
     <style>
@@ -122,15 +122,14 @@
 
     <!-- Background (visible behind popup) -->
     <div class="payment-bg">
-        <span class="payment-bg-text">Payment Gateway</span>
+        <span class="payment-bg-text">Subscription</span>
     </div>
 
     <!-- Popup shown dynamically on load -->
     <div class="payment-popup-overlay" id="paymentPopupOverlay">
         <div class="payment-popup-box" id="paymentPopupBox">
-            <span class="payment-popup-icon">💳</span>
-            <h2 class="payment-popup-title" id="paymentPopupTitle">Payment Gateway</h2>
-            <p class="payment-popup-note" id="paymentPopupNote">This feature can be implemented in a later version.</p>
+            <h2 class="payment-popup-title" id="paymentPopupTitle">Subscription</h2>
+            <p class="payment-popup-note" id="paymentPopupNote">Coming soon</p>
             <button class="payment-popup-btn" id="paymentBackBtn" tabindex="0">Go Back</button>
         </div>
     </div>
@@ -145,8 +144,8 @@
 
                 // Allow dynamic title/message overrides via URL params
                 var params = new URLSearchParams(window.location.search);
-                if (titleEl) titleEl.textContent = params.get('title') || (options && options.title) || 'Payment Gateway';
-                if (noteEl) noteEl.textContent = params.get('message') || (options && options.message) || 'This feature can be implemented in a later version.';
+                if (titleEl) titleEl.textContent = params.get('title') || (options && options.title) || 'Subscription';
+                if (noteEl) noteEl.textContent = params.get('message') || (options && options.message) || 'Coming soon';
 
                 // Trigger animation on next frame
                 requestAnimationFrame(function () {

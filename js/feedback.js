@@ -28,6 +28,18 @@
 var focusables = [];
 var currentFocus = 0;
 
+function isElementVisible(el) {
+    if (!el) return false;
+    if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return false;
+    var style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
+function refreshFocusableList() {
+    var all = Array.from(document.querySelectorAll('.focusable'));
+    focusables = all.filter(isElementVisible);
+}
+
 // ==========================================
 // CUSTOM POPUP - Replaces native browser popup
 // Header shows: "Fo-Fi TV Feedback"
@@ -76,7 +88,7 @@ window.onload = function () {
         }
     }
 
-    focusables = document.querySelectorAll(".focusable");
+    refreshFocusableList();
 
     if (focusables.length > 0) {
         currentFocus = 0;
@@ -134,7 +146,9 @@ document.addEventListener("keydown", function (e) {
     if (code === 40) moveFocus(1);
 
     // Custom: Right from submit-btn moves to cancel-btn
+    refreshFocusableList();
     var el = focusables[currentFocus];
+    if (!el) return;
     if (code === 39 && el.classList.contains('submit-btn')) {
         // Find the next focusable that is cancel-btn
         for (let i = currentFocus + 1; i < focusables.length; i++) {
@@ -178,6 +192,7 @@ document.addEventListener("keydown", function (e) {
 });
 
 function moveFocus(step) {
+    refreshFocusableList();
     if (focusables.length === 0) return;
     var next = currentFocus + step;
     if (next < 0) next = 0;

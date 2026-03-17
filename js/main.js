@@ -438,6 +438,11 @@ function setupNumberOnlyInputs() {
     var getOtpBtn = document.getElementById("getOtpBtn");
     
     if (phoneInput) {
+        phoneInput.setAttribute('type', 'tel');
+        phoneInput.setAttribute('inputmode', 'numeric');
+        phoneInput.setAttribute('pattern', '[0-9]*');
+        phoneInput.setAttribute('autocomplete', 'off');
+
         // Keep phone field in controlled numeric mode (remote digits only).
         phoneInput.readOnly = true;
 
@@ -508,6 +513,10 @@ function setupNumberOnlyInputs() {
     // OTP Inputs - only allow numbers + auto-advance
     var otpInputs = document.querySelectorAll(".otp-input");
     otpInputs.forEach(function (input, idx) {
+        input.setAttribute('type', 'tel');
+        input.setAttribute('inputmode', 'numeric');
+        input.setAttribute('pattern', '[0-9]');
+        input.setAttribute('autocomplete', 'off');
         input.readOnly = true;
         input.removeAttribute('maxlength');
 

@@ -745,6 +745,11 @@ function initLanguageDropdown() {
 function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
+        searchInput.setAttribute('type', 'tel');
+        searchInput.setAttribute('inputmode', 'numeric');
+        searchInput.setAttribute('pattern', '[0-9]*');
+        searchInput.setAttribute('autocomplete', 'off');
+
         // Keep field non-editable on navigation focus; user must click/OK to activate editing.
         searchInput.readOnly = true;
 
