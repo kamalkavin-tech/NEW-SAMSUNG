@@ -112,8 +112,10 @@
 
         .payment-popup-btn:focus,
         .payment-popup-btn.focused {
+            background: #ffffff;
+            color: #000000;
             transform: scale(1.06);
-            box-shadow: 0 0 0 4px #00aaff88, 0 8px 30px rgba(0, 170, 255, 0.5);
+            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.5), 0 8px 30px rgba(255, 255, 255, 0.35);
         }
     </style>
 </head>
@@ -125,8 +127,8 @@
         <span class="payment-bg-text">Subscription</span>
     </div>
 
-    <!-- Popup shown dynamically on load -->
-    <div class="payment-popup-overlay" id="paymentPopupOverlay">
+    <!-- Popup is visible immediately on page render -->
+    <div class="payment-popup-overlay visible" id="paymentPopupOverlay">
         <div class="payment-popup-box" id="paymentPopupBox">
             <h2 class="payment-popup-title" id="paymentPopupTitle">Subscription</h2>
             <p class="payment-popup-note" id="paymentPopupNote">Coming soon</p>
@@ -135,7 +137,7 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
+        (function () {
 
             function showPaymentPopup(options) {
                 var overlay = document.getElementById('paymentPopupOverlay');
@@ -147,24 +149,19 @@
                 if (titleEl) titleEl.textContent = params.get('title') || (options && options.title) || 'Subscription';
                 if (noteEl) noteEl.textContent = params.get('message') || (options && options.message) || 'Coming soon';
 
-                // Trigger animation on next frame
+                if (overlay) overlay.classList.add('visible');
+
+                // Focus as soon as the current frame is painted.
                 requestAnimationFrame(function () {
-                    requestAnimationFrame(function () {
-                        if (overlay) overlay.classList.add('visible');
-                        setTimeout(function () {
-                            var btn = document.getElementById('paymentBackBtn');
-                            if (btn) btn.focus();
-                        }, 200);
-                    });
+                    var btn = document.getElementById('paymentBackBtn');
+                    if (btn) btn.focus();
                 });
             }
 
             function goBack() {
                 var overlay = document.getElementById('paymentPopupOverlay');
                 if (overlay) overlay.classList.remove('visible');
-                setTimeout(function () {
-                    window.location.href = 'player.html?resume=paynow';
-                }, 250);
+                window.location.href = 'player.html?resume=paynow';
             }
 
             var backBtn = document.getElementById('paymentBackBtn');
@@ -189,9 +186,9 @@
                 }
             });
 
-            // Show popup dynamically on page load
+            // Keep this call for dynamic title/message updates.
             showPaymentPopup();
-        });
+        })();
     </script>
 
 </body>

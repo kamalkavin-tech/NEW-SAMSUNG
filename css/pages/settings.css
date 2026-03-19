@@ -736,9 +736,9 @@ input:checked + .slider:before {
 }
 
 .tv-popup-ok {
-    background: #fff;
-    color: #000;
-    border: 2px solid transparent;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     padding: 12px 48px;
     border-radius: 25px;
     font-size: 16px;
@@ -749,6 +749,8 @@ input:checked + .slider:before {
 }
 
 .tv-popup-ok:focus {
+    background: #ffffff !important;
+    color: #000000 !important;
     border: 3px solid #ffffff !important;
     box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
@@ -768,6 +770,8 @@ input:checked + .slider:before {
 }
 
 .tv-popup-cancel:focus {
+    background: #ffffff !important;
+    color: #000000 !important;
     border: 3px solid #ffffff !important;
     box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;

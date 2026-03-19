@@ -246,42 +246,44 @@ body.ott-apps-page {
 
 .error-popup {
     background: #1e1e1e;
-    padding: 40px;
+    padding: 48px 56px;
     border-radius: 20px;
     text-align: center;
-    max-width: 400px;
+    max-width: 760px;
+    width: 94%;
 }
 
 .error-popup-title {
     color: #fff;
-    font-size: 22px;
+    font-size: 28px;
     font-weight: 600;
     margin: 20px 0 10px;
 }
 
 .error-popup-message {
     color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
+    font-size: 20px;
     margin-bottom: 20px;
 }
 
 .error-popup-btn {
     padding: 12px 40px;
-    background: #6366f1;
-    color: #fff;
-    border: none;
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #ffffff;
     border-radius: 25px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 18px;
     cursor: pointer;
     transition: all 0.3s;
 }
 
 .error-popup-btn:hover,
 .error-popup-btn:focus {
-    background: #4f46e5;
-    border: 2px solid #FFFFFF;
-    box-shadow: none;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 3px solid #FFFFFF !important;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35) !important;
     outline: none;
 }
 

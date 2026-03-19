@@ -533,10 +533,12 @@
 .otp-popup-btn:hover,
 .otp-popup-btn:focus {
     transform: translateY(-3px);
-    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    background: #ffffff;
+    color: #000000;
+    border: 3px solid #ffffff;
     box-shadow:
-        0 12px 35px rgba(46, 204, 113, 0.4),
-        0 0 0 4px rgba(46, 204, 113, 0.3);
+        0 12px 35px rgba(255, 255, 255, 0.35),
+        0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }
 
@@ -566,10 +568,12 @@
 
 .error-popup .error-btn:hover,
 .error-popup .error-btn:focus {
-    background: linear-gradient(135deg, #ee5a5a 0%, #dc4a4a 100%);
+    background: #ffffff;
+    color: #000000;
+    border: 3px solid #ffffff;
     box-shadow:
-        0 12px 35px rgba(255, 68, 68, 0.4),
-        0 0 0 4px rgba(255, 68, 68, 0.3);
+        0 12px 35px rgba(255, 255, 255, 0.35),
+        0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
 /* ========================================

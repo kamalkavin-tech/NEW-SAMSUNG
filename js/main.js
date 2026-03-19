@@ -88,14 +88,8 @@ window.onload = function () {
             }
             if (el.id === 'phoneInput') {
                 currentFocus = index;
-                el.readOnly = false;
+                el.readOnly = true;
                 el.focus();
-                try {
-                    if (typeof el.setSelectionRange === 'function') {
-                        var end = (el.value || '').length;
-                        el.setSelectionRange(end, end);
-                    }
-                } catch (err) {}
                 return;
             }
             e.preventDefault();
@@ -433,7 +427,7 @@ function initializePhoneInput() {
 
 /* NUMBER-ONLY INPUT VALIDATION */
 function setupNumberOnlyInputs() {
-    // Phone Input - only allow numbers
+    // Phone Input - handle remote numeric key entry (NO KEYBOARD)
     var phoneInput = document.getElementById("phoneInput");
     var getOtpBtn = document.getElementById("getOtpBtn");
     
@@ -443,48 +437,66 @@ function setupNumberOnlyInputs() {
         phoneInput.setAttribute('pattern', '[0-9]*');
         phoneInput.setAttribute('autocomplete', 'off');
 
-        // Keep phone field in controlled numeric mode (remote digits only).
+        // KEEP PHONE INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
         phoneInput.readOnly = true;
 
+        // Prevent blur when clicked (keep focus on input)
         phoneInput.addEventListener('focus', function () {
-            // On Samsung TV, focused tel input must be editable for keypad to appear on OK.
-            phoneInput.readOnly = false;
-            try {
-                if (typeof phoneInput.setSelectionRange === 'function') {
-                    var end = (phoneInput.value || '').length;
-                    phoneInput.setSelectionRange(end, end);
-                }
-            } catch (err) {}
+            phoneInput.readOnly = true; // ENSURE ALWAYS READ-ONLY
         });
 
-        phoneInput.addEventListener('click', function () {
-            // Enable editing on click/OK so Samsung numeric keypad appears immediately.
-            phoneInput.readOnly = false;
-            try {
-                if (typeof phoneInput.setSelectionRange === 'function') {
-                    var end = (phoneInput.value || '').length;
-                    phoneInput.setSelectionRange(end, end);
-                }
-            } catch (err) {}
-        });
-
-        // Block non-numeric keypress
+        // Block all keyboard input - we only accept remote numeric keys
         phoneInput.addEventListener("keypress", function (e) {
-            var charCode = e.which || e.keyCode;
-            // Allow only 0-9 (charCode 48-57)
-            if (charCode < 48 || charCode > 57) {
+            e.preventDefault();
+            return false;
+        });
+
+        phoneInput.addEventListener("keyup", function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Handle remote numeric keys via keydown (must be before global keydown handler)
+        phoneInput.addEventListener("keydown", function (e) {
+            var charCode = e.keyCode;
+            var digit = null;
+
+            // Standard keyboard digits: 0-9 (keyCode 48-57)
+            if (charCode >= 48 && charCode <= 57) {
+                digit = String.fromCharCode(charCode);
+            }
+            // Numpad digits: 0-9 (keyCode 96-105)
+            else if (charCode >= 96 && charCode <= 105) {
+                digit = String.fromCharCode(charCode - 48);
+            }
+            // Backspace (keyCode 8)
+            else if (charCode === 8) {
                 e.preventDefault();
+                this.value = this.value.slice(0, -1);
+                updateOtpButton();
+                return;
+            }
+            // Not a digit key
+            else {
+                e.preventDefault();
+                return false;
+            }
+
+            // Insert the digit
+            if (digit !== null) {
+                e.preventDefault();
+                if (this.value.length < 10) {
+                    this.value += digit;
+                    updateOtpButton();
+                }
                 return false;
             }
         });
 
-        // Filter on input (for paste/auto-fill) + validate 10 digits for OTP button
-        phoneInput.addEventListener("input", function (e) {
-            this.value = this.value.replace(/[^0-9]/g, '').substring(0, 10);
-            
-            // Enable/disable Get OTP button based on 10 digit validation
+        // Helper to update OTP button state
+        function updateOtpButton() {
             if (getOtpBtn) {
-                var value = this.value.replace(/\D/g, '');
+                var value = phoneInput.value.replace(/\D/g, '');
                 if (value.length === 10) {
                     getOtpBtn.disabled = false;
                     getOtpBtn.classList.add('enabled');
@@ -493,21 +505,12 @@ function setupNumberOnlyInputs() {
                     getOtpBtn.classList.remove('enabled');
                 }
             }
-        });
-        
-        // Initial state - disable button if not 10 digits
-        if (getOtpBtn) {
-            var initialValue = phoneInput.value.replace(/\D/g, '');
-            if (initialValue.length !== 10) {
-                getOtpBtn.disabled = true;
-                getOtpBtn.classList.remove('enabled');
-            } else {
-                getOtpBtn.disabled = false;
-                getOtpBtn.classList.add('enabled');
-            }
         }
 
-        console.log("Phone input: number-only validation + 10-digit OTP validation enabled");
+        // Initial state - disable button if not 10 digits
+        updateOtpButton();
+
+        console.log("Phone input: Remote numeric key entry enabled (NO KEYBOARD)");
     }
 
     // OTP Inputs - only allow numbers + auto-advance
@@ -517,42 +520,80 @@ function setupNumberOnlyInputs() {
         input.setAttribute('inputmode', 'numeric');
         input.setAttribute('pattern', '[0-9]');
         input.setAttribute('autocomplete', 'off');
+        
+        // KEEP OTP INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
         input.readOnly = true;
         input.removeAttribute('maxlength');
 
-        // Block non-numeric keypress
+        // Prevent blur when clicked
+        input.addEventListener('focus', function () {
+            input.readOnly = true; // ENSURE ALWAYS READ-ONLY
+        });
+
+        // Block all keyboard input
         input.addEventListener("keypress", function (e) {
-            var charCode = e.which || e.keyCode;
-            // Allow only 0-9 (charCode 48-57)
-            if (charCode < 48 || charCode > 57) {
+            e.preventDefault();
+            return false;
+        });
+
+        input.addEventListener("keyup", function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Handle remote numeric keys via keydown
+        input.addEventListener("keydown", function (e) {
+            var charCode = e.keyCode;
+            var digit = null;
+
+            // Standard keyboard digits: 0-9 (keyCode 48-57)
+            if (charCode >= 48 && charCode <= 57) {
+                digit = String.fromCharCode(charCode);
+            }
+            // Numpad digits: 0-9 (keyCode 96-105)
+            else if (charCode >= 96 && charCode <= 105) {
+                digit = String.fromCharCode(charCode - 48);
+            }
+            // Backspace (keyCode 8)
+            else if (charCode === 8) {
+                e.preventDefault();
+                this.value = '';
+                // Move to previous OTP input
+                if (idx > 0) {
+                    var prev = document.querySelectorAll(".otp-input")[idx - 1];
+                    if (prev) {
+                        prev.focus();
+                        currentFocus = Array.from(focusables).indexOf(prev);
+                        if (currentFocus < 0) currentFocus = idx - 1;
+                    }
+                }
+                return;
+            }
+            // Not a digit key
+            else {
                 e.preventDefault();
                 return false;
             }
-        });
 
-        // Filter and auto-advance on input
-        input.addEventListener("input", function (e) {
-            // Keep OTP strictly single-digit to prevent native "box is full" behavior.
-            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 1);
-
-            // If digit entered, auto-advance to next input
-            if (this.value.length === 1) {
-                var currentId = this.id;
-                var currentIdx = parseInt(currentId.replace('otp', ''));
-
-                if (currentIdx < 4) {
-                    var next = document.getElementById('otp' + (currentIdx + 1));
+            // Insert the digit and auto-advance
+            if (digit !== null) {
+                e.preventDefault();
+                this.value = digit; // Replace with single digit
+                
+                // Auto-advance to next OTP input
+                if (idx < 3) {
+                    var next = document.querySelectorAll(".otp-input")[idx + 1];
                     if (next) {
-                        activateOTPInput(next);
-                        // Update currentFocus to keep in sync
+                        next.focus();
                         var focusIndex = Array.from(focusables).indexOf(next);
                         if (focusIndex >= 0) currentFocus = focusIndex;
                     }
                 }
+                return false;
             }
         });
 
-        console.log("OTP input " + (idx + 1) + ": number-only validation + auto-advance enabled");
+        console.log("OTP input " + (idx + 1) + ": Remote numeric key entry + auto-advance enabled");
     });
 }
 
@@ -566,15 +607,9 @@ function deactivateOTPInputEditing() {
 function activateOTPInput(input) {
     if (!input) return;
     deactivateOTPInputEditing();
-    input.readOnly = false;
+    // KEEP READ-ONLY - DO NOT SET TO FALSE
+    input.readOnly = true;
     input.focus();
-    // Select existing digit so next numeric key replaces it instead of appending.
-    try {
-        if (typeof input.setSelectionRange === 'function') {
-            var len = (input.value || '').length;
-            input.setSelectionRange(0, len);
-        }
-    } catch (e) {}
 }
 
 /* REMOTE CONTROL KEYS */
@@ -611,8 +646,9 @@ document.addEventListener("keydown", function (e) {
                 }
                 return;
             } else if (e.keyCode === 13) {
-                // Enter/OK on OTP input should activate keypad immediately.
+                // Enter/OK on OTP input keeps focus only; do not open any keyboard.
                 activateOTPInput(active);
+                e.preventDefault();
                 return;
             } else if (e.keyCode === 37) {
                 // LEFT arrow - move to previous OTP input
@@ -708,15 +744,10 @@ document.addEventListener("keydown", function (e) {
 
             // Enter/OK on phone input should open Samsung numeric keypad.
             if (e.keyCode === 13) {
-                active.readOnly = false;
+                // Keep read-only so text keyboard never appears.
+                active.readOnly = true;
                 active.focus();
-                try {
-                    if (typeof active.setSelectionRange === 'function') {
-                        var end = (active.value || '').length;
-                        active.setSelectionRange(end, end);
-                    }
-                } catch (err) {}
-                // Do not prevent default here; Samsung keyboard service needs it.
+                e.preventDefault();
                 return;
             }
         } else {

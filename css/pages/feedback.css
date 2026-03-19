@@ -253,9 +253,9 @@ body {
 }
 
 .submit-btn {
-    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
-    color: #000;
-    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     padding: 14px 48px;
     border-radius: 25px;
     font-size: 16px;
@@ -268,8 +268,10 @@ body {
 
 .submit-btn:hover,
 .submit-btn:focus {
-    border: 3px solid #FFFFFF;
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 3px solid #FFFFFF !important;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35) !important;
     outline: none;
 }
 
@@ -289,11 +291,11 @@ body {
 
 .cancel-btn:hover,
 .cancel-btn:focus {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border: 3px solid #FFFFFF;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 3px solid #FFFFFF !important;
     outline: none;
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35) !important;
     transform: scale(1.03);
 }
 
@@ -353,7 +355,10 @@ body {
 }
 
 .tv-popup-ok:focus {
-    border: 2px solid #888;
+    background: #ffffff;
+    color: #000000;
+    border: 3px solid #ffffff;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }
 
@@ -371,6 +376,9 @@ body {
 }
 
 .tv-popup-cancel:focus {
-    border: 2px solid #fff;
+    background: #ffffff;
+    color: #000000;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }

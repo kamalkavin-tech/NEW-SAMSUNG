@@ -685,7 +685,7 @@ function handleCategoryFilter(category, gridId) {
     // appear instantly when the grid renders instead of lazy-loading from blank.
     var previewChannels = getCachedChannels(options);
     if (previewChannels && previewChannels.length > 0) {
-        primeChannelLogoCache(previewChannels, 60);
+        primeChannelLogoCache(previewChannels, previewChannels.length);
     }
 
     loadChannels(options);
@@ -746,23 +746,17 @@ function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.setAttribute('type', 'tel');
-        searchInput.setAttribute('inputmode', 'numeric');
+        searchInput.setAttribute('inputmode', 'none');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
 
-        // Keep field non-editable on navigation focus; user must click/OK to activate editing.
+        // KEEP SEARCH INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
         searchInput.readOnly = true;
 
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
-            searchInput.readOnly = false;
+            searchInput.readOnly = true; // ENSURE ALWAYS READ-ONLY
             searchInput.focus();
-            try {
-                if (typeof searchInput.setSelectionRange === 'function') {
-                    var end = (searchInput.value || '').length;
-                    searchInput.setSelectionRange(end, end);
-                }
-            } catch (err) {}
         });
 
         searchInput.addEventListener('blur', function () {
@@ -770,31 +764,59 @@ function initSearchFunctionality() {
             searchInput.readOnly = true;
         });
 
-        // Filter out non-numeric characters and limit to 4 digits
-        searchInput.addEventListener('input', function () {
-            var cleaned = searchInput.value.replace(/[^0-9]/g, '');
-            if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
-            if (cleaned !== searchInput.value) {
-                searchInput.value = cleaned;
-            }
-
-            clearTimeout(searchTimeout);
-
-            if (cleaned.length > 0) {
-                // Auto-play the channel after 3 seconds of no input
-                searchTimeout = setTimeout(function () {
-                    var lcn = parseInt(cleaned, 10);
-                    console.log("[Channels] Auto-playing LCN:", lcn);
-                    playChannelByLCN(lcn);
-                }, 3000);
-            }
+        // Block all keyboard input - handle remote keys via keydown
+        searchInput.addEventListener('keypress', function (e) {
+            e.preventDefault();
+            return false;
         });
 
-        // Block non-numeric key presses (extra safety for TV keyboard)
-        searchInput.addEventListener('keypress', function (e) {
-            var char = String.fromCharCode(e.which || e.keyCode);
-            if (!/[0-9]/.test(char) && e.keyCode !== 13 && e.keyCode !== 8) {
+        searchInput.addEventListener('keyup', function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Handle remote numeric keys via keydown
+        searchInput.addEventListener('keydown', function (e) {
+            var charCode = e.keyCode;
+            var digit = null;
+
+            // Standard keyboard digits: 0-9 (keyCode 48-57)
+            if (charCode >= 48 && charCode <= 57) {
+                digit = String.fromCharCode(charCode);
+            }
+            // Numpad digits: 0-9 (keyCode 96-105)
+            else if (charCode >= 96 && charCode <= 105) {
+                digit = String.fromCharCode(charCode - 48);
+            }
+            // Backspace (keyCode 8)
+            else if (charCode === 8) {
                 e.preventDefault();
+                searchInput.value = searchInput.value.slice(0, -1);
+                clearTimeout(searchTimeout);
+                return;
+            }
+            // Not a digit key - block it
+            else {
+                e.preventDefault();
+                return false;
+            }
+
+            // Insert the digit
+            if (digit !== null) {
+                e.preventDefault();
+                if (searchInput.value.length < 4) { // Limit to 4 digits for LCN
+                    searchInput.value += digit;
+
+                    clearTimeout(searchTimeout);
+
+                    // Auto-play the channel after 3 seconds of no input
+                    searchTimeout = setTimeout(function () {
+                        var lcn = parseInt(searchInput.value, 10);
+                        console.log("[Channels] Auto-playing LCN:", lcn);
+                        playChannelByLCN(lcn);
+                    }, 3000);
+                }
+                return false;
             }
         });
     }
@@ -868,15 +890,20 @@ function primeChannelLogoCache(channels, maxCount) {
         if (channelLogoCache[logoUrl] || _channelLogoPrefetchInFlight[logoUrl]) continue;
 
         _channelLogoPrefetchInFlight[logoUrl] = true;
-        var img = new Image();
-        img.onload = function () {
-            channelLogoCache[this.src] = true;
-            delete _channelLogoPrefetchInFlight[this.src];
-        };
-        img.onerror = function () {
-            delete _channelLogoPrefetchInFlight[this.src];
-        };
-        img.src = logoUrl;
+        (function (urlKey) {
+            var img = new Image();
+            img.onload = function () {
+                channelLogoCache[urlKey] = true;
+                channelLogoCache[this.src] = true;
+                delete _channelLogoPrefetchInFlight[urlKey];
+                delete _channelLogoPrefetchInFlight[this.src];
+            };
+            img.onerror = function () {
+                delete _channelLogoPrefetchInFlight[urlKey];
+                delete _channelLogoPrefetchInFlight[this.src];
+            };
+            img.src = urlKey;
+        })(logoUrl);
     }
 }
 
@@ -1056,8 +1083,8 @@ function renderAllChannels(channels) {
     const grid = document.createElement("div");
     grid.className = "channels-grid channels-grid-smooth";
 
-    // Prefetch visible logos to reduce perceived delay when switching categories.
-    primeChannelLogoCache(channels, 40);
+        // Prefetch logos for the filtered set to reduce category-switch delay.
+    primeChannelLogoCache(channels, channels.length);
 
     channels.forEach(ch => {
         const card = createChannelCard(ch);
@@ -1166,7 +1193,12 @@ function createChannelCard(ch) {
     if (chLogo) {
         const img = document.createElement("img");
         // If already loaded in this session, set src directly to avoid visible reload delay.
-        if (channelLogoCache[chLogo]) {
+        var resolvedLogo = chLogo;
+        try {
+            resolvedLogo = new URL(chLogo, window.location.href).href;
+        } catch (e) {}
+
+        if (channelLogoCache[chLogo] || channelLogoCache[resolvedLogo]) {
             img.src = chLogo;
         } else {
             img.dataset.src = chLogo;  // Lazy load first time
@@ -1175,6 +1207,7 @@ function createChannelCard(ch) {
         img.className = "lazy-logo";
         img.onload = function () {
             channelLogoCache[chLogo] = true;
+            channelLogoCache[this.src] = true;
         };
         img.onerror = function() {
             this.style.display = 'none';
@@ -1263,22 +1296,8 @@ document.addEventListener("keydown", function (e) {
     // Allow typing in search input - only intercept navigation keys
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
-        // ENTER - play the channel number immediately
+        // ENTER - play the channel number immediately (keep field read-only)
         if (code === 13) {
-            if (!channelsSearchActivated || document.activeElement.readOnly) {
-                e.preventDefault();
-                channelsSearchActivated = true;
-                document.activeElement.readOnly = false;
-                document.activeElement.focus();
-                try {
-                    if (typeof document.activeElement.setSelectionRange === 'function') {
-                        var end = (document.activeElement.value || '').length;
-                        document.activeElement.setSelectionRange(end, end);
-                    }
-                } catch (err) {}
-                return;
-            }
-
             e.preventDefault();
             clearTimeout(searchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();

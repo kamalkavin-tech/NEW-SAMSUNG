@@ -205,23 +205,17 @@ window.onload = function () {
     if (searchInput) {
         searchInput.value = '';
         searchInput.setAttribute('type', 'tel');
-        searchInput.setAttribute('inputmode', 'numeric');
+        searchInput.setAttribute('inputmode', 'none');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
 
-        // Keep search non-editable on navigation focus to avoid auto keypad pop-up.
+        // KEEP SEARCH INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
         searchInput.readOnly = true;
 
         searchInput.addEventListener('click', function () {
             homeSearchActivated = true;
-            searchInput.readOnly = false;
+            searchInput.readOnly = true; // ENSURE ALWAYS READ-ONLY
             searchInput.focus();
-            try {
-                if (typeof searchInput.setSelectionRange === 'function') {
-                    var end = (searchInput.value || '').length;
-                    searchInput.setSelectionRange(end, end);
-                }
-            } catch (err) {}
         });
 
         searchInput.addEventListener('blur', function () {
@@ -229,31 +223,59 @@ window.onload = function () {
             searchInput.readOnly = true;
         });
 
-        // Filter out non-numeric characters and limit to 4 digits
-        searchInput.addEventListener('input', function () {
-            var cleaned = searchInput.value.replace(/[^0-9]/g, '');
-            if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
-            if (cleaned !== searchInput.value) {
-                searchInput.value = cleaned;
-            }
-
-            clearTimeout(homeSearchTimeout);
-
-            if (cleaned.length > 0) {
-                // Auto-play channel after 3 seconds of no input
-                homeSearchTimeout = setTimeout(function () {
-                    var lcn = parseInt(cleaned, 10);
-                    console.log("[HOME] Auto-playing LCN:", lcn);
-                    playChannelByLCNFromHome(lcn);
-                }, 3000);
-            }
+        // Block all keyboard input - handle remote keys via keydown
+        searchInput.addEventListener('keypress', function (e) {
+            e.preventDefault();
+            return false;
         });
 
-        // Block non-numeric key presses
-        searchInput.addEventListener('keypress', function (e) {
-            var char = String.fromCharCode(e.which || e.keyCode);
-            if (!/[0-9]/.test(char) && e.keyCode !== 13 && e.keyCode !== 8) {
+        searchInput.addEventListener('keyup', function (e) {
+            e.preventDefault();
+            return false;
+        });
+
+        // Handle remote numeric keys via keydown
+        searchInput.addEventListener('keydown', function (e) {
+            var charCode = e.keyCode;
+            var digit = null;
+
+            // Standard keyboard digits: 0-9 (keyCode 48-57)
+            if (charCode >= 48 && charCode <= 57) {
+                digit = String.fromCharCode(charCode);
+            }
+            // Numpad digits: 0-9 (keyCode 96-105)
+            else if (charCode >= 96 && charCode <= 105) {
+                digit = String.fromCharCode(charCode - 48);
+            }
+            // Backspace (keyCode 8)
+            else if (charCode === 8) {
                 e.preventDefault();
+                searchInput.value = searchInput.value.slice(0, -1);
+                clearTimeout(homeSearchTimeout);
+                return;
+            }
+            // Not a digit key - block it
+            else {
+                e.preventDefault();
+                return false;
+            }
+
+            // Insert the digit
+            if (digit !== null) {
+                e.preventDefault();
+                if (searchInput.value.length < 4) { // Limit to 4 digits for LCN
+                    searchInput.value += digit;
+
+                    clearTimeout(homeSearchTimeout);
+
+                    // Auto-play channel after 3 seconds of no input
+                    homeSearchTimeout = setTimeout(function () {
+                        var lcn = parseInt(searchInput.value, 10);
+                        console.log("[HOME] Auto-playing LCN:", lcn);
+                        playChannelByLCNFromHome(lcn);
+                    }, 3000);
+                }
+                return false;
             }
         });
     }
@@ -322,20 +344,6 @@ document.addEventListener('keydown', function (e) {
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
         if (e.keyCode === 13) { // ENTER - play channel by number
-            if (!homeSearchActivated || document.activeElement.readOnly) {
-                e.preventDefault();
-                homeSearchActivated = true;
-                document.activeElement.readOnly = false;
-                document.activeElement.focus();
-                try {
-                    if (typeof document.activeElement.setSelectionRange === 'function') {
-                        var end = (document.activeElement.value || '').length;
-                        document.activeElement.setSelectionRange(end, end);
-                    }
-                } catch (err) {}
-                return;
-            }
-
             e.preventDefault();
             clearTimeout(homeSearchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
@@ -2277,31 +2285,72 @@ function loadFoFiLogo() {
     BBNL_API.getFoFiLogo().then(function (response) {
         var logoImg = document.getElementById('fofitv-logo');
         var fallbackText = document.getElementById('brand-text-fallback');
-        if (!logoImg) return;
-
-        var logoPath = '';
-        var body = response && response.body;
-        if (body && typeof body === 'object' && !Array.isArray(body)) {
-            logoPath = body.logo_path || body.logo || body.logopath || '';
-        } else if (Array.isArray(body) && body.length > 0) {
-            var first = body[0] || {};
-            logoPath = first.logo_path || first.logo || first.logopath || '';
+        if (!logoImg) {
+            console.warn("[HOME] Logo image element not found");
+            return;
         }
 
-        if (logoPath) {
+        console.log("[HOME] FoFi logo API response:", response);
+
+        var logoPath = '';
+        
+        // Try multiple ways to extract logo path from response
+        if (response) {
+            // Try response.body.logo_path
+            if (response.body && typeof response.body === 'object' && !Array.isArray(response.body)) {
+                logoPath = response.body.logo_path || response.body.logo || response.body.logopath || '';
+                console.log("[HOME] Extracted logo from response.body:", logoPath);
+            }
+            // Try response.body as array
+            else if (response.body && Array.isArray(response.body) && response.body.length > 0) {
+                var first = response.body[0] || {};
+                logoPath = first.logo_path || first.logo || first.logopath || '';
+                console.log("[HOME] Extracted logo from response.body[0]:", logoPath);
+            }
+            // Try response.logo_path directly
+            else if (response.logo_path) {
+                logoPath = response.logo_path;
+                console.log("[HOME] Extracted logo from response.logo_path:", logoPath);
+            }
+            // Try response.logo directly
+            else if (response.logo) {
+                logoPath = response.logo;
+                console.log("[HOME] Extracted logo from response.logo:", logoPath);
+            }
+            // Try response.logopath
+            else if (response.logopath) {
+                logoPath = response.logopath;
+                console.log("[HOME] Extracted logo from response.logopath:", logoPath);
+            }
+        }
+
+        if (logoPath && logoPath.length > 0) {
+            console.log("[HOME] Setting logo src to:", logoPath);
             logoImg.src = logoPath;
             logoImg.style.display = 'block';
+            
+            // Handle image load failure
             logoImg.onerror = function () {
+                console.error("[HOME] Logo image failed to load:", logoPath);
                 logoImg.style.display = 'none';
                 if (fallbackText) fallbackText.style.display = 'block';
             };
+            
+            // Hide fallback text
             if (fallbackText) fallbackText.style.display = 'none';
+            
+            console.log("[HOME] ✓ Logo display enabled");
         } else {
+            console.warn("[HOME] No logo path found in API response");
             logoImg.style.display = 'none';
             if (fallbackText) fallbackText.style.display = 'block';
         }
-    }).catch(function () {
-        console.warn("[HOME] FoFi logo fetch failed, using fallback text.");
+    }).catch(function (error) {
+        console.error("[HOME] FoFi logo fetch failed:", error);
+        var logoImg = document.getElementById('fofitv-logo');
+        var fallbackText = document.getElementById('brand-text-fallback');
+        if (logoImg) logoImg.style.display = 'none';
+        if (fallbackText) fallbackText.style.display = 'block';
     });
 }
 

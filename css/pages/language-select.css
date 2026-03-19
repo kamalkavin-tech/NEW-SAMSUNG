@@ -354,9 +354,10 @@ body.language-select-page {
 
 .error-popup-btn:hover,
 .error-popup-btn:focus {
-    background: #4f46e5;
+    background: #ffffff;
+    color: #000000;
     border: 2px solid #FFFFFF;
-    box-shadow: none;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35);
     outline: none;
 }
 
