@@ -321,23 +321,23 @@
     background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
     border: 1px solid rgba(255, 68, 68, 0.3);
     border-radius: 20px;
-    padding: 50px 60px;
-    max-width: 600px;
+    padding: 38px 44px;
+    max-width: 500px;
     text-align: center;
     box-shadow: 0 20px 60px rgba(255, 68, 68, 0.2);
 }
 
 .error-icon {
-    margin-bottom: 30px;
+    margin-bottom: 20px;
     display: flex;
     justify-content: center;
 }
 
 .error-title {
-    font-size: 36px;
+    font-size: 30px;
     font-weight: 700;
     color: #FF4444;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
 }
 
 .error-message {
@@ -349,10 +349,10 @@
 
 .error-try-again-btn {
     width: 100%;
-    padding: 18px 40px;
+    padding: 14px 30px;
     background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
     color: #000;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     border: none;
     border-radius: 12px;

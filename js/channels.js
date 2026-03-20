@@ -48,9 +48,23 @@ var searchTimeout = null;
 var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages)
 var masterListLoaded = false; // Flag to track if master list is loaded
 var channelLogoCache = {}; // Reuse loaded logos across category switches
+var channelLogoSourceMap = {}; // Normalized logo key -> last successful src
 var channelsSearchActivated = false; // Only activate keypad after explicit user action
 var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
+var CHANNELS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function normalizeChannelLogoKey(url) {
+    if (!url) return '';
+    var resolved = String(url).trim();
+    if (!resolved) return '';
+    try {
+        var u = new URL(resolved, window.location.href);
+        return u.origin + u.pathname;
+    } catch (e) {
+        return resolved.split('?')[0].split('#')[0];
+    }
+}
 
 window.addEventListener('beforeunload', function () {
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
@@ -746,77 +760,41 @@ function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.setAttribute('type', 'tel');
-        searchInput.setAttribute('inputmode', 'none');
+        searchInput.setAttribute('inputmode', 'numeric');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
 
-        // KEEP SEARCH INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
-        searchInput.readOnly = true;
+        // Keep editable so Samsung native numeric keypad can appear.
+        searchInput.readOnly = false;
 
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
-            searchInput.readOnly = true; // ENSURE ALWAYS READ-ONLY
+            searchInput.readOnly = false;
             searchInput.focus();
         });
 
         searchInput.addEventListener('blur', function () {
             channelsSearchActivated = false;
-            searchInput.readOnly = true;
+            searchInput.readOnly = false;
         });
 
-        // Block all keyboard input - handle remote keys via keydown
-        searchInput.addEventListener('keypress', function (e) {
-            e.preventDefault();
-            return false;
+        searchInput.addEventListener('input', function () {
+            searchInput.value = String(searchInput.value || '').replace(/\D/g, '').slice(0, 4);
+            clearTimeout(searchTimeout);
+            if (searchInput.value.length > 0) {
+                searchTimeout = setTimeout(function () {
+                    var lcn = parseInt(searchInput.value, 10);
+                    console.log("[Channels] Auto-playing LCN:", lcn);
+                    playChannelByLCN(lcn);
+                }, 3000);
+            }
         });
 
-        searchInput.addEventListener('keyup', function (e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Handle remote numeric keys via keydown
         searchInput.addEventListener('keydown', function (e) {
-            var charCode = e.keyCode;
-            var digit = null;
-
-            // Standard keyboard digits: 0-9 (keyCode 48-57)
-            if (charCode >= 48 && charCode <= 57) {
-                digit = String.fromCharCode(charCode);
-            }
-            // Numpad digits: 0-9 (keyCode 96-105)
-            else if (charCode >= 96 && charCode <= 105) {
-                digit = String.fromCharCode(charCode - 48);
-            }
-            // Backspace (keyCode 8)
-            else if (charCode === 8) {
+            if (e.keyCode === 13 && searchInput.value.replace(/[^0-9]/g, '').trim().length > 0) {
                 e.preventDefault();
-                searchInput.value = searchInput.value.slice(0, -1);
                 clearTimeout(searchTimeout);
-                return;
-            }
-            // Not a digit key - block it
-            else {
-                e.preventDefault();
-                return false;
-            }
-
-            // Insert the digit
-            if (digit !== null) {
-                e.preventDefault();
-                if (searchInput.value.length < 4) { // Limit to 4 digits for LCN
-                    searchInput.value += digit;
-
-                    clearTimeout(searchTimeout);
-
-                    // Auto-play the channel after 3 seconds of no input
-                    searchTimeout = setTimeout(function () {
-                        var lcn = parseInt(searchInput.value, 10);
-                        console.log("[Channels] Auto-playing LCN:", lcn);
-                        playChannelByLCN(lcn);
-                    }, 3000);
-                }
-                return false;
+                playChannelByLCN(parseInt(searchInput.value, 10));
             }
         });
     }
@@ -865,7 +843,23 @@ function buildChannelsCacheKey(options) {
 function getCachedChannels(options) {
     var key = buildChannelsCacheKey(options);
     var cached = channelsResultCache[key];
-    return Array.isArray(cached) ? cached : null;
+    if (Array.isArray(cached)) return cached;
+
+    try {
+        var persistKey = 'channels_cache_' + key;
+        var raw = sessionStorage.getItem(persistKey);
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.data) || !parsed.ts) return null;
+        if ((Date.now() - Number(parsed.ts)) > CHANNELS_CACHE_TTL_MS) {
+            sessionStorage.removeItem(persistKey);
+            return null;
+        }
+        channelsResultCache[key] = parsed.data.slice();
+        return parsed.data;
+    } catch (e) {
+        return null;
+    }
 }
 
 function setCachedChannels(options, channels) {
@@ -873,6 +867,10 @@ function setCachedChannels(options, channels) {
     var key = buildChannelsCacheKey(options);
     // Keep an immutable snapshot to avoid accidental mutations.
     channelsResultCache[key] = channels.slice();
+    try {
+        var persistKey = 'channels_cache_' + key;
+        sessionStorage.setItem(persistKey, JSON.stringify({ ts: Date.now(), data: channels.slice() }));
+    } catch (e) {}
 }
 
 function clearChannelsResultCache() {
@@ -886,15 +884,18 @@ function primeChannelLogoCache(channels, maxCount) {
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
         var logoUrl = getChannelCardLogo(ch);
+        var logoKey = normalizeChannelLogoKey(logoUrl);
         if (!logoUrl) continue;
-        if (channelLogoCache[logoUrl] || _channelLogoPrefetchInFlight[logoUrl]) continue;
+        if (!logoKey) continue;
+        if (channelLogoCache[logoKey] || _channelLogoPrefetchInFlight[logoKey]) continue;
 
-        _channelLogoPrefetchInFlight[logoUrl] = true;
-        (function (urlKey) {
+        _channelLogoPrefetchInFlight[logoKey] = true;
+        (function (urlKey, srcUrl) {
             var img = new Image();
             img.onload = function () {
                 channelLogoCache[urlKey] = true;
                 channelLogoCache[this.src] = true;
+                channelLogoSourceMap[urlKey] = this.src;
                 delete _channelLogoPrefetchInFlight[urlKey];
                 delete _channelLogoPrefetchInFlight[this.src];
             };
@@ -902,8 +903,8 @@ function primeChannelLogoCache(channels, maxCount) {
                 delete _channelLogoPrefetchInFlight[urlKey];
                 delete _channelLogoPrefetchInFlight[this.src];
             };
-            img.src = urlKey;
-        })(logoUrl);
+            img.src = srcUrl;
+        })(logoKey, logoUrl);
     }
 }
 
@@ -1121,8 +1122,14 @@ function initLazyLoading() {
                 if (entry.isIntersecting) {
                     var img = entry.target;
                     if (img.dataset.src) {
-                        img.src = img.dataset.src;
+                        var key = img.dataset.logoKey || normalizeChannelLogoKey(img.dataset.src);
+                        if (key && channelLogoSourceMap[key]) {
+                            img.src = channelLogoSourceMap[key];
+                        } else {
+                            img.src = img.dataset.src;
+                        }
                         channelLogoCache[img.dataset.src] = true;
+                        if (key) channelLogoCache[key] = true;
                         img.removeAttribute('data-src');
                     }
                     _lazyObserver.unobserve(img);
@@ -1194,20 +1201,27 @@ function createChannelCard(ch) {
         const img = document.createElement("img");
         // If already loaded in this session, set src directly to avoid visible reload delay.
         var resolvedLogo = chLogo;
+        var logoKey = normalizeChannelLogoKey(chLogo);
+        var cachedSrc = logoKey ? channelLogoSourceMap[logoKey] : '';
         try {
             resolvedLogo = new URL(chLogo, window.location.href).href;
         } catch (e) {}
 
-        if (channelLogoCache[chLogo] || channelLogoCache[resolvedLogo]) {
-            img.src = chLogo;
+        if (logoKey && (channelLogoCache[logoKey] || channelLogoCache[chLogo] || channelLogoCache[resolvedLogo])) {
+            img.src = cachedSrc || chLogo;
         } else {
             img.dataset.src = chLogo;  // Lazy load first time
+            if (logoKey) img.dataset.logoKey = logoKey;
         }
         img.alt = chName;
         img.className = "lazy-logo";
         img.onload = function () {
             channelLogoCache[chLogo] = true;
             channelLogoCache[this.src] = true;
+            if (logoKey) {
+                channelLogoCache[logoKey] = true;
+                channelLogoSourceMap[logoKey] = this.src;
+            }
         };
         img.onerror = function() {
             this.style.display = 'none';
@@ -1298,42 +1312,25 @@ document.addEventListener("keydown", function (e) {
     if (isSearchFocused) {
         // ENTER - play the channel number immediately (keep field read-only)
         if (code === 13) {
-            e.preventDefault();
-            clearTimeout(searchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
             if (query.length > 0) {
+                e.preventDefault();
+                clearTimeout(searchTimeout); // Cancel auto-play timer
                 playChannelByLCN(parseInt(query, 10));
             }
-            return;
-        }
-        if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
-            e.preventDefault();
-            var numOnSearch = (code >= 96) ? (code - 96) : (code - 48);
-            if (document.activeElement.value.length < 4) {
-                document.activeElement.value += numOnSearch.toString();
-                var inputEvt = new Event('input', { bubbles: true });
-                document.activeElement.dispatchEvent(inputEvt);
-            }
-            return;
-        }
-        if (code === 8) {
-            e.preventDefault();
-            document.activeElement.value = document.activeElement.value.slice(0, -1);
-            var backEvt = new Event('input', { bubbles: true });
-            document.activeElement.dispatchEvent(backEvt);
             return;
         }
         // DOWN - leave search input, go to category pills
         if (code === 40) {
             e.preventDefault();
-            document.activeElement.readOnly = true;
+            document.activeElement.readOnly = false;
             moveToFirstCategoryPill();
             return;
         }
         // LEFT - leave search input, go to back button
         if (code === 37) {
             e.preventDefault();
-            document.activeElement.readOnly = true;
+            document.activeElement.readOnly = false;
             moveToBackButton();
             return;
         }

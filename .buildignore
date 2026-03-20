@@ -50,6 +50,7 @@ build-tools/
 # Exclude build artifacts
 .buildResult/
 .sign/
+*.wgt
 *.log
 *.tmp
 

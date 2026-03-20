@@ -11,6 +11,23 @@ var homeNetworkInterval = null; // Interval for network status updates
 var homeSearchActivated = false; // Only activate keypad/editing on explicit action
 var homeLanguageLogoCache = {}; // URL -> true
 var homeLanguageLogoPrefetchInFlight = {}; // URL -> true
+var homeAdImageCache = {}; // URL -> true
+
+function primeHomeAds(ads, maxCount) {
+    if (!Array.isArray(ads) || ads.length === 0) return;
+    var limit = Math.min(maxCount || 2, ads.length);
+    for (var i = 0; i < limit; i++) {
+        var ad = ads[i] || {};
+        var url = String(ad.adpath || '').trim();
+        if (!url || homeAdImageCache[url]) continue;
+        var img = new Image();
+        img.onload = function () {
+            homeAdImageCache[this.src] = true;
+        };
+        img.onerror = function () {};
+        img.src = url;
+    }
+}
 
 function getHomeLanguageLogoUrl(lang) {
     if (!lang || typeof lang !== 'object') return '';
@@ -205,77 +222,41 @@ window.onload = function () {
     if (searchInput) {
         searchInput.value = '';
         searchInput.setAttribute('type', 'tel');
-        searchInput.setAttribute('inputmode', 'none');
+        searchInput.setAttribute('inputmode', 'numeric');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
 
-        // KEEP SEARCH INPUT READ-ONLY AT ALL TIMES - NO KEYBOARD SHOULD APPEAR
-        searchInput.readOnly = true;
+        // Keep editable so Samsung native numeric keypad can appear.
+        searchInput.readOnly = false;
 
         searchInput.addEventListener('click', function () {
             homeSearchActivated = true;
-            searchInput.readOnly = true; // ENSURE ALWAYS READ-ONLY
+            searchInput.readOnly = false;
             searchInput.focus();
         });
 
         searchInput.addEventListener('blur', function () {
             homeSearchActivated = false;
-            searchInput.readOnly = true;
+            searchInput.readOnly = false;
         });
 
-        // Block all keyboard input - handle remote keys via keydown
-        searchInput.addEventListener('keypress', function (e) {
-            e.preventDefault();
-            return false;
+        searchInput.addEventListener('input', function () {
+            searchInput.value = String(searchInput.value || '').replace(/\D/g, '').slice(0, 4);
+            clearTimeout(homeSearchTimeout);
+            if (searchInput.value.length > 0) {
+                homeSearchTimeout = setTimeout(function () {
+                    var lcn = parseInt(searchInput.value, 10);
+                    console.log("[HOME] Auto-playing LCN:", lcn);
+                    playChannelByLCNFromHome(lcn);
+                }, 3000);
+            }
         });
 
-        searchInput.addEventListener('keyup', function (e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Handle remote numeric keys via keydown
         searchInput.addEventListener('keydown', function (e) {
-            var charCode = e.keyCode;
-            var digit = null;
-
-            // Standard keyboard digits: 0-9 (keyCode 48-57)
-            if (charCode >= 48 && charCode <= 57) {
-                digit = String.fromCharCode(charCode);
-            }
-            // Numpad digits: 0-9 (keyCode 96-105)
-            else if (charCode >= 96 && charCode <= 105) {
-                digit = String.fromCharCode(charCode - 48);
-            }
-            // Backspace (keyCode 8)
-            else if (charCode === 8) {
+            if (e.keyCode === 13 && searchInput.value.replace(/[^0-9]/g, '').trim().length > 0) {
                 e.preventDefault();
-                searchInput.value = searchInput.value.slice(0, -1);
                 clearTimeout(homeSearchTimeout);
-                return;
-            }
-            // Not a digit key - block it
-            else {
-                e.preventDefault();
-                return false;
-            }
-
-            // Insert the digit
-            if (digit !== null) {
-                e.preventDefault();
-                if (searchInput.value.length < 4) { // Limit to 4 digits for LCN
-                    searchInput.value += digit;
-
-                    clearTimeout(homeSearchTimeout);
-
-                    // Auto-play channel after 3 seconds of no input
-                    homeSearchTimeout = setTimeout(function () {
-                        var lcn = parseInt(searchInput.value, 10);
-                        console.log("[HOME] Auto-playing LCN:", lcn);
-                        playChannelByLCNFromHome(lcn);
-                    }, 3000);
-                }
-                return false;
+                playChannelByLCNFromHome(parseInt(searchInput.value, 10));
             }
         });
     }
@@ -344,35 +325,18 @@ document.addEventListener('keydown', function (e) {
     var isSearchFocused = document.activeElement && document.activeElement.id === 'searchInput';
     if (isSearchFocused) {
         if (e.keyCode === 13) { // ENTER - play channel by number
-            e.preventDefault();
-            clearTimeout(homeSearchTimeout); // Cancel auto-play timer
             var query = document.activeElement.value.replace(/[^0-9]/g, '').trim();
             if (query.length > 0) {
+                e.preventDefault();
+                clearTimeout(homeSearchTimeout); // Cancel auto-play timer
                 console.log("[HOME] Playing LCN:", query);
                 playChannelByLCNFromHome(parseInt(query, 10));
             }
             return;
         }
-        if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
-            e.preventDefault();
-            var num = (e.keyCode >= 96) ? (e.keyCode - 96) : (e.keyCode - 48);
-            if (document.activeElement.value.length < 4) {
-                document.activeElement.value += num.toString();
-                var inputEvent = new Event('input', { bubbles: true });
-                document.activeElement.dispatchEvent(inputEvent);
-            }
-            return;
-        }
-        if (e.keyCode === 8) { // BACKSPACE
-            e.preventDefault();
-            document.activeElement.value = document.activeElement.value.slice(0, -1);
-            var backEvent = new Event('input', { bubbles: true });
-            document.activeElement.dispatchEvent(backEvent);
-            return;
-        }
         if (e.keyCode === 39) { // RIGHT - go to Settings button
             e.preventDefault();
-            document.activeElement.readOnly = true;
+            document.activeElement.readOnly = false;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleRight();
             }
@@ -380,7 +344,7 @@ document.addEventListener('keydown', function (e) {
         }
         if (e.keyCode === 37) { // LEFT - go to sidebar
             e.preventDefault();
-            document.activeElement.readOnly = true;
+            document.activeElement.readOnly = false;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleLeft();
             }
@@ -392,7 +356,7 @@ document.addEventListener('keydown', function (e) {
         }
         if (e.keyCode === 40) { // DOWN - leave search, go to cards
             e.preventDefault();
-            document.activeElement.readOnly = true;
+            document.activeElement.readOnly = false;
             if (typeof TVNavigation !== 'undefined') {
                 TVNavigation.handleDown();
             }
@@ -875,6 +839,7 @@ function loadHomeAds() {
             var ads = JSON.parse(cachedAds);
             if (ads && Array.isArray(ads) && ads.length > 0) {
                 console.log("[HOME] Ads loaded from cache:", ads.length);
+                primeHomeAds(ads, 2);
                 renderAdsInHeroBanner(ads);
                 return;
             }
@@ -891,6 +856,7 @@ function loadHomeAds() {
                 console.log("[HOME] Displaying", ads.length, "ads");
                 // Cache in sessionStorage
                 try { sessionStorage.setItem('home_ads_cache', JSON.stringify(ads)); } catch (e) {}
+                primeHomeAds(ads, 2);
                 renderAdsInHeroBanner(ads);
             } else {
                 console.log("[HOME] No ads to display - keeping clean UI");
@@ -932,7 +898,14 @@ function renderAdsInHeroBanner(ads) {
         slide.style.cssText = index === 0 ? 'opacity:1;z-index:1' : 'opacity:0;z-index:0';
 
         var img = document.createElement('img');
-        img.src = ad.adpath;
+        var adUrl = String(ad.adpath || '').trim();
+        if (index === 0 || homeAdImageCache[adUrl]) {
+            img.src = adUrl;
+        } else {
+            img.dataset.src = adUrl;
+            img.loading = 'lazy';
+            img.decoding = 'async';
+        }
         img.alt = 'Advertisement ' + (index + 1);
 
         // Handle image load errors gracefully
@@ -946,6 +919,16 @@ function renderAdsInHeroBanner(ads) {
     });
     sliderContainer.appendChild(fragment);
     container.appendChild(sliderContainer);
+
+    // Load remaining slide images shortly after first paint.
+    setTimeout(function () {
+        var deferredImgs = sliderContainer.querySelectorAll('img[data-src]');
+        deferredImgs.forEach(function (img) {
+            img.src = img.dataset.src;
+            homeAdImageCache[img.dataset.src] = true;
+            img.removeAttribute('data-src');
+        });
+    }, 100);
 
     // Add navigation dots if multiple ads
     if (ads.length > 1) {

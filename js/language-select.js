@@ -32,6 +32,13 @@ var languageLogoCache = {};
 var languageLogoPrefetchInFlight = {};
 var _languageLazyObserver = null;
 
+function sanitizeLanguageText(value) {
+    var str = String(value || '');
+    // Strip simple HTML tags returned by API payloads.
+    str = str.replace(/<[^>]*>/g, ' ');
+    return str.replace(/\s+/g, ' ').trim();
+}
+
 function getLanguageLogoUrl(lang) {
     if (!lang || typeof lang !== 'object') return '';
     var candidates = [
@@ -79,8 +86,8 @@ async function initPage() {
         if (Array.isArray(langResponse) && langResponse.length > 0) {
             // Sort languages alphabetically by title
             langResponse.sort(function(a, b) {
-                var nameA = (a.langtitle || '').toLowerCase();
-                var nameB = (b.langtitle || '').toLowerCase();
+                var nameA = sanitizeLanguageText(a.langtitle || '').toLowerCase();
+                var nameB = sanitizeLanguageText(b.langtitle || '').toLowerCase();
                 // Keep "All" or "Subscribed" at the top
                 if (nameA.includes('all') || nameA.includes('subscribed')) return -1;
                 if (nameB.includes('all') || nameB.includes('subscribed')) return 1;
@@ -112,9 +119,9 @@ function renderLanguages(languages) {
     container.innerHTML = '';
 
     languages.forEach(lang => {
-        const langName = lang.langtitle || 'Unknown';
+        const langName = sanitizeLanguageText(lang.langtitle || '') || 'Unknown';
         const langId = lang.langid || '';
-        const langDetails = lang.langdetails || '';
+        const langDetails = sanitizeLanguageText(lang.langdetails || '');
         const langLogo = getLanguageLogoUrl(lang);
 
         // Create language card
