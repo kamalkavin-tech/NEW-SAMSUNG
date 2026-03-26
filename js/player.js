@@ -33,6 +33,7 @@ var playerDateTimeInterval = null; // Interval for date/time updates
 // Clean up background intervals when leaving page
 window.addEventListener('beforeunload', function () {
     if (playerDateTimeInterval) clearInterval(playerDateTimeInterval);
+    if (playerNetworkWatchInterval) clearInterval(playerNetworkWatchInterval);
 });
 
 const PLAYER_CONFIG = {
@@ -98,6 +99,13 @@ var playerErrorActionMode = 'retry'; // retry | paynow
 var PAYMENT_GATEWAY_URL = 'https://bbnl.in/renew';
 var playerErrorUiTimeout = null;
 var PLAYER_ERROR_UI_HIDE_DELAY = 10000; // 10 seconds
+var PLAYER_STREAM_START_TIMEOUT_MS = 3800; // Keep dead-stream detection under 4s for faster popup feedback
+var playerNetworkWatchInterval = null;
+var playerNetworkDisconnectSince = 0;
+var PLAYER_NETWORK_WATCH_INTERVAL_MS = 1000;
+var PLAYER_NETWORK_POPUP_DELAY_MS = 2500;
+var playerLastErrorCategory = '';
+var playerAutoResumeInProgress = false;
 
 /**
  * Check if the network is disconnected
@@ -113,6 +121,59 @@ function isNetworkDisconnected() {
         console.error("[Player] Network check error:", e);
     }
     return !navigator.onLine;
+}
+
+function hasRecentApiNetworkFailure(maxAgeMs) {
+    var root = (typeof window !== 'undefined') ? window : globalThis;
+    var failure = root && root.__bbnlLastApiFailure;
+    if (!failure || !failure.networkLike) return false;
+    var age = Date.now() - Number(failure.ts || 0);
+    return age >= 0 && age <= (maxAgeMs || 30000);
+}
+
+function currentChannelNeedsInternet() {
+    var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
+    if (!ch) return false;
+    var raw = String(ch.streamlink || ch.channel_url || '').trim().toLowerCase();
+    if (!raw) return false;
+    return raw.indexOf('dvb://') !== 0;
+}
+
+function startPlayerNetworkWatchdog() {
+    if (playerNetworkWatchInterval) clearInterval(playerNetworkWatchInterval);
+    playerNetworkDisconnectSince = 0;
+
+    playerNetworkWatchInterval = setInterval(function () {
+        if (!currentChannelNeedsInternet()) {
+            playerNetworkDisconnectSince = 0;
+            playerAutoResumeInProgress = false;
+            return;
+        }
+
+        var disconnected = isNetworkDisconnected() || hasRecentApiNetworkFailure(20000);
+        if (!disconnected) {
+            if (playerErrorPopupOpen && playerLastErrorCategory === 'network' && !playerAutoResumeInProgress) {
+                playerAutoResumeInProgress = true;
+                hidePlayerErrorPopup();
+                retryLastAttemptedChannel();
+            }
+            playerNetworkDisconnectSince = 0;
+            return;
+        }
+
+        playerAutoResumeInProgress = false;
+
+        if (!playerNetworkDisconnectSince) {
+            playerNetworkDisconnectSince = Date.now();
+            return;
+        }
+
+        if (!playerErrorPopupOpen && (Date.now() - playerNetworkDisconnectSince) >= PLAYER_NETWORK_POPUP_DELAY_MS) {
+            hideBufferingIndicator();
+            showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
+            playerNetworkDisconnectSince = 0;
+        }
+    }, PLAYER_NETWORK_WATCH_INTERVAL_MS);
 }
 
 function clearPlayerErrorUiTimer() {
@@ -207,8 +268,14 @@ function showPlayerErrorPopup(title, message) {
 
         var titleLower = String(title || '').toLowerCase();
         var msgLower = String(message || '').toLowerCase();
+        playerLastErrorCategory = 'playback';
         var isSubscriptionPopup = titleLower.indexOf('subscription not available') !== -1 ||
             msgLower.indexOf('please subscribe to watch this channel') !== -1;
+        if (isSubscriptionPopup) {
+            playerLastErrorCategory = 'subscription';
+        } else if (titleLower.indexOf('network') !== -1 || msgLower.indexOf('network') !== -1 || msgLower.indexOf('internet') !== -1 || msgLower.indexOf('offline') !== -1) {
+            playerLastErrorCategory = 'network';
+        }
         playerErrorActionMode = isSubscriptionPopup ? 'paynow' : 'retry';
         if (actionBtn) actionBtn.textContent = isSubscriptionPopup ? 'Pay Now' : 'Try Again';
         popup.classList.toggle('subscription-popup', !!isSubscriptionPopup);
@@ -221,7 +288,7 @@ function showPlayerErrorPopup(title, message) {
                 key = 'NO_CHANNELS_AVAILABLE';
             } else if (title && (title.toLowerCase().includes('signal') || title.toLowerCase().includes('unavailable'))) {
                 key = 'SIGNAL_UNAVAILABLE';
-            } else if (title && title.toLowerCase().includes('network')) {
+            } else if ((title && title.toLowerCase().includes('network')) || (message && message.toLowerCase().includes('network'))) {
                 key = 'NO_INTERNET_CONNECTION';
             }
             var imgUrl = ErrorImagesAPI.getImageUrl(key);
@@ -229,7 +296,11 @@ function showPlayerErrorPopup(title, message) {
                 imgUrl = ErrorImagesAPI.getImageUrl('SIGNAL_UNAVAILABLE') || ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE') || ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
             }
             if (imgUrl) {
-                img.src = imgUrl;
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, imgUrl);
+                } else {
+                    img.src = imgUrl;
+                }
             }
         }
 
@@ -254,9 +325,48 @@ function hidePlayerErrorPopup() {
     if (popup) {
         popup.style.display = 'none';
         playerErrorPopupOpen = false;
+        playerAutoResumeInProgress = false;
         clearPlayerErrorUiTimer();
         // Start auto-hide timer now that popup is dismissed
         showOverlay();
+    }
+}
+
+function retryLastAttemptedChannel() {
+    if (!_lastAttemptedChannel) return;
+
+    var channelToRetry = _lastAttemptedChannel;
+    var chId = channelToRetry.channelno || channelToRetry.urno || channelToRetry.chid || "";
+
+    // Refresh channel data to get updated info, then retry same channel
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
+        BBNL_API.getChannelData().then(function (channels) {
+            if (channels && channels.length > 0) {
+                // Update ALL channels for navigation and sidebar
+                allChannels = channels.slice().sort(function (a, b) {
+                    var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
+                    var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+                    return aNo - bNo;
+                });
+                _allChannelsUnfiltered = allChannels; // Same list for sidebar
+                // Find the same channel in refreshed list by ID
+                if (chId) {
+                    var updated = channels.find(function (ch) {
+                        return (ch.channelno || ch.urno || ch.chid || "") === chId;
+                    });
+                    if (updated) {
+                        setupPlayer(updated);
+                        return;
+                    }
+                }
+            }
+            // Fallback: retry with the stored channel object
+            setupPlayer(channelToRetry);
+        }).catch(function () {
+            setupPlayer(channelToRetry);
+        });
+    } else {
+        setupPlayer(channelToRetry);
     }
 }
 
@@ -353,7 +463,7 @@ window.onload = function () {
                         window._streamTimeoutTimer = null;
                     }
 
-                    if (isNetworkDisconnected()) {
+                    if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                         showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
                     } else {
                         // Check if current channel is unsubscribed/paid
@@ -398,6 +508,8 @@ window.onload = function () {
         console.error("AVPlayer Module not loaded!");
         showPlayerErrorPopup('Player Error', 'AVPlayer module not loaded. Please restart the app.');
     }
+
+    startPlayerNetworkWatchdog();
 
     // Parse URL params
     const urlParams = new URLSearchParams(window.location.search);
@@ -447,6 +559,19 @@ window.onload = function () {
         initializeSidebar();
     });
 
+    // Keep player labels in sync if DeviceInfo resolves/changes asynchronously.
+    window.addEventListener('bbnl:device-id-updated', function () {
+        try {
+            var idLabel = DeviceInfo.getDeviceIdLabel();
+            var uiDeviceId = document.getElementById('ui-device-id');
+            var uiTvId = document.getElementById('ui-tvid');
+            var popupDeviceId = document.getElementById('popupDeviceId');
+            if (uiDeviceId) uiDeviceId.innerText = idLabel;
+            if (uiTvId) uiTvId.innerText = idLabel;
+            if (popupDeviceId && playerErrorPopupOpen) popupDeviceId.textContent = idLabel;
+        } catch (e) {}
+    });
+
     // Events
     document.addEventListener("keydown", handleKeydown);
 
@@ -472,41 +597,7 @@ window.onload = function () {
             }
 
             hidePlayerErrorPopup();
-            if (!_lastAttemptedChannel) return;
-
-            var channelToRetry = _lastAttemptedChannel;
-            var chId = channelToRetry.channelno || channelToRetry.urno || channelToRetry.chid || "";
-
-            // Refresh channel data to get updated info, then retry same channel
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
-                BBNL_API.getChannelData().then(function (channels) {
-                    if (channels && channels.length > 0) {
-                        // Update ALL channels for navigation and sidebar
-                        allChannels = channels.slice().sort(function (a, b) {
-                            var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
-                            var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
-                            return aNo - bNo;
-                        });
-                        _allChannelsUnfiltered = allChannels; // Same list for sidebar
-                        // Find the same channel in refreshed list by ID
-                        if (chId) {
-                            var updated = channels.find(function (ch) {
-                                return (ch.channelno || ch.urno || ch.chid || "") === chId;
-                            });
-                            if (updated) {
-                                setupPlayer(updated);
-                                return;
-                            }
-                        }
-                    }
-                    // Fallback: retry with the stored channel object
-                    setupPlayer(channelToRetry);
-                }).catch(function () {
-                    setupPlayer(channelToRetry);
-                });
-            } else {
-                setupPlayer(channelToRetry);
-            }
+            retryLastAttemptedChannel();
         });
     }
 
@@ -625,12 +716,46 @@ async function loadChannelList(lookupName = null) {
 
 function getChannelLogoUrl(channel) {
     if (!channel) return "";
-    return channel.logo_url || channel.chlogo || channel.logo || "";
+    // Try ALL possible field names in order
+    return channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.channellogo || channel.logo || channel.logo_path || channel.image || "";
 }
 
 function normalizeLogoCacheUrl(url) {
     var raw = String(url || '').trim();
     if (!raw) return '';
+
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
+        raw = BBNL_API.resolveAssetUrl(raw);
+    }
+
+    var apiBase = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL)
+        ? String(BBNL_API.BASE_URL).trim()
+        : '';
+    var appOrigin = (window.location && window.location.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : '';
+    var preferredOrigin = '';
+    try {
+        if (apiBase) preferredOrigin = new URL(apiBase, window.location.href).origin;
+    } catch (e) {}
+    if (!preferredOrigin) preferredOrigin = appOrigin;
+
+    if (preferredOrigin) {
+        raw = raw.replace(/^https?:\/\/(localhost|127\.0\.0\.1|124\.40\.244\.211|0\.0\.0\.0)(:\d+)?/i, preferredOrigin);
+    }
+
+    if (raw.indexOf('//') === 0) {
+        raw = (window.location.protocol || 'https:') + raw;
+    } else if (!/^https?:\/\//i.test(raw)) {
+        try {
+            if (raw.charAt(0) === '/' && preferredOrigin) {
+                raw = preferredOrigin + raw;
+            } else if (apiBase) {
+                raw = new URL(raw, apiBase + '/').href;
+            }
+        } catch (e2) {}
+    }
+
     // Remove URL fragment and known cache-busting query params for stable cache keying.
     var noHash = raw.split('#')[0];
     var parts = noHash.split('?');
@@ -671,13 +796,17 @@ function updatePlayerChannelLogo(channel) {
     }
 
     if (_logoCache[normalizedLogo]) {
-        uiLogo.src = normalizedLogo;
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(uiLogo, normalizedLogo);
+        } else {
+            uiLogo.src = normalizedLogo;
+        }
         uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
         uiLogo.onerror = function () {
             if (requestToken !== _playerLogoRequestToken) return;
-            uiLogo.style.display = 'none';
             uiLogo.removeAttribute('src');
+            uiLogo.style.display = 'none';
         };
         return;
     }
@@ -690,21 +819,29 @@ function updatePlayerChannelLogo(channel) {
     preloader.onload = function () {
         if (requestToken !== _playerLogoRequestToken) return;
         _logoCache[normalizedLogo] = true;
-        uiLogo.src = normalizedLogo;
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(uiLogo, normalizedLogo);
+        } else {
+            uiLogo.src = normalizedLogo;
+        }
         uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
         uiLogo.onerror = function () {
             if (requestToken !== _playerLogoRequestToken) return;
-            uiLogo.style.display = 'none';
             uiLogo.removeAttribute('src');
+            uiLogo.style.display = 'none';
         };
     };
     preloader.onerror = function () {
         if (requestToken !== _playerLogoRequestToken) return;
-        uiLogo.style.display = 'none';
         uiLogo.removeAttribute('src');
+        uiLogo.style.display = 'none';
     };
-    preloader.src = normalizedLogo;
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+        BBNL_API.setImageSource(preloader, normalizedLogo);
+    } else {
+        preloader.src = normalizedLogo;
+    }
 }
 
 /**
@@ -909,10 +1046,10 @@ function setupPlayer(channel) {
     // TV ID (from DeviceInfo)
     const uiTvId = document.getElementById("ui-tvid");
     if (uiTvId) {
-        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.devslno) {
-            uiTvId.innerText = DeviceInfo.devslno;
-        } else {
-            uiTvId.innerText = "TV-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        try {
+            uiTvId.innerText = DeviceInfo.getDeviceIdLabel();
+        } catch (e) {
+            uiTvId.innerText = "Not available";
         }
     }
 
@@ -1010,13 +1147,13 @@ function setupPlayer(channel) {
         // Show loading indicator immediately
         showBufferingIndicator();
 
-        // Stream timeout: if playback doesn't start within 15 seconds, show error
+        // Stream timeout: if playback doesn't start quickly, show error
         if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
         window._streamTimeoutTimer = setTimeout(function () {
             // Abort if a newer setupPlayer call was made (user switched channels)
             if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
-                console.warn("[Player] Stream timeout - playback did not start within 15s");
+            console.warn("[Player] Stream timeout - playback did not start within " + PLAYER_STREAM_START_TIMEOUT_MS + "ms");
                 hideBufferingIndicator();
 
                 var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
@@ -1025,13 +1162,13 @@ function setupPlayer(channel) {
 
                 if (ch && !isSubs && price > 0) {
                     showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
-                } else if (isNetworkDisconnected()) {
+                } else if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                     showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
                 } else {
                     showPlayerErrorPopup('Playback Error', 'Unable to play this channel. The stream may not be available.');
                 }
             }
-        }, 15000);
+        }, PLAYER_STREAM_START_TIMEOUT_MS);
 
         try {
             // Use the FIXED stream URL (with localhost replaced for IPTV, or DVB URL for FTA)
@@ -1129,7 +1266,11 @@ function showStreamAd() {
         return;
     }
 
-    img.src = adUrl;
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+        BBNL_API.setImageSource(img, adUrl);
+    } else {
+        img.src = adUrl;
+    }
     img.onerror = function () {
         console.warn("[StreamAd] Image failed to load:", adUrl);
         hideStreamAd();
@@ -1146,7 +1287,11 @@ function showStreamAd() {
             var nextAd = streamAdAds[streamAdCurrentIndex];
             var nextUrl = nextAd.adpath || nextAd.adimage || nextAd.image || '';
             if (nextUrl && img) {
-                img.src = nextUrl;
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, nextUrl);
+                } else {
+                    img.src = nextUrl;
+                }
                 console.log("[StreamAd] Rotated to ad:", nextUrl);
             }
         }, 8000);
@@ -1259,7 +1404,6 @@ function closePlayer() {
 // Prevents re-downloading when sidebar re-renders
 // ==========================================
 var _logoCache = {};  // URL → true (marks as loaded, browser HTTP cache handles actual data)
-var _sidebarLazyObserver = null;
 
 function prefetchSidebarChannelLogos(channels, maxCount) {
     if (!Array.isArray(channels) || channels.length === 0) return;
@@ -1267,7 +1411,7 @@ function prefetchSidebarChannelLogos(channels, maxCount) {
 
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
-        var logoUrl = normalizeLogoCacheUrl(ch.logo_url || ch.chlogo || ch.logo || '');
+        var logoUrl = normalizeLogoCacheUrl(getChannelLogoUrl(ch));
         if (!logoUrl) continue;
         if (_logoCache[logoUrl]) continue;
 
@@ -1275,56 +1419,18 @@ function prefetchSidebarChannelLogos(channels, maxCount) {
         pre.onload = function () {
             _logoCache[this.src] = true;
         };
-        pre.onerror = function () {};
-        pre.src = logoUrl;
+        pre.onerror = function () {
+            // Ignore preload failures; no local placeholder should be injected.
+        };
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(pre, logoUrl);
+        } else {
+            pre.src = logoUrl;
+        }
     }
 }
 
-function initSidebarLazyLoading() {
-    if (_sidebarLazyObserver) {
-        _sidebarLazyObserver.disconnect();
-    }
-
-    var container = document.getElementById('channelsList');
-    if (!container) return;
-
-    var lazyImages = container.querySelectorAll('img.sidebar-lazy-logo');
-    if (lazyImages.length === 0) return;
-
-    if ('IntersectionObserver' in window) {
-        _sidebarLazyObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting) {
-                    var img = entry.target;
-                    if (img.dataset.src) {
-                        img.src = img.dataset.src;
-                        img.removeAttribute('data-src');
-                        img.addEventListener('load', function () {
-                            _logoCache[img.src] = true;
-                        }, { once: true });
-                    }
-                    _sidebarLazyObserver.unobserve(img);
-                }
-            });
-        }, {
-            root: container,       // Observe within the scrollable sidebar
-            rootMargin: '200px'    // Pre-load 200px ahead
-        });
-
-        lazyImages.forEach(function (img) {
-            _sidebarLazyObserver.observe(img);
-        });
-        console.log("[Sidebar] Lazy loading initialized for", lazyImages.length, "logos");
-    } else {
-        // Fallback: load all
-        lazyImages.forEach(function (img) {
-            if (img.dataset.src) {
-                img.src = img.dataset.src;
-                img.removeAttribute('data-src');
-            }
-        });
-    }
-}
+// All sidebar images now load immediately (no lazy loading)
 
 // ==========================================
 // PLAYER SIDEBAR - 2-LEVEL DYNAMIC DESIGN
@@ -1631,13 +1737,13 @@ function buildCategoriesForLanguage() {
  * Used so the sidebar opens with focus on the current channel, not the first one.
  */
 function findCurrentChannelInSidebar() {
-    if (sidebarState.channels.length === 0) return 0;
+    if (sidebarState.channels.length === 0) return -1;
     var chId = getCurrentPlayingChannelId();
-    if (!chId) return 0;
+    if (!chId) return -1;
     var idx = sidebarState.channels.findIndex(function (ch) {
         return String(ch.channelno || ch.urno || ch.chid || "") === String(chId);
     });
-    return idx >= 0 ? idx : 0;
+    return idx;
 }
 
 function getCurrentPlayingChannelId() {
@@ -1725,12 +1831,13 @@ function alignSidebarToCurrentPlayback() {
 
     var currentCategoryIndex = getCurrentPlayingCategoryIndex();
     if (currentCategoryIndex >= 0) {
-        selectCategory(currentCategoryIndex);
-        sidebarState.channelIndex = findCurrentChannelInSidebar();
+        selectCategory(currentCategoryIndex, true);
+        var syncedIndex = findCurrentChannelInSidebar();
+        sidebarState.channelIndex = syncedIndex >= 0 ? syncedIndex : 0;
     } else {
         sidebarState.categoryIndex = 0;
         if (sidebarState.categories.length > 0) {
-            selectCategory(0);
+            selectCategory(0, false);
         }
         sidebarState.channelIndex = 0;
     }
@@ -1812,8 +1919,10 @@ function renderCategoriesList() {
 /**
  * Select a category and update channels
  */
-function selectCategory(index) {
+function selectCategory(index, preferCurrentChannel) {
     if (index < 0 || index >= sidebarState.categories.length) return;
+
+    var shouldPreferCurrent = (preferCurrentChannel !== false);
 
     sidebarState.categoryIndex = index;
 
@@ -1829,7 +1938,12 @@ function selectCategory(index) {
 
     // Filter channels by language and category
     filterChannelsByCategory();
-    sidebarState.channelIndex = sidebarState.channels.length > 0 ? findCurrentChannelInSidebar() : 0;
+    if (sidebarState.channels.length > 0) {
+        var currentInCategory = shouldPreferCurrent ? findCurrentChannelInSidebar() : -1;
+        sidebarState.channelIndex = currentInCategory >= 0 ? currentInCategory : 0;
+    } else {
+        sidebarState.channelIndex = 0;
+    }
 
     // UPDATE: Prefetch logos for channels in THIS category BEFORE rendering
     // This reduces visible loading delay when switching categories
@@ -1925,21 +2039,19 @@ function renderChannelsList() {
         // Channel Logo (left) - with cache + lazy loading
         var logoDiv = document.createElement('div');
         logoDiv.className = 'channel-item-logo';
-        var logoUrl = normalizeLogoCacheUrl(ch.logo_url || ch.chlogo || ch.logo || '');
+        var logoUrl = normalizeLogoCacheUrl(getChannelLogoUrl(ch));
         if (logoUrl && logoUrl.trim() !== '') {
             var logoImg = document.createElement('img');
             logoImg.alt = ch.chtitle || 'Channel';
-            logoImg.onerror = function() {
-                this.style.display = 'none';
-            };
-            // If already cached in memory, load immediately (browser HTTP cache serves it)
-            if (_logoCache[logoUrl]) {
-                logoImg.src = logoUrl;
+            // Load immediately (no lazy loading)
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(logoImg, logoUrl);
             } else {
-                // Lazy load: defer until visible in sidebar scroll
-                logoImg.dataset.src = logoUrl;
-                logoImg.className = 'sidebar-lazy-logo';
+                logoImg.src = logoUrl;
             }
+            logoImg.addEventListener('load', function () {
+                _logoCache[logoUrl] = true;
+            }, { once: true });
             logoDiv.appendChild(logoImg);
         }
 
@@ -1981,8 +2093,17 @@ function renderChannelsList() {
 
     console.log("[Sidebar] Rendered", sidebarState.channels.length, "channels");
 
-    // Initialize lazy loading for logos not yet in cache
-    initSidebarLazyLoading();
+    // Load all sidebar logos immediately
+    var sidebarImages = document.querySelectorAll('.channel-item-logo img');
+    sidebarImages.forEach(function (img) {
+        if (img.dataset && img.dataset.src) {
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            img.addEventListener('load', function () {
+                _logoCache[img.src] = true;
+            }, { once: true });
+        }
+    });
 }
 
 /**
@@ -2040,7 +2161,11 @@ function openSidebar() {
     var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
     if (sidebarState.channels.length > 0) {
         sidebarState.currentLevel = 'channels';
-        focusChannelItem(Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1)));
+        var reopenChannelIndex = findCurrentChannelInSidebar();
+        sidebarState.channelIndex = reopenChannelIndex >= 0
+            ? reopenChannelIndex
+            : Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+        focusChannelItem(sidebarState.channelIndex);
     } else if (!categoriesHidden && sidebarState.categories.length > 0) {
         sidebarState.currentLevel = 'categories';
         focusCategoryItem(Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1)));
@@ -2241,13 +2366,13 @@ function focusCategoryItem(index) {
             item.focus();
 
             // Ensure item is fully visible
-            setTimeout(function () {
+            requestAnimationFrame(function () {
                 item.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center',
+                    behavior: 'auto',
+                    block: 'nearest',
                     inline: 'nearest'
                 });
-            }, 50);
+            });
         } else {
             item.classList.remove('active');
         }
@@ -2273,13 +2398,13 @@ function focusChannelItem(index) {
             item.focus();
 
             // Ensure item is fully visible with smooth scroll
-            setTimeout(function () {
+            requestAnimationFrame(function () {
                 item.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center',
+                    behavior: 'auto',
+                    block: 'nearest',
                     inline: 'nearest'
                 });
-            }, 50);
+            });
         } else {
             item.classList.remove('active');
         }
@@ -2341,7 +2466,8 @@ function handleSidebarKeydown(e) {
 
         if (sidebarState.channels.length > 0) {
             sidebarState.currentLevel = 'channels';
-            sidebarState.channelIndex = findCurrentChannelInSidebar();
+            var langSwitchIndex = findCurrentChannelInSidebar();
+            sidebarState.channelIndex = langSwitchIndex >= 0 ? langSwitchIndex : 0;
             focusChannelItem(sidebarState.channelIndex);
         } else if (sidebarState.categories.length > 0) {
             sidebarState.currentLevel = 'categories';
@@ -2426,7 +2552,7 @@ function handleSidebarKeydown(e) {
                     var prevCatIdx = (currentCatIndex - 1 + categoryCount) % categoryCount;
                     sidebarState.categoryIndex = prevCatIdx;
                     focusCategoryItem(prevCatIdx);
-                    selectCategory(prevCatIdx);
+                    selectCategory(prevCatIdx, false);
                 }
                 e.preventDefault();
                 handled = true;
@@ -2437,7 +2563,7 @@ function handleSidebarKeydown(e) {
                     var nextCatIdx = (currentCatIndex + 1) % categoryCount;
                     sidebarState.categoryIndex = nextCatIdx;
                     focusCategoryItem(nextCatIdx);
-                    selectCategory(nextCatIdx);
+                    selectCategory(nextCatIdx, false);
                 }
                 e.preventDefault();
                 handled = true;
@@ -2449,7 +2575,7 @@ function handleSidebarKeydown(e) {
                     var newCatIdx = currentCatIndex - 1;
                     sidebarState.categoryIndex = newCatIdx;
                     focusCategoryItem(newCatIdx);
-                    selectCategory(newCatIdx);
+                    selectCategory(newCatIdx, false);
                 } else {
                     // At first category, move to language arrow
                     var leftArrow = document.getElementById('langNavLeft');
@@ -2465,7 +2591,7 @@ function handleSidebarKeydown(e) {
                     var newCatIdx = currentCatIndex + 1;
                     sidebarState.categoryIndex = newCatIdx;
                     focusCategoryItem(newCatIdx);
-                    selectCategory(newCatIdx);
+                    selectCategory(newCatIdx, false);
                 } else {
                     // At last category, move to current channel
                     if (sidebarState.channels.length > 0) {
@@ -2484,11 +2610,11 @@ function handleSidebarKeydown(e) {
 
             case 13: // ENTER
                 // Select category (already highlighted, just confirm)
-                selectCategory(currentCatIndex);
+                selectCategory(currentCatIndex, false);
                 // Move to channels when available; otherwise keep category focus.
                 if (sidebarState.channels.length > 0) {
                     sidebarState.currentLevel = 'channels';
-                    var currentChIdx = findCurrentChannelInSidebar();
+                    var currentChIdx = sidebarState.channelIndex;
                     sidebarState.channelIndex = currentChIdx;
                     focusChannelItem(currentChIdx);
                 } else {
@@ -3064,7 +3190,6 @@ function showBufferingIndicator() {
             if (!hasHiddenLoadingIndicator) {
                 console.log("⏱️ Safety timeout: Force hiding loading indicator after 8 seconds");
                 hideBufferingIndicator();
-                hasHiddenLoadingIndicator = true;
             }
         }, 8000); // 8 seconds max for ultra-fast mode
     }
@@ -3115,20 +3240,13 @@ document.addEventListener('DOMContentLoaded', function () {
 // ==========================================
 var channelNumberBuffer = "";
 var channelInputTimeout = null;
-var CHANNEL_INPUT_DELAY = 2000; // 2 seconds to complete typing
+var CHANNEL_INPUT_DELAY = 0; // Keep input visible until explicit user action (OK/Back)
 
 function resetChannelInputTimer() {
     if (channelInputTimeout) {
         clearTimeout(channelInputTimeout);
+        channelInputTimeout = null;
     }
-    channelInputTimeout = setTimeout(function () {
-        var value = String(channelNumberBuffer || '').replace(/\D/g, '');
-        if (value.length > 0) {
-            navigateToChannelNumber(value);
-        }
-        channelNumberBuffer = "";
-        hideChannelNumberInput();
-    }, CHANNEL_INPUT_DELAY);
 }
 
 /**
@@ -3173,7 +3291,7 @@ function showChannelNumberInput(number) {
 
         var input = document.createElement('input');
         input.id = 'channel-number-field';
-        input.type = 'tel';
+        input.type = 'number';
         input.inputMode = 'numeric';
         input.pattern = '[0-9]*';
         input.maxLength = 4;

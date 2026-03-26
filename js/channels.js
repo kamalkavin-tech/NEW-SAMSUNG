@@ -66,12 +66,52 @@ function normalizeChannelLogoKey(url) {
     }
 }
 
+function resolveChannelAssetUrl(rawUrl) {
+    if (rawUrl === null || rawUrl === undefined) return '';
+    var value = String(rawUrl).trim();
+    if (!value) return '';
+
+    var apiBase = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL)
+        ? String(BBNL_API.BASE_URL).trim()
+        : '';
+    var appOrigin = (window.location && window.location.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : '';
+
+    var preferredOrigin = '';
+    try {
+        if (apiBase) {
+            preferredOrigin = new URL(apiBase, window.location.href).origin;
+        }
+    } catch (e) {}
+    if (!preferredOrigin) preferredOrigin = appOrigin;
+
+    // Replace localhost image hosts with reachable app/api origin.
+    if (preferredOrigin) {
+        value = value.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, preferredOrigin);
+    }
+
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.indexOf('//') === 0) return (window.location.protocol || 'https:') + value;
+
+    try {
+        if (value.charAt(0) === '/' && preferredOrigin) {
+            return preferredOrigin + value;
+        }
+        if (apiBase) {
+            return new URL(value, apiBase + '/').href;
+        }
+    } catch (e2) {}
+
+    return value;
+}
+
 window.addEventListener('beforeunload', function () {
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
-        var searchEl = document.getElementById('searchInput');
         AppPerformanceCache.savePageState('channels', {
             focusIndex: currentFocus,
-            searchText: searchEl ? searchEl.value : '',
+            // Do not persist transient LCN search input between navigations.
+            searchText: '',
             currentCategory: currentCategory,
             currentLanguage: currentLanguage,
             scrollTop: window.scrollY || 0
@@ -114,8 +154,8 @@ window.onload = function () {
         var cachedState = AppPerformanceCache.getPageState('channels', 60 * 60 * 1000);
         if (cachedState) {
             var searchInput = document.getElementById('searchInput');
-            if (searchInput && cachedState.searchText) {
-                searchInput.value = String(cachedState.searchText);
+            if (searchInput) {
+                searchInput.value = '';
             }
             if (typeof cachedState.focusIndex === 'number') {
                 currentFocus = cachedState.focusIndex;
@@ -202,7 +242,7 @@ async function initPage() {
 
     } catch (e) {
         console.error("Init Exception:", e);
-        if (isNetworkDisconnected()) {
+        if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
             showErrorPopup('internet');
         }
     }
@@ -759,10 +799,16 @@ function initLanguageDropdown() {
 function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        searchInput.setAttribute('type', 'tel');
+        searchInput.setAttribute('type', 'number');
         searchInput.setAttribute('inputmode', 'numeric');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
+        searchInput.value = '';
+
+        // Prevent wheel/trackpad value scroll behavior while focused.
+        searchInput.addEventListener('wheel', function (e) {
+            e.preventDefault();
+        }, { passive: false });
 
         // Keep editable so Samsung native numeric keypad can appear.
         searchInput.readOnly = false;
@@ -818,6 +864,14 @@ function isNetworkDisconnected() {
         console.error("[Channels] Network check error:", e);
     }
     return !navigator.onLine;
+}
+
+function hasRecentApiNetworkFailure(maxAgeMs) {
+    var root = (typeof window !== 'undefined') ? window : globalThis;
+    var failure = root && root.__bbnlLastApiFailure;
+    if (!failure || !failure.networkLike) return false;
+    var age = Date.now() - Number(failure.ts || 0);
+    return age >= 0 && age <= (maxAgeMs || 30000);
 }
 
 function setChannelsLoadingState(isLoading) {
@@ -884,6 +938,9 @@ function primeChannelLogoCache(channels, maxCount) {
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
         var logoUrl = getChannelCardLogo(ch);
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
+            logoUrl = BBNL_API.getValidatedImageUrl(logoUrl);
+        }
         var logoKey = normalizeChannelLogoKey(logoUrl);
         if (!logoUrl) continue;
         if (!logoKey) continue;
@@ -900,8 +957,9 @@ function primeChannelLogoCache(channels, maxCount) {
                 delete _channelLogoPrefetchInFlight[this.src];
             };
             img.onerror = function () {
+                var failedSrc = this.src;
                 delete _channelLogoPrefetchInFlight[urlKey];
-                delete _channelLogoPrefetchInFlight[this.src];
+                delete _channelLogoPrefetchInFlight[failedSrc];
             };
             img.src = srcUrl;
         })(logoKey, logoUrl);
@@ -912,7 +970,10 @@ function getChannelCardLogo(ch) {
     if (!ch || typeof ch !== 'object') return '';
     var candidates = [
         ch.chlogo,
+        ch.chnllogo,
         ch.logo_url,
+        ch.channel_logo,
+        ch.channellogo,
         ch.logo,
         ch.logo_path,
         ch.default_logo,
@@ -924,7 +985,7 @@ function getChannelCardLogo(ch) {
         var value = candidates[i];
         if (value === null || value === undefined) continue;
         var str = String(value).trim();
-        if (str) return str;
+        if (str) return resolveChannelAssetUrl(str);
     }
     return '';
 }
@@ -938,10 +999,18 @@ function showErrorPopup(type) {
     if (typeof ErrorImagesAPI !== 'undefined') {
         if (type === 'channels') {
             var img = document.getElementById('errorImg_noChannels');
-            if (img) img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+            if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE'));
+            } else if (img) {
+                img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+            }
         } else if (type === 'internet') {
             var img = document.getElementById('errorImg_noInternet');
-            if (img) img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+            if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION'));
+            } else if (img) {
+                img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+            }
         }
     }
 
@@ -1043,7 +1112,7 @@ async function loadChannels(options = {}) {
             if (allChannels.length === 0) {
                 container.innerHTML = '<div class="loading-spinner">No channels found</div>';
                 setChannelsLoadingState(false);
-                if (isNetworkDisconnected()) {
+                if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                     showErrorPopup('channels');
                 }
                 return;
@@ -1055,7 +1124,7 @@ async function loadChannels(options = {}) {
             container.innerHTML = '';
             console.error("Channel Load Failed", response);
             setChannelsLoadingState(false);
-            if (isNetworkDisconnected()) {
+            if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                 showErrorPopup('channels');
             }
         }
@@ -1063,7 +1132,7 @@ async function loadChannels(options = {}) {
         console.error("[Channels Page] Exception:", e);
         container.innerHTML = '';
         setChannelsLoadingState(false);
-        if (isNetworkDisconnected()) {
+        if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
             showErrorPopup('internet');
         }
     }
@@ -1098,62 +1167,13 @@ function renderAllChannels(channels) {
         grid.classList.add('is-visible');
     });
     refreshFocusables();
-    initLazyLoading();
+    // All images now load immediately on page render (no lazy loading)
 }
 
 // ==========================================
-// LAZY LOADING - Load channel logos only when visible
-// Dramatically reduces initial load time for 100+ channels
+// ALL IMAGES LOADED IMMEDIATELY
+// Images are loaded when channel cards are rendered (no lazy loading)
 // ==========================================
-var _lazyObserver = null;
-
-function initLazyLoading() {
-    // Disconnect previous observer if any
-    if (_lazyObserver) {
-        _lazyObserver.disconnect();
-    }
-
-    var lazyImages = document.querySelectorAll('img.lazy-logo');
-    if (lazyImages.length === 0) return;
-
-    if ('IntersectionObserver' in window) {
-        _lazyObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting) {
-                    var img = entry.target;
-                    if (img.dataset.src) {
-                        var key = img.dataset.logoKey || normalizeChannelLogoKey(img.dataset.src);
-                        if (key && channelLogoSourceMap[key]) {
-                            img.src = channelLogoSourceMap[key];
-                        } else {
-                            img.src = img.dataset.src;
-                        }
-                        channelLogoCache[img.dataset.src] = true;
-                        if (key) channelLogoCache[key] = true;
-                        img.removeAttribute('data-src');
-                    }
-                    _lazyObserver.unobserve(img);
-                }
-            });
-        }, {
-            rootMargin: '300px'  // Pre-load 300px before visible (2 rows ahead)
-        });
-
-        lazyImages.forEach(function (img) {
-            _lazyObserver.observe(img);
-        });
-        console.log("[Channels] Lazy loading initialized for", lazyImages.length, "logos");
-    } else {
-        // Fallback for older Tizen: load all immediately
-        lazyImages.forEach(function (img) {
-            if (img.dataset.src) {
-                img.src = img.dataset.src;
-                img.removeAttribute('data-src');
-            }
-        });
-        console.log("[Channels] IntersectionObserver not available - loaded all logos immediately");
-    }
-}
 
 function createChannelCard(ch) {
     const chName = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
@@ -1199,32 +1219,28 @@ function createChannelCard(ch) {
 
     if (chLogo) {
         const img = document.createElement("img");
-        // If already loaded in this session, set src directly to avoid visible reload delay.
-        var resolvedLogo = chLogo;
-        var logoKey = normalizeChannelLogoKey(chLogo);
-        var cachedSrc = logoKey ? channelLogoSourceMap[logoKey] : '';
-        try {
-            resolvedLogo = new URL(chLogo, window.location.href).href;
-        } catch (e) {}
+        // Always prefer fresh validated API URL; do not use stale cached src values.
+        var normalizedLogo = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
+            ? BBNL_API.getValidatedImageUrl(chLogo)
+            : BBNL_API.resolveAssetUrl(chLogo);
 
-        if (logoKey && (channelLogoCache[logoKey] || channelLogoCache[chLogo] || channelLogoCache[resolvedLogo])) {
-            img.src = cachedSrc || chLogo;
+        var logoKey = normalizeChannelLogoKey(chLogo);
+
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(img, normalizedLogo);
         } else {
-            img.dataset.src = chLogo;  // Lazy load first time
-            if (logoKey) img.dataset.logoKey = logoKey;
+            img.src = normalizedLogo;
         }
         img.alt = chName;
-        img.className = "lazy-logo";
+        img.className = "channel-logo-img";
         img.onload = function () {
+            console.log("[Channels] Logo successfully displayed: ch=" + chName + " final-url=" + this.src);
             channelLogoCache[chLogo] = true;
             channelLogoCache[this.src] = true;
             if (logoKey) {
                 channelLogoCache[logoKey] = true;
                 channelLogoSourceMap[logoKey] = this.src;
             }
-        };
-        img.onerror = function() {
-            this.style.display = 'none';
         };
         logoDiv.appendChild(img);
     }
@@ -1878,6 +1894,10 @@ function findAndPlayLCN(lcn) {
         // Play the channel immediately
         BBNL_API.playChannel(channel);
     } else {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
         console.warn("[Channels] LCN", lcn, "not found in master list");
         showSearchNotFound("Channel Not Found");
     }

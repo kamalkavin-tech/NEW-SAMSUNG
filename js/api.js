@@ -209,6 +209,199 @@ const API_CONFIG = {
     HEADERS: DEFAULT_HEADERS
 };
 
+// Bump when image URL/cache format changes to clear stale URL entries on deployed TVs.
+var IMAGE_CACHE_SCHEMA_VERSION = '2';
+
+function getImagePlaceholderUrl() {
+    return '';
+}
+
+function _isMalformedImageUrl(url) {
+    var val = String(url || '').trim();
+    if (!val) return true;
+    if (/^(javascript|vbscript):/i.test(val)) return true;
+    return false;
+}
+
+function getValidatedImageUrl(rawUrl) {
+    if (_isMalformedImageUrl(rawUrl)) return '';
+
+    var original = String(rawUrl || '').trim();
+    var resolved = resolveAssetUrl(original);
+    if (_isMalformedImageUrl(resolved)) return '';
+
+    // Keep validation permissive for Samsung TV runtime quirks; only block empty/script URLs.
+    return resolved;
+}
+
+function setImageSource(imgEl, rawUrl, options) {
+    var freshUrl = getValidatedImageUrl(rawUrl);
+    var finalUrl = freshUrl || '';
+
+    console.log('IMAGE URL:', finalUrl);
+
+    if (!imgEl) return finalUrl;
+
+    var prevOnError = imgEl.onerror;
+    var rawFallbackTried = false;
+
+    imgEl.onerror = function () {
+        // If normalized URL fails, retry the raw URL once before delegating.
+        if (!rawFallbackTried) {
+            rawFallbackTried = true;
+            var raw = String(rawUrl || '').trim();
+            if (raw && raw !== finalUrl) {
+                imgEl.setAttribute('src', raw);
+                return;
+            }
+        }
+        if (typeof prevOnError === 'function') {
+            try { prevOnError.call(imgEl); } catch (e) {}
+        }
+    };
+
+    if (finalUrl) {
+        imgEl.style.display = '';
+        imgEl.setAttribute('src', finalUrl);
+    } else {
+        if (typeof prevOnError === 'function') {
+            try { prevOnError.call(imgEl); } catch (e) {}
+        }
+    }
+    return finalUrl;
+}
+
+function invalidateImageUrlCaches() {
+    try {
+        var localKeys = ['bbnl_error_images', 'home_fofi_logo_url'];
+        for (var i = 0; i < localKeys.length; i++) {
+            try { localStorage.removeItem(localKeys[i]); } catch (e) {}
+        }
+
+        var removeKeys = [];
+        for (var j = 0; j < sessionStorage.length; j++) {
+            var k = sessionStorage.key(j);
+            if (!k) continue;
+            if (k.indexOf('channels_cache_') === 0 || k === 'home_fofi_logo_url') {
+                removeKeys.push(k);
+            }
+        }
+        removeKeys.forEach(function (k2) {
+            try { sessionStorage.removeItem(k2); } catch (e) {}
+        });
+    } catch (e3) {}
+}
+
+function migrateImageCachesIfNeeded() {
+    try {
+        var current = localStorage.getItem('bbnl_image_cache_schema') || '0';
+        if (current === IMAGE_CACHE_SCHEMA_VERSION) return;
+
+        // Remove image-related caches that may contain stale/legacy hosts from old builds.
+        var localKeys = [
+            'bbnl_error_images',
+            'home_fofi_logo_url',
+            'home_ads_cache_persistent'
+        ];
+        localKeys.forEach(function (k) {
+            try { localStorage.removeItem(k); } catch (e) {}
+        });
+
+        var sessionKeys = [
+            'home_ads_cache',
+            'home_languages_cache',
+            'home_channels_cache',
+            'home_fofi_logo_url'
+        ];
+        sessionKeys.forEach(function (k) {
+            try { sessionStorage.removeItem(k); } catch (e) {}
+        });
+
+        // Clear dynamic channels cache buckets (channels_cache_*) that can carry stale logo fields.
+        try {
+            var toDelete = [];
+            for (var i = 0; i < sessionStorage.length; i++) {
+                var key = sessionStorage.key(i);
+                if (key && key.indexOf('channels_cache_') === 0) {
+                    toDelete.push(key);
+                }
+            }
+            toDelete.forEach(function (k) {
+                try { sessionStorage.removeItem(k); } catch (e) {}
+            });
+        } catch (e2) {}
+
+        localStorage.setItem('bbnl_image_cache_schema', IMAGE_CACHE_SCHEMA_VERSION);
+    } catch (e3) {
+        // Ignore storage errors on constrained TVs.
+    }
+}
+migrateImageCachesIfNeeded();
+
+function resolveAssetUrl(rawUrl) {
+    if (rawUrl === null || rawUrl === undefined) return '';
+    var value = String(rawUrl).trim();
+    if (!value) return '';
+
+    var apiBase = String(API_CONFIG.BASE_URL || '').trim();
+    var appOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : '';
+
+    var preferredOrigin = '';
+    try {
+        if (apiBase) preferredOrigin = new URL(apiBase, (typeof window !== 'undefined' ? window.location.href : undefined)).origin;
+    } catch (e) {
+        console.warn("[resolveAssetUrl] Failed to parse API base URL:", apiBase, e.message);
+    }
+    if (!preferredOrigin) preferredOrigin = appOrigin;
+
+    var originalValue = value;
+
+    function isLegacyOrLocalHost(hostname) {
+        if (!hostname) return false;
+        var host = String(hostname).toLowerCase();
+        return host === 'localhost'
+            || host === '127.0.0.1'
+            || host === '124.40.244.211'
+            || host === '0.0.0.0';
+    }
+
+    if (preferredOrigin) {
+        value = value.replace(/^https?:\/\/(localhost|127\.0\.0\.1|124\.40\.244\.211|0\.0\.0\.0)(:\d+)?/i, preferredOrigin);
+    }
+
+    if (/^https?:\/\//i.test(value)) {
+        try {
+            var parsedAbs = new URL(value);
+            if (preferredOrigin && isLegacyOrLocalHost(parsedAbs.hostname)) {
+                var targetOrigin = new URL(preferredOrigin).origin;
+                return targetOrigin + parsedAbs.pathname + (parsedAbs.search || '') + (parsedAbs.hash || '');
+            }
+        } catch (eAbs) {}
+        return value;
+    }
+    if (value.indexOf('//') === 0) {
+        var result = ((typeof window !== 'undefined' && window.location && window.location.protocol) ? window.location.protocol : 'https:') + value;
+        return result;
+    }
+
+    try {
+        if (value.charAt(0) === '/' && preferredOrigin) {
+            var result = preferredOrigin + value;
+            return result;
+        }
+        if (apiBase) {
+            var result = new URL(value, apiBase + '/').href;
+            return result;
+        }
+    } catch (e2) {
+        console.warn("[resolveAssetUrl] Failed to resolve relative URL:", value, e2.message);
+    }
+
+    return value;
+}
+
 // ==========================================
 // CACHE MANAGER - Handles localStorage caching with expiry
 // ==========================================
@@ -642,16 +835,18 @@ function _isImageUrl(url) {
 }
 
 function _preloadImage(url) {
-    if (!_isImageUrl(url)) return;
-    if (_IMAGE_CACHE_MAP[url]) return;
+    var validatedUrl = getValidatedImageUrl(url);
+    if (!validatedUrl) return;
+    if (!_isImageUrl(validatedUrl)) return;
+    if (_IMAGE_CACHE_MAP[validatedUrl]) return;
 
-    _IMAGE_CACHE_MAP[url] = 1;
+    _IMAGE_CACHE_MAP[validatedUrl] = 1;
     _persistImageCache();
 
     try {
         var img = new Image();
         img.decoding = 'async';
-        img.src = url;
+        img.src = validatedUrl;
     } catch (e) {}
 }
 
@@ -765,6 +960,12 @@ async function apiCall(endpoint, payload, customHeaders) {
         const data = await response.json();
         console.log(`[API] Response: ${url}`, data);
 
+        // Clear stale API failure marker after a successful response.
+        try {
+            var okRoot = (typeof window !== 'undefined') ? window : globalThis;
+            okRoot.__bbnlLastApiFailure = null;
+        } catch (e) {}
+
         if (cacheable) {
             _API_MEMORY_CACHE[cacheKey] = data;
             _persistApiMemoryCache();
@@ -775,6 +976,21 @@ async function apiCall(endpoint, payload, customHeaders) {
         if (timeoutId) clearTimeout(timeoutId);
         var isTimeout = error && error.name === 'AbortError';
         console.error(`[API] ${isTimeout ? 'TIMEOUT' : 'Error'}: ${url}`, error);
+
+        // Persist lightweight failure context for page-level popup decisions.
+        try {
+            var failRoot = (typeof window !== 'undefined') ? window : globalThis;
+            var messageText = String((error && error.message) || '');
+            var networkLike = isTimeout || /network|failed to fetch|load failed|offline|timeout/i.test(messageText);
+            failRoot.__bbnlLastApiFailure = {
+                ts: Date.now(),
+                endpoint: url,
+                message: messageText,
+                timeout: !!isTimeout,
+                networkLike: !!networkLike
+            };
+        } catch (e) {}
+
         return {
             error: true,
             message: isTimeout ? 'Request timed out (10s)' : error.message,
@@ -797,6 +1013,31 @@ function mapBBNLError(msg) {
 // DEVICE INFO
 // ==========================================
 const DeviceInfo = {
+    _applyDeviceId: function (id) {
+        var value = String(id || '').trim();
+        if (!value) return '';
+        var changed = DEVICE_INFO.devslno !== value;
+        DEVICE_INFO.devslno = value;
+        DEFAULT_HEADERS["devslno"] = value;
+        DEFAULT_HEADERS["deviceID"] = value;
+        try { sessionStorage.setItem('_resolvedDeviceId', value); } catch (e) {}
+        try { localStorage.setItem('_resolvedDeviceId', value); } catch (e) {}
+
+        if (changed && typeof window !== 'undefined' && window.dispatchEvent) {
+            try {
+                window.dispatchEvent(new CustomEvent('bbnl:device-id-updated', { detail: { deviceId: value } }));
+            } catch (e) {
+                // Older engines may not support CustomEvent constructor.
+                try {
+                    var ev = document.createEvent('CustomEvent');
+                    ev.initCustomEvent('bbnl:device-id-updated', false, false, { deviceId: value });
+                    window.dispatchEvent(ev);
+                } catch (e2) {}
+            }
+        }
+        return value;
+    },
+
     initializeDeviceInfo: function () {
         // Load cached public IP — check sessionStorage first, then localStorage
         // sessionStorage survives page navigation; localStorage survives HOME→Relaunch
@@ -865,8 +1106,8 @@ const DeviceInfo = {
                     try {
                         var duid = webapis.productinfo.getDuid();
                         if (duid) {
-                            DEVICE_INFO.devslno = duid;
-                            console.log("[DeviceInfo] DUID:", duid);
+                            var initDeviceId = this._applyDeviceId(duid);
+                            console.log("[DeviceInfo] DUID:", initDeviceId);
                         }
                     } catch (e) {
                         console.warn("[DeviceInfo] DUID detection failed:", e);
@@ -910,8 +1151,7 @@ const DeviceInfo = {
                 DEFAULT_HEADERS["devmac"] = DEVICE_INFO.mac_address;
             }
             if (DEVICE_INFO.devslno) {
-                DEFAULT_HEADERS["devslno"] = DEVICE_INFO.devslno;
-                DEFAULT_HEADERS["deviceID"] = DEVICE_INFO.devslno;
+                this._applyDeviceId(DEVICE_INFO.devslno);
             }
 
             console.log("[DeviceInfo] Initialized:", JSON.stringify(DEVICE_INFO));
@@ -944,6 +1184,9 @@ const DeviceInfo = {
             } catch (e2) {}
         }
 
+        // Ensure a resolved/cached device id is available as early as possible.
+        this.getDeviceId();
+
         // Always detect public IP (webapis returns private 192.168.x.x)
         this._detectPublicIP();
     },
@@ -956,10 +1199,7 @@ const DeviceInfo = {
             if (typeof webapis !== 'undefined' && webapis.productinfo && webapis.productinfo.getDuid) {
                 var duid = webapis.productinfo.getDuid();
                 if (duid && typeof duid === 'string' && duid.trim()) {
-                    var resolvedDuid = duid.trim();
-                    DEVICE_INFO.devslno = resolvedDuid;
-                    DEFAULT_HEADERS["devslno"] = resolvedDuid;
-                    DEFAULT_HEADERS["deviceID"] = resolvedDuid;
+                    var resolvedDuid = this._applyDeviceId(duid);
                     console.log("[DeviceInfo] Device ID from getDuid():", resolvedDuid);
                     return resolvedDuid;
                 }
@@ -973,10 +1213,7 @@ const DeviceInfo = {
             if (typeof tizen !== 'undefined' && tizen.systeminfo && tizen.systeminfo.getCapability) {
                 var tizenId = tizen.systeminfo.getCapability("http://tizen.org/system/tizenid");
                 if (tizenId && typeof tizenId === 'string' && tizenId.trim()) {
-                    var resolvedTizenId = tizenId.trim();
-                    DEVICE_INFO.devslno = resolvedTizenId;
-                    DEFAULT_HEADERS["devslno"] = resolvedTizenId;
-                    DEFAULT_HEADERS["deviceID"] = resolvedTizenId;
+                    var resolvedTizenId = this._applyDeviceId(tizenId);
                     console.log("[DeviceInfo] Device ID from tizenid:", resolvedTizenId);
                     return resolvedTizenId;
                 }
@@ -989,6 +1226,14 @@ const DeviceInfo = {
         if (DEVICE_INFO.devslno) {
             return DEVICE_INFO.devslno;
         }
+
+        // Priority 3.5: Use previously resolved real device id from storage.
+        try {
+            var storedId = sessionStorage.getItem('_resolvedDeviceId') || localStorage.getItem('_resolvedDeviceId');
+            if (storedId && String(storedId).trim()) {
+                return this._applyDeviceId(storedId);
+            }
+        } catch (e5) {}
 
         // Priority 4: Pure browser session (no Tizen APIs at all) — generate per-session ID
         // This only runs in a desktop browser, never on the real TV or emulator.
@@ -1114,6 +1359,9 @@ const DeviceInfo = {
     },
 
     getDeviceInfo: function () {
+        if (!DEVICE_INFO.devslno) {
+            this.getDeviceId();
+        }
         // Guard: if IP is still private, try sessionStorage then localStorage cache
         if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
             try {
@@ -1132,6 +1380,7 @@ const DeviceInfo = {
      * Passes ALL device info collected from Samsung TV APIs
      */
     getDevDets: function () {
+        var resolvedId = this.getDeviceId();
         // Ensure public IP is used (same guard as getDeviceInfo)
         if (this._isPrivateIP(DEVICE_INFO.ip_address)) {
             try {
@@ -1153,7 +1402,7 @@ const DeviceInfo = {
             dns: DEVICE_INFO.dns || "",
             gateway_ip: DEVICE_INFO.gateway_ip || "",
             screen_resolution: DEVICE_INFO.screen_resolution || "",
-            deviceID: DEVICE_INFO.devslno || ""
+            deviceID: resolvedId || ""
         };
     },
 
@@ -1894,6 +2143,8 @@ const ChannelsAPI = {
 
         // Cache the fresh data
         if (channels.length > 0) {
+            // Fresh API data should replace stale cached image URL references.
+            invalidateImageUrlCaches();
             CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
             console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
 
@@ -1901,7 +2152,7 @@ const ChannelsAPI = {
             var channelImages = [];
             for (var ci = 0; ci < channels.length; ci++) {
                 var ch = channels[ci] || {};
-                var logo = ch.chnllogo || ch.logo || ch.channel_logo || ch.image || ch.img || '';
+                var logo = ch.chlogo || ch.chnllogo || ch.logo_url || ch.channel_logo || ch.channellogo || ch.logo || ch.image || ch.img || '';
                 if (logo) channelImages.push(logo);
             }
             _preloadImageBatch(channelImages);
@@ -2131,6 +2382,8 @@ const ChannelsAPI = {
 
         // Cache the languages
         if (languages.length > 0) {
+            // Fresh API data should replace stale cached image URL references.
+            invalidateImageUrlCaches();
             CacheManager.set(CacheManager.KEYS.LANGUAGES, languages, CacheManager.EXPIRY.LANGUAGES);
             console.log("[ChannelsAPI] 💾 Cached " + languages.length + " languages");
 
@@ -2138,7 +2391,7 @@ const ChannelsAPI = {
             var languageImages = [];
             for (var li = 0; li < languages.length; li++) {
                 var lang = languages[li] || {};
-                var lLogo = lang.chnllanglogo || lang.langlogo || lang.logo || lang.image || lang.img || '';
+                var lLogo = lang.langlogo || lang.chnllanglogo || lang.logo_url || lang.logo || lang.image || lang.img || '';
                 if (lLogo) languageImages.push(lLogo);
             }
             _preloadImageBatch(languageImages);
@@ -2797,9 +3050,13 @@ const RaiseTicketAPI = {
 
         console.log("[RaiseTicketAPI] Raising ticket:", payload);
 
+        var currentDeviceId = (typeof DeviceInfo !== 'undefined' && DeviceInfo.getDeviceId)
+            ? DeviceInfo.getDeviceId()
+            : DEVICE_INFO.devslno;
+
         return await apiCall(API_ENDPOINTS.RAISE_TICKET, payload, {
             "devmac": DEVICE_INFO.mac_address,
-            "devslno": DEVICE_INFO.devslno
+            "devslno": currentDeviceId || ""
         });
     }
 };
@@ -2838,7 +3095,7 @@ const ErrorImagesAPI = {
                 var images = {};
                 response.errImgs.forEach(function (item) {
                     var key = Object.keys(item)[0];
-                    images[key] = item[key];
+                    images[key] = resolveAssetUrl(item[key]);
                 });
 
                 this._cache = images;
@@ -2861,7 +3118,11 @@ const ErrorImagesAPI = {
      * @returns {string} Image URL or empty string
      */
     getImageUrl: function (key) {
-        return this._cache[key] || "";
+        var cachedUrl = this._cache[key];
+        var resolved = getValidatedImageUrl(cachedUrl || "");
+        var source = cachedUrl ? "localStorage-cache" : "empty";
+        console.log("[ErrorImagesAPI.getImageUrl] key=" + key + " source=" + source + " url=" + (resolved || "(empty)"));
+        return resolved;
     },
 
     /**
@@ -2871,7 +3132,12 @@ const ErrorImagesAPI = {
         try {
             var stored = localStorage.getItem(this._STORAGE_KEY);
             if (stored) {
-                this._cache = JSON.parse(stored);
+                var parsed = JSON.parse(stored) || {};
+                var normalized = {};
+                Object.keys(parsed).forEach(function (k) {
+                    normalized[k] = getValidatedImageUrl(parsed[k]);
+                });
+                this._cache = normalized;
             }
         } catch (e) { }
     }
@@ -2939,6 +3205,11 @@ const BBNL_API = {
     // Error Images Methods
     errorImages: ErrorImagesAPI,
     getErrorImageUrl: ErrorImagesAPI.getImageUrl.bind(ErrorImagesAPI),
+    resolveAssetUrl: resolveAssetUrl,
+    getValidatedImageUrl: getValidatedImageUrl,
+    setImageSource: setImageSource,
+    getImagePlaceholderUrl: getImagePlaceholderUrl,
+    invalidateImageUrlCaches: invalidateImageUrlCaches,
 
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),

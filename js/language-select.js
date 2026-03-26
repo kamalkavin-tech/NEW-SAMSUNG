@@ -30,7 +30,6 @@ var currentFocus = 0;
 var allLanguages = [];
 var languageLogoCache = {};
 var languageLogoPrefetchInFlight = {};
-var _languageLazyObserver = null;
 
 function sanitizeLanguageText(value) {
     var str = String(value || '');
@@ -42,8 +41,9 @@ function sanitizeLanguageText(value) {
 function getLanguageLogoUrl(lang) {
     if (!lang || typeof lang !== 'object') return '';
     var candidates = [
-        lang.chnllanglogo,
         lang.langlogo,
+        lang.chnllanglogo,
+        lang.logo_url,
         lang.logo,
         lang.image,
         lang.img
@@ -52,7 +52,13 @@ function getLanguageLogoUrl(lang) {
         var value = candidates[i];
         if (value === null || value === undefined) continue;
         var str = String(value).trim();
-        if (str) return str;
+        if (str) {
+            return (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
+                ? BBNL_API.getValidatedImageUrl(str)
+                : ((typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl)
+                    ? BBNL_API.resolveAssetUrl(str)
+                    : str);
+        }
     }
     return '';
 }
@@ -137,20 +143,18 @@ function renderLanguages(languages) {
 
         if (langLogo && !langLogo.includes('noimage')) {
             const img = document.createElement('img');
-            img.className = 'lazy-language-logo';
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            if (languageLogoCache[langLogo]) {
-                img.src = langLogo;
-            } else {
-                img.dataset.src = langLogo;
-            }
+            img.className = 'language-logo';
             img.alt = langName;
+            // Load immediately (no lazy loading)
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, langLogo);
+            } else {
+                img.src = langLogo;
+            }
             img.onload = function () {
                 languageLogoCache[langLogo] = true;
             };
             img.onerror = function () {
-                // Image failed to load — replace with text icon fallback
                 img.style.display = 'none';
                 var fallback = document.createElement('div');
                 fallback.className = 'language-icon-text';
@@ -177,12 +181,7 @@ function renderLanguages(languages) {
         title.textContent = langName;
         infoDiv.appendChild(title);
 
-        if (langDetails && langDetails !== langName) {
-            const subtitle = document.createElement('div');
-            subtitle.className = 'language-card-subtitle';
-            subtitle.textContent = langDetails;
-            infoDiv.appendChild(subtitle);
-        }
+        // Subtitle intentionally hidden to avoid duplicate/garbled secondary labels.
 
         card.appendChild(infoDiv);
 
@@ -202,7 +201,7 @@ function renderLanguages(languages) {
     });
 
     refreshFocusables();
-    initLanguageLazyLoading();
+    // All language logos load immediately (no lazy loading)
 }
 
 function primeLanguageLogos(languages, maxCount) {
@@ -222,46 +221,14 @@ function primeLanguageLogos(languages, maxCount) {
             delete languageLogoPrefetchInFlight[this.src];
         };
         pre.onerror = function () {
-            delete languageLogoPrefetchInFlight[this.src];
+            var failedSrc = this.src;
+            delete languageLogoPrefetchInFlight[failedSrc];
         };
-        pre.src = logoUrl;
-    }
-}
-
-function initLanguageLazyLoading() {
-    if (_languageLazyObserver) {
-        _languageLazyObserver.disconnect();
-    }
-
-    var lazyImages = document.querySelectorAll('img.lazy-language-logo');
-    if (lazyImages.length === 0) return;
-
-    if ('IntersectionObserver' in window) {
-        _languageLazyObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (!entry.isIntersecting) return;
-
-                var img = entry.target;
-                if (img.dataset && img.dataset.src) {
-                    img.src = img.dataset.src;
-                    languageLogoCache[img.dataset.src] = true;
-                    img.removeAttribute('data-src');
-                }
-                _languageLazyObserver.unobserve(img);
-            });
-        }, { rootMargin: '200px' });
-
-        lazyImages.forEach(function (img) {
-            _languageLazyObserver.observe(img);
-        });
-    } else {
-        lazyImages.forEach(function (img) {
-            if (img.dataset && img.dataset.src) {
-                img.src = img.dataset.src;
-                languageLogoCache[img.dataset.src] = true;
-                img.removeAttribute('data-src');
-            }
-        });
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(pre, logoUrl);
+        } else {
+            pre.src = logoUrl;
+        }
     }
 }
 

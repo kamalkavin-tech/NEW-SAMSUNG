@@ -83,7 +83,11 @@ function showComingSoonPopup() {
         // Load error image if available
         var img = document.getElementById("errorImg_comingSoonFav");
         if (img && typeof ErrorImagesAPI !== 'undefined') {
-            img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('COMING_SOON_OTT'));
+            } else {
+                img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+            }
         }
         popup.style.display = "flex";
         comingSoonPopupOpen = true;
@@ -137,7 +141,12 @@ function renderFavoriteChannels(channels) {
 
     channels.forEach(function (channel) {
         var channelName = channel.chtitle || channel.channel_name || "Channel";
-        var channelLogo = channel.chlogo || channel.logo_url || "";
+        var channelLogo = channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.logo || "";
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
+            channelLogo = BBNL_API.getValidatedImageUrl(channelLogo);
+        } else if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
+            channelLogo = BBNL_API.resolveAssetUrl(channelLogo);
+        }
         var streamLink = channel.streamlink || channel.channel_url || "";
         var channelNo = channel.channelno || channel.channel_no || "";
 
@@ -157,7 +166,11 @@ function renderFavoriteChannels(channels) {
 
         if (channelLogo && !channelLogo.includes('chnlnoimage')) {
             var img = document.createElement('img');
-            img.src = channelLogo;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, channelLogo);
+            } else {
+                img.src = channelLogo;
+            }
             img.alt = channelName;
             img.onerror = function () {
                 var span = document.createElement('span');

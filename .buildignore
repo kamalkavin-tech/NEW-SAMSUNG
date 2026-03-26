@@ -51,6 +51,9 @@ build-tools/
 .buildResult/
 .sign/
 *.wgt
+*.tpk
+*.zip
+BBNLIPTV.wgt
 *.log
 *.tmp
 

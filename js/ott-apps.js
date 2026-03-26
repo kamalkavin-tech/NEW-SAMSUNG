@@ -402,10 +402,21 @@ function renderApps(apps) {
         var appIcon = document.createElement("div");
         appIcon.className = "app-icon";
 
+        var iconUrl = app.icon || app.appicon || app.logo || '';
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
+            iconUrl = BBNL_API.getValidatedImageUrl(iconUrl);
+        } else if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
+            iconUrl = BBNL_API.resolveAssetUrl(iconUrl);
+        }
+
         // Check if app has icon URL
-        if (app.icon) {
+        if (iconUrl) {
             var img = document.createElement("img");
-            img.src = app.icon;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, iconUrl);
+            } else {
+                img.src = iconUrl;
+            }
             img.alt = app.appname;
             img.style.width = "100%";
             img.style.height = "100%";
@@ -460,19 +471,31 @@ function showError(message, type) {
         if (type === 'network') {
             if (titleEl) titleEl.innerText = "Failed to Load";
             if (img && typeof ErrorImagesAPI !== 'undefined') {
-                img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION'));
+                } else {
+                    img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+                }
             }
             if (btn) btn.innerText = "Try Again";
         } else if (type === 'no_apps') {
             if (titleEl) titleEl.innerText = "No Apps Available";
             if (img && typeof ErrorImagesAPI !== 'undefined') {
-                img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('COMING_SOON_OTT'));
+                } else {
+                    img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+                }
             }
             if (btn) btn.innerText = "Go Back";
         } else {
             if (titleEl) titleEl.innerText = "Coming Soon";
             if (img && typeof ErrorImagesAPI !== 'undefined') {
-                img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('COMING_SOON_OTT'));
+                } else {
+                    img.src = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
+                }
             }
             if (btn) btn.innerText = "Go Back";
         }
@@ -584,7 +607,11 @@ function showComingSoonPopup() {
         if (img && typeof ErrorImagesAPI !== 'undefined') {
             var imgUrl = ErrorImagesAPI.getImageUrl('COMING_SOON_OTT');
             if (imgUrl) {
-                img.src = imgUrl;
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, imgUrl);
+                } else {
+                    img.src = imgUrl;
+                }
             }
         }
 

@@ -6,6 +6,7 @@ var focusables = [];
 var currentFocus = 0;
 var exitPopupOpen = false; // Track if exit/logout popup is open
 var homeSearchTimeout = null; // Timer for auto-play channel by number
+var HOME_CHANNEL_INPUT_GRACE_MS = 6000; // Give enough time to finish entering LCN via TV keypad
 var homeAdInterval = null; // Interval for ad rotation
 var homeNetworkInterval = null; // Interval for network status updates
 var homeSearchActivated = false; // Only activate keypad/editing on explicit action
@@ -18,22 +19,30 @@ function primeHomeAds(ads, maxCount) {
     var limit = Math.min(maxCount || 2, ads.length);
     for (var i = 0; i < limit; i++) {
         var ad = ads[i] || {};
-        var url = String(ad.adpath || '').trim();
+        var url = normalizeHomeAssetUrl(ad.adpath || '');
         if (!url || homeAdImageCache[url]) continue;
         var img = new Image();
         img.onload = function () {
             homeAdImageCache[this.src] = true;
         };
-        img.onerror = function () {};
-        img.src = url;
+        img.onerror = function () {
+            this.removeAttribute('src');
+            this.style.display = 'none';
+        };
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(img, url);
+        } else {
+            img.src = url;
+        }
     }
 }
 
 function getHomeLanguageLogoUrl(lang) {
     if (!lang || typeof lang !== 'object') return '';
     var candidates = [
-        lang.chnllanglogo,
         lang.langlogo,
+        lang.chnllanglogo,
+        lang.logo_url,
         lang.logo,
         lang.image,
         lang.img
@@ -42,9 +51,120 @@ function getHomeLanguageLogoUrl(lang) {
         var value = candidates[i];
         if (value === null || value === undefined) continue;
         var str = String(value).trim();
-        if (str) return str;
+        if (str) {
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
+                return BBNL_API.getValidatedImageUrl(str);
+            }
+            return normalizeHomeAssetUrl(str);
+        }
     }
     return '';
+}
+
+function normalizeHomeAssetUrl(rawUrl) {
+    if (rawUrl === null || rawUrl === undefined) return '';
+    var value = String(rawUrl).trim();
+    if (!value) return '';
+
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
+        return BBNL_API.resolveAssetUrl(value);
+    }
+
+    var apiBase = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL)
+        ? String(BBNL_API.BASE_URL).trim()
+        : '';
+    var appOrigin = (window.location && window.location.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : '';
+
+    var preferredOrigin = '';
+    try {
+        if (apiBase) preferredOrigin = new URL(apiBase, window.location.href).origin;
+    } catch (e) {}
+    if (!preferredOrigin) preferredOrigin = appOrigin;
+
+    // Fix API responses that still point to localhost on TV deployments.
+    if (preferredOrigin) {
+        value = value.replace(/^https?:\/\/(localhost|127\.0\.0\.1|124\.40\.244\.211|0\.0\.0\.0)(:\d+)?/i, preferredOrigin);
+    }
+
+    // Absolute URL
+    if (/^https?:\/\//i.test(value)) {
+        return value;
+    }
+
+    // Protocol-relative URL
+    if (value.indexOf('//') === 0) {
+        return window.location.protocol + value;
+    }
+
+    // Resolve root-relative and relative paths against API origin when possible.
+    var baseUrl = apiBase || appOrigin;
+
+    try {
+        if (value.charAt(0) === '/' && preferredOrigin) {
+            var baseOrigin = new URL(baseUrl, window.location.href).origin;
+            return baseOrigin + value;
+        }
+        if (baseUrl) {
+            return new URL(value, baseUrl + '/').href;
+        }
+    } catch (e) {
+        // Fall through to raw string.
+    }
+
+    return value;
+}
+
+function extractFoFiLogoPath(response) {
+    if (!response) return '';
+
+    if (response.body && typeof response.body === 'object' && !Array.isArray(response.body)) {
+        var bodyPath = response.body.logo_path || response.body.logo || response.body.logopath || response.body.path || '';
+        if (bodyPath) return String(bodyPath).trim();
+    }
+
+    if (response.body && Array.isArray(response.body) && response.body.length > 0) {
+        var first = response.body[0] || {};
+        var listPath = first.logo_path || first.logo || first.logopath || first.path || '';
+        if (listPath) return String(listPath).trim();
+    }
+
+    var directPath = response.logo_path || response.logo || response.logopath || response.path || '';
+    return String(directPath || '').trim();
+}
+
+function showFoFiLogo(logoUrl) {
+    var logoImg = document.getElementById('fofitv-logo');
+    var fallbackText = document.getElementById('brand-text-fallback');
+    if (!logoImg) return false;
+
+    var resolved = normalizeHomeAssetUrl(logoUrl);
+    if (!resolved) {
+        console.log("[HOME] showFoFiLogo: Cannot resolve URL: " + logoUrl);
+        return false;
+    }
+
+    console.log("[HOME] showFoFiLogo: Setting src to " + resolved);
+    logoImg.onerror = function () {
+        console.log("[HOME] FoFi logo failed to load: " + this.src);
+        this.removeAttribute('src');
+        this.style.display = 'none';
+        if (fallbackText) fallbackText.style.display = 'block';
+    };
+
+    logoImg.onload = function () {
+        console.log("[HOME] FoFi logo loaded successfully: " + this.src);
+    };
+
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+        BBNL_API.setImageSource(logoImg, resolved);
+    } else {
+        logoImg.src = resolved;
+    }
+    logoImg.style.display = 'block';
+    if (fallbackText) fallbackText.style.display = 'none';
+    return true;
 }
 
 // Clean up background intervals when leaving page
@@ -221,7 +341,7 @@ window.onload = function () {
     var searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.value = '';
-        searchInput.setAttribute('type', 'tel');
+        searchInput.setAttribute('type', 'number');
         searchInput.setAttribute('inputmode', 'numeric');
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
@@ -248,7 +368,7 @@ window.onload = function () {
                     var lcn = parseInt(searchInput.value, 10);
                     console.log("[HOME] Auto-playing LCN:", lcn);
                     playChannelByLCNFromHome(lcn);
-                }, 3000);
+                }, HOME_CHANNEL_INPUT_GRACE_MS);
             }
         });
 
@@ -846,6 +966,21 @@ function loadHomeAds() {
         }
     } catch (e) {}
 
+    // Fallback cache for fresh app relaunch where sessionStorage is empty.
+    try {
+        var persistentAds = localStorage.getItem('home_ads_cache_persistent');
+        if (persistentAds) {
+            var persistedList = JSON.parse(persistentAds);
+            if (persistedList && Array.isArray(persistedList) && persistedList.length > 0) {
+                console.log("[HOME] Ads loaded from persistent cache:", persistedList.length);
+                try { sessionStorage.setItem('home_ads_cache', JSON.stringify(persistedList)); } catch (cacheErr) {}
+                primeHomeAds(persistedList, 2);
+                renderAdsInHeroBanner(persistedList);
+                return;
+            }
+        }
+    } catch (e) {}
+
     // Get ads from API
     AdsAPI.getHomeAds()
         .then(function (ads) {
@@ -856,6 +991,7 @@ function loadHomeAds() {
                 console.log("[HOME] Displaying", ads.length, "ads");
                 // Cache in sessionStorage
                 try { sessionStorage.setItem('home_ads_cache', JSON.stringify(ads)); } catch (e) {}
+                try { localStorage.setItem('home_ads_cache_persistent', JSON.stringify(ads)); } catch (e) {}
                 primeHomeAds(ads, 2);
                 renderAdsInHeroBanner(ads);
             } else {
@@ -883,6 +1019,11 @@ function renderAdsInHeroBanner(ads) {
 
     console.log("[HOME] Rendering", ads.length, "ads in hero banner");
 
+    if (homeAdInterval) {
+        clearInterval(homeAdInterval);
+        homeAdInterval = null;
+    }
+
     // Clear any existing content
     container.innerHTML = '';
 
@@ -898,13 +1039,12 @@ function renderAdsInHeroBanner(ads) {
         slide.style.cssText = index === 0 ? 'opacity:1;z-index:1' : 'opacity:0;z-index:0';
 
         var img = document.createElement('img');
-        var adUrl = String(ad.adpath || '').trim();
-        if (index === 0 || homeAdImageCache[adUrl]) {
-            img.src = adUrl;
+        var adUrl = normalizeHomeAssetUrl(ad.adpath || '');
+        // Load all ads immediately (no deferred loading)
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(img, adUrl);
         } else {
-            img.dataset.src = adUrl;
-            img.loading = 'lazy';
-            img.decoding = 'async';
+            img.src = adUrl;
         }
         img.alt = 'Advertisement ' + (index + 1);
 
@@ -919,16 +1059,6 @@ function renderAdsInHeroBanner(ads) {
     });
     sliderContainer.appendChild(fragment);
     container.appendChild(sliderContainer);
-
-    // Load remaining slide images shortly after first paint.
-    setTimeout(function () {
-        var deferredImgs = sliderContainer.querySelectorAll('img[data-src]');
-        deferredImgs.forEach(function (img) {
-            img.src = img.dataset.src;
-            homeAdImageCache[img.dataset.src] = true;
-            img.removeAttribute('data-src');
-        });
-    }, 100);
 
     // Add navigation dots if multiple ads
     if (ads.length > 1) {
@@ -1050,7 +1180,7 @@ function loadHomeChannels() {
             console.error("[HOME] Failed to load channels:", error);
             var container = document.getElementById('home-channels-container');
             if (container) container.innerHTML = '';
-            if (isNetworkDisconnected()) {
+            if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                 showHomeErrorPopup('failedLoad');
             }
         });
@@ -1077,7 +1207,7 @@ function renderChannelsInHomeGrid(channels) {
 
     channels.forEach(function (channel) {
         var channelName = channel.chtitle || channel.channel_name || "Channel";
-        var channelLogo = channel.chlogo || channel.logo_url || "";
+        var channelLogo = normalizeHomeAssetUrl(channel.chlogo || channel.logo_url || channel.logo || "");
         var channelNo = channel.channelno || channel.channel_no || "";
         var streamLink = channel.streamlink || channel.channel_url || "";
 
@@ -1096,7 +1226,11 @@ function renderChannelsInHomeGrid(channels) {
 
         if (channelLogo && !channelLogo.includes('chnlnoimage')) {
             var img = document.createElement('img');
-            img.src = channelLogo;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, channelLogo);
+            } else {
+                img.src = channelLogo;
+            }
             img.alt = channelName;
             img.style.cssText = 'max-width:80%;max-height:80%;object-fit:contain';
             img.onerror = function () {
@@ -1174,7 +1308,7 @@ function handleChannelCardClick(channel) {
 function renderEmptyChannelsState() {
     var container = document.getElementById('home-channels-container');
     if (container) container.innerHTML = '';
-    if (isNetworkDisconnected()) {
+    if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
         showHomeErrorPopup('noChannels');
     }
 }
@@ -1223,7 +1357,7 @@ function loadHomeLanguages() {
             console.error("[HOME] Failed to load languages:", error);
             var container = document.getElementById('home-languages-container');
             if (container) container.innerHTML = '';
-            if (isNetworkDisconnected()) {
+            if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
                 showHomeErrorPopup('failedLoad');
             }
         });
@@ -1250,9 +1384,14 @@ function prefetchHomeLanguageLogos(languages, maxCount) {
             delete homeLanguageLogoPrefetchInFlight[this.src];
         };
         pre.onerror = function () {
-            delete homeLanguageLogoPrefetchInFlight[this.src];
+            var failedSrc = this.src;
+            delete homeLanguageLogoPrefetchInFlight[failedSrc];
         };
-        pre.src = logoUrl;
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(pre, logoUrl);
+        } else {
+            pre.src = logoUrl;
+        }
     }
 }
 
@@ -1304,8 +1443,12 @@ function renderLanguagesInHomeGrid(languages) {
             var img = document.createElement('img');
             img.className = 'language-logo';
             img.decoding = 'async';
-            img.loading = (index < 7) ? 'eager' : 'lazy';
-            img.src = langLogo;
+            img.loading = 'eager';
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, langLogo);
+            } else {
+                img.src = langLogo;
+            }
             img.alt = langName;
             if (homeLanguageLogoCache[langLogo]) {
                 img.style.transition = 'none';
@@ -1402,7 +1545,7 @@ function restoreLanguageFocusIfNeeded() {
 function renderEmptyLanguagesState() {
     var container = document.getElementById('home-languages-container');
     if (container) container.innerHTML = '';
-    if (isNetworkDisconnected()) {
+    if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
         showHomeErrorPopup('noChannels');
     }
 }
@@ -1450,7 +1593,11 @@ function renderAppsInHomeGrid(apps) {
         // Display icon if available
         if (appIcon) {
             var img = document.createElement('img');
-            img.src = appIcon;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, appIcon);
+            } else {
+                img.src = appIcon;
+            }
             img.alt = appName;
             img.style.width = '100%';
             img.style.height = '100%';
@@ -1884,7 +2031,11 @@ function showAppLockScreen() {
         // Set error image from API
         var img = document.getElementById('errorImg_serviceLocked');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
-            img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'));
+            } else {
+                img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
+            }
         }
 
         // Focus on retry button
@@ -1961,6 +2112,14 @@ function isNetworkDisconnected() {
     return !navigator.onLine;
 }
 
+function hasRecentApiNetworkFailure(maxAgeMs) {
+    var root = (typeof window !== 'undefined') ? window : globalThis;
+    var failure = root && root.__bbnlLastApiFailure;
+    if (!failure || !failure.networkLike) return false;
+    var age = Date.now() - Number(failure.ts || 0);
+    return age >= 0 && age <= (maxAgeMs || 30000);
+}
+
 // ==========================================
 // ERROR POPUP FUNCTIONALITY
 // ==========================================
@@ -1990,13 +2149,25 @@ function showHomeErrorPopup(type) {
         if (typeof ErrorImagesAPI !== 'undefined') {
             if (type === 'failedLoad') {
                 var img = document.getElementById('errorImg_failedLoad');
-                if (img) img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION'));
+                } else if (img) {
+                    img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
+                }
             } else if (type === 'loginRequired') {
                 var img = document.getElementById('errorImg_loginRequired');
-                if (img) img.src = ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED');
+                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED'));
+                } else if (img) {
+                    img.src = ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED');
+                }
             } else if (type === 'noChannels') {
                 var img = document.getElementById('errorImg_noChannels');
-                if (img) img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE'));
+                } else if (img) {
+                    img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
+                }
             }
         }
 
@@ -2265,75 +2436,50 @@ function autoTuneDefaultChannel() {
  * Load FoFi TV logo from API and display in sidebar
  */
 function loadFoFiLogo() {
-    BBNL_API.getFoFiLogo().then(function (response) {
-        var logoImg = document.getElementById('fofitv-logo');
-        var fallbackText = document.getElementById('brand-text-fallback');
-        if (!logoImg) {
-            console.warn("[HOME] Logo image element not found");
-            return;
-        }
+    var logoImg = document.getElementById('fofitv-logo');
+    var fallbackText = document.getElementById('brand-text-fallback');
+    if (!logoImg) {
+        console.warn("[HOME] Logo image element not found");
+        return;
+    }
 
+    // Paint instantly from cache while API request is in-flight.
+    var cachedLogo = '';
+    try {
+        cachedLogo = sessionStorage.getItem('home_fofi_logo_url') || localStorage.getItem('home_fofi_logo_url') || '';
+    } catch (e) {}
+    if (cachedLogo) {
+        console.log("[HOME] Found cached FoFi logo: " + cachedLogo);
+        showFoFiLogo(cachedLogo);
+    }
+
+    BBNL_API.getFoFiLogo().then(function (response) {
         console.log("[HOME] FoFi logo API response:", response);
 
-        var logoPath = '';
-        
-        // Try multiple ways to extract logo path from response
-        if (response) {
-            // Try response.body.logo_path
-            if (response.body && typeof response.body === 'object' && !Array.isArray(response.body)) {
-                logoPath = response.body.logo_path || response.body.logo || response.body.logopath || '';
-                console.log("[HOME] Extracted logo from response.body:", logoPath);
-            }
-            // Try response.body as array
-            else if (response.body && Array.isArray(response.body) && response.body.length > 0) {
-                var first = response.body[0] || {};
-                logoPath = first.logo_path || first.logo || first.logopath || '';
-                console.log("[HOME] Extracted logo from response.body[0]:", logoPath);
-            }
-            // Try response.logo_path directly
-            else if (response.logo_path) {
-                logoPath = response.logo_path;
-                console.log("[HOME] Extracted logo from response.logo_path:", logoPath);
-            }
-            // Try response.logo directly
-            else if (response.logo) {
-                logoPath = response.logo;
-                console.log("[HOME] Extracted logo from response.logo:", logoPath);
-            }
-            // Try response.logopath
-            else if (response.logopath) {
-                logoPath = response.logopath;
-                console.log("[HOME] Extracted logo from response.logopath:", logoPath);
+        var logoPath = extractFoFiLogoPath(response);
+        var resolvedLogo = normalizeHomeAssetUrl(logoPath);
+
+        if (resolvedLogo) {
+            console.log("[HOME] API returned new logo: " + resolvedLogo);
+            var visible = showFoFiLogo(resolvedLogo);
+            if (visible) {
+                try { sessionStorage.setItem('home_fofi_logo_url', resolvedLogo); } catch (e) {}
+                try { localStorage.setItem('home_fofi_logo_url', resolvedLogo); } catch (e) {}
+                return;
             }
         }
 
-        if (logoPath && logoPath.length > 0) {
-            console.log("[HOME] Setting logo src to:", logoPath);
-            logoImg.src = logoPath;
-            logoImg.style.display = 'block';
-            
-            // Handle image load failure
-            logoImg.onerror = function () {
-                console.error("[HOME] Logo image failed to load:", logoPath);
-                logoImg.style.display = 'none';
-                if (fallbackText) fallbackText.style.display = 'block';
-            };
-            
-            // Hide fallback text
-            if (fallbackText) fallbackText.style.display = 'none';
-            
-            console.log("[HOME] ✓ Logo display enabled");
-        } else {
-            console.warn("[HOME] No logo path found in API response");
+        console.warn("[HOME] No valid logo path found in API response");
+        if (!cachedLogo) {
             logoImg.style.display = 'none';
             if (fallbackText) fallbackText.style.display = 'block';
         }
     }).catch(function (error) {
         console.error("[HOME] FoFi logo fetch failed:", error);
-        var logoImg = document.getElementById('fofitv-logo');
-        var fallbackText = document.getElementById('brand-text-fallback');
-        if (logoImg) logoImg.style.display = 'none';
-        if (fallbackText) fallbackText.style.display = 'block';
+        if (!cachedLogo) {
+            logoImg.style.display = 'none';
+            if (fallbackText) fallbackText.style.display = 'block';
+        }
     });
 }
 

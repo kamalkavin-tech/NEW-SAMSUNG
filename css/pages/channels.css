@@ -286,6 +286,8 @@ body.channels-page-pills {
     font-size: 14px;
     width: 100%;
     font-family: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .search-input::placeholder {
@@ -595,12 +597,13 @@ body.channels-page-pills {
     font-size: 25px;
     font-weight: 600;
     text-align: center;
-    padding: 6px 10px 12px;
+    padding: 6px 10px 14px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     width: 100%;
     margin-top: auto;
+    margin-bottom: 4px;
     line-height: 1.2;
 }
 
