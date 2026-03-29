@@ -574,6 +574,30 @@ body.channels-page-pills {
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
+/* ==========================================
+   CHANNEL LOGO PLACEHOLDER (When image fails)
+   ========================================== */
+
+.channel-logo-placeholder {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.channel-logo-placeholder span {
+    display: block;
+    text-align: center;
+}
+
 .no-logo-text {
     width: 60px;
     height: 60px;

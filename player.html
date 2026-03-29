@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
+    <!-- CSP for Samsung Tizen widget - allow fetch from any origin for image loading -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
     <title>Fo-Fi TV - Player</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/pages/player.css">
@@ -24,7 +26,7 @@
 
         <!-- Stream Ad Panel (right side overlay) -->
         <div class="stream-ad-panel" id="streamAdPanel" style="display: none;">
-            <img id="streamAdImage" src="" alt="Ad">
+            <img id="streamAdImage" src="" alt="Ad" crossorigin="anonymous">
         </div>
 
         <!-- Player Sidebar - Redesigned Layout -->
@@ -81,7 +83,7 @@
         <!-- LEFT SECTION: Logo + Channel Number & Name stacked -->
         <div class="info-left-section">
             <div class="channel-logo-box">
-                <img src="" alt="Channel Logo" id="ui-channel-logo">
+                <img src="" alt="Channel Logo" id="ui-channel-logo" crossorigin="anonymous">
             </div>
             <div class="channel-info-stack">
                 <span class="channel-lcn" id="ui-channel-number">11</span>
@@ -123,7 +125,7 @@
     <div class="error-popup-overlay" id="playerErrorPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_player" src="" alt="Playback error">
+                <img id="errorImg_player" src="" alt="Playback error" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title" id="playerErrorTitle">Playback Error</h2>
             <p class="error-popup-channel-name" id="popupChannelName"></p>

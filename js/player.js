@@ -296,11 +296,19 @@ function showPlayerErrorPopup(title, message) {
                 imgUrl = ErrorImagesAPI.getImageUrl('SIGNAL_UNAVAILABLE') || ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE') || ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
             }
             if (imgUrl) {
+                img.onload = function () {
+                    img.style.display = '';
+                };
+                img.onerror = function () {
+                    img.style.display = 'none';
+                };
                 if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                     BBNL_API.setImageSource(img, imgUrl);
                 } else {
                     img.src = imgUrl;
                 }
+            } else {
+                img.style.display = 'none';
             }
         }
 
@@ -327,8 +335,25 @@ function hidePlayerErrorPopup() {
         playerErrorPopupOpen = false;
         playerAutoResumeInProgress = false;
         clearPlayerErrorUiTimer();
-        // Start auto-hide timer now that popup is dismissed
-        showOverlay();
+        
+        // CRITICAL: Clear any pending overlay timeout so it doesn't hide the info bar after popup closes
+        if (overlayTimeout) {
+            clearTimeout(overlayTimeout);
+            overlayTimeout = null;
+        }
+        
+        // Keep info bar visible without auto-hide timer until user changes channel
+        var infoBar = document.querySelector('.info-bar-premium');
+        if (infoBar) {
+            infoBar.classList.remove('info-bar-hidden');
+            syncInfoBarSidebarState();
+        }
+        var overlay = document.querySelector('.player-overlay');
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('visible');
+        }
+        console.log('[InfoBar] Kept visible after error popup closed (no auto-hide, timeout cleared)');
     }
 }
 
@@ -720,12 +745,59 @@ function getChannelLogoUrl(channel) {
     return channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.channellogo || channel.logo || channel.logo_path || channel.image || "";
 }
 
+function getChannelInitials(channel) {
+    var name = '';
+    if (channel) name = String(channel.chtitle || channel.channel_name || '').trim();
+    if (!name) return '?';
+
+    var parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+function ensureSidebarLogoPlaceholder(logoDiv, channel) {
+    if (!logoDiv) return;
+    var existing = logoDiv.querySelector('.logo-placeholder');
+    if (existing) return;
+
+    var placeholder = document.createElement('div');
+    placeholder.className = 'logo-placeholder';
+    placeholder.textContent = getChannelInitials(channel);
+    logoDiv.appendChild(placeholder);
+}
+
+function setInfoBarLogoPlaceholder(channel) {
+    var box = document.querySelector('.info-bar-premium .channel-logo-box');
+    if (!box) return;
+
+    var existing = box.querySelector('.channel-logo-fallback');
+    if (!existing) {
+        existing = document.createElement('div');
+        existing.className = 'channel-logo-fallback';
+        box.appendChild(existing);
+    }
+    existing.textContent = getChannelInitials(channel);
+    existing.style.display = 'flex';
+}
+
+function clearInfoBarLogoPlaceholder() {
+    var box = document.querySelector('.info-bar-premium .channel-logo-box');
+    if (!box) return;
+    var existing = box.querySelector('.channel-logo-fallback');
+    if (existing) existing.style.display = 'none';
+}
+
 function normalizeLogoCacheUrl(url) {
     var raw = String(url || '').trim();
     if (!raw) return '';
 
+    console.log('[normalizeLogoCacheUrl] Input URL:', raw);
+
     if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
         raw = BBNL_API.resolveAssetUrl(raw);
+        console.log('[normalizeLogoCacheUrl] After resolveAssetUrl:', raw);
     }
 
     var apiBase = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL)
@@ -759,18 +831,26 @@ function normalizeLogoCacheUrl(url) {
     // Remove URL fragment and known cache-busting query params for stable cache keying.
     var noHash = raw.split('#')[0];
     var parts = noHash.split('?');
-    if (parts.length < 2) return noHash;
+    if (parts.length < 2) {
+        console.log('[normalizeLogoCacheUrl] Final URL:', noHash);
+        return noHash;
+    }
 
     var base = parts[0];
     var query = parts[1] || '';
-    if (!query) return base;
+    if (!query) {
+        console.log('[normalizeLogoCacheUrl] Final URL:', base);
+        return base;
+    }
 
     var kept = query.split('&').filter(function (pair) {
         var key = (pair.split('=')[0] || '').toLowerCase();
         return key && key !== 't' && key !== 'ts' && key !== 'timestamp' && key !== '_' && key !== 'cache' && key !== 'cb';
     });
 
-    return kept.length > 0 ? (base + '?' + kept.join('&')) : base;
+    var result = kept.length > 0 ? (base + '?' + kept.join('&')) : base;
+    console.log('[normalizeLogoCacheUrl] Final URL:', result);
+    return result;
 }
 
 function updatePlayerChannelLogo(channel) {
@@ -787,11 +867,13 @@ function updatePlayerChannelLogo(channel) {
         uiLogo.style.display = 'none';
         uiLogo.removeAttribute('src');
         uiLogo.dataset.logoUrl = '';
+        setInfoBarLogoPlaceholder(channel);
         return;
     }
 
     if (uiLogo.dataset.logoUrl === normalizedLogo && uiLogo.getAttribute('src')) {
         uiLogo.style.display = '';
+        clearInfoBarLogoPlaceholder();
         return;
     }
 
@@ -803,10 +885,12 @@ function updatePlayerChannelLogo(channel) {
         }
         uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
+        clearInfoBarLogoPlaceholder();
         uiLogo.onerror = function () {
             if (requestToken !== _playerLogoRequestToken) return;
             uiLogo.removeAttribute('src');
             uiLogo.style.display = 'none';
+            setInfoBarLogoPlaceholder(channel);
         };
         return;
     }
@@ -826,17 +910,26 @@ function updatePlayerChannelLogo(channel) {
         }
         uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
+        clearInfoBarLogoPlaceholder();
         uiLogo.onerror = function () {
             if (requestToken !== _playerLogoRequestToken) return;
             uiLogo.removeAttribute('src');
             uiLogo.style.display = 'none';
+            setInfoBarLogoPlaceholder(channel);
         };
     };
     preloader.onerror = function () {
         if (requestToken !== _playerLogoRequestToken) return;
+        console.error('[LOGO LOAD FAILED] URL:', normalizedLogo, 'Channel:', channel.chtitle || 'unknown');
+        console.error('[LOGO LOAD FAILED] Network issue, CORS, Certificate, or 404 error');
         uiLogo.removeAttribute('src');
         uiLogo.style.display = 'none';
+        setInfoBarLogoPlaceholder(channel);
     };
+    preloader.onabort = function () {
+        console.warn('[LOGO LOAD ABORTED] URL:', normalizedLogo);
+    };
+    console.log('[LOGO PRELOAD START] Attempting to load:', normalizedLogo, 'for channel:', channel.chtitle || 'unknown');
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
         BBNL_API.setImageSource(preloader, normalizedLogo);
     } else {
@@ -2043,6 +2136,10 @@ function renderChannelsList() {
         if (logoUrl && logoUrl.trim() !== '') {
             var logoImg = document.createElement('img');
             logoImg.alt = ch.chtitle || 'Channel';
+            logoImg.addEventListener('error', function () {
+                this.style.display = 'none';
+                ensureSidebarLogoPlaceholder(logoDiv, ch);
+            }, { once: true });
             // Load immediately (no lazy loading)
             if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(logoImg, logoUrl);
@@ -2053,6 +2150,8 @@ function renderChannelsList() {
                 _logoCache[logoUrl] = true;
             }, { once: true });
             logoDiv.appendChild(logoImg);
+        } else {
+            ensureSidebarLogoPlaceholder(logoDiv, ch);
         }
 
         // Channel Info (name + price)
@@ -2855,7 +2954,7 @@ function handleKeydown(e) {
                 console.log('[Player] RETURN pressed - closing sidebar (popup open)');
             } else {
                 hidePlayerErrorPopup();
-                showOverlay();
+                // Info bar now stays visible without auto-hide until channel change
             }
         } else if (code === 13) {
             // ENTER - click Try Again button
@@ -3291,10 +3390,10 @@ function showChannelNumberInput(number) {
 
         var input = document.createElement('input');
         input.id = 'channel-number-field';
-        input.type = 'number';
+        input.type = 'text';
         input.inputMode = 'numeric';
         input.pattern = '[0-9]*';
-        input.maxLength = 4;
+        input.maxLength = '4';
         input.autocomplete = 'off';
         input.style.cssText = 'width:190px; height:58px; border-radius:10px; border:2px solid #ffffff; ' +
             'background:rgba(15,15,15,0.92); color:#fff; font-size:42px; font-weight:700; ' +
@@ -3373,7 +3472,12 @@ function navigateToChannelNumber(number) {
 
     if (channel) {
         console.log("[Player] Found channel:", channel.chtitle || channel.channel_name);
+        // CRITICAL: Close number input overlay BEFORE setup to ensure proper focus transfer
+        hideChannelNumberInput();
+        // Now start playing the found channel
         setupPlayer(channel);
+        // Show info bar for 5 seconds when channel is found by number pad
+        showOverlay();
     } else {
         console.warn("[Player] Channel not found for number:", number);
         showChannelNotFound(number);

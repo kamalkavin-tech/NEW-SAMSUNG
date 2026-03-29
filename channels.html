@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
+    <!-- CSP for Samsung Tizen widget - allow fetch from any origin for image loading -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
     <title>Fo-Fi TV - Channels</title>
     <!-- Base Styles -->
     <link rel="stylesheet" href="css/style.css">
@@ -80,7 +82,7 @@
     <div class="error-popup-overlay" id="noChannelsPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_noChannels" src="" alt="No channels available">
+                <img id="errorImg_noChannels" src="" alt="No channels available" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">No Channels Available</h2>
             <p class="error-popup-message">Please Check your network and try again</p>
@@ -92,7 +94,7 @@
     <div class="error-popup-overlay" id="noInternetPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_noInternet" src="" alt="No internet connection">
+                <img id="errorImg_noInternet" src="" alt="No internet connection" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">Failed to Load Channels</h2>
             <p class="error-popup-message">Please Check your network and try again</p>

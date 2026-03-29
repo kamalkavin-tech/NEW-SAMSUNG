@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
+    <!-- CSP for Samsung Tizen widget - allow fetch from any origin for image loading -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
     <title>Fo-Fi TV - Home</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/layout/home-layout.css">
@@ -15,7 +17,7 @@
     <aside class="icon-sidebar">
         <!-- FoFi TV Logo (loaded from API) -->
         <div class="sidebar-brand">
-            <img id="fofitv-logo" src="" alt="FoFi TV" style="display:none;max-width:72px;max-height:72px;object-fit:contain;">
+            <img id="fofitv-logo" src="" alt="FoFi TV" style="display:none;max-width:72px;max-height:72px;object-fit:contain;" crossorigin="anonymous">
             <span class="brand-text" id="brand-text-fallback">BBNL</span>
         </div>
         <nav class="sidebar-nav">
@@ -144,7 +146,7 @@
     <div class="error-popup-overlay" id="failedLoadPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_failedLoad" src="about:blank" alt="Failed to load channels">
+                <img id="errorImg_failedLoad" src="about:blank" alt="Failed to load channels" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">Failed to Load Channels</h2>
             <p class="error-popup-message">Please Check your network and try again</p>
@@ -156,7 +158,7 @@
     <div class="error-popup-overlay" id="loginRequiredPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_loginRequired" src="about:blank" alt="Login required">
+                <img id="errorImg_loginRequired" src="about:blank" alt="Login required" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">Login Required</h2>
             <p class="error-popup-message">Please login to access your channels</p>
@@ -168,7 +170,7 @@
     <div class="error-popup-overlay" id="noChannelsPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_noChannels" src="about:blank" alt="No channels available">
+                <img id="errorImg_noChannels" src="about:blank" alt="No channels available" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">No Channels Available</h2>
             <p class="error-popup-message">Please Check your network and try again</p>
@@ -200,7 +202,7 @@
             <!-- Right Side - Error Image from API -->
             <div class="applock-right">
                 <div class="applock-mascot">
-                    <img id="errorImg_serviceLocked" src="about:blank" alt="Service locked" style="max-width: 280px; max-height: 280px;">
+                    <img id="errorImg_serviceLocked" src="about:blank" alt="Service locked" style="max-width: 280px; max-height: 280px;" crossorigin="anonymous">
                 </div>
             </div>
         </div>

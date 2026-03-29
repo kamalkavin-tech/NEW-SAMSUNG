@@ -220,41 +220,43 @@ function _isMalformedImageUrl(url) {
     var val = String(url || '').trim();
     if (!val) return true;
     if (/^(javascript|vbscript):/i.test(val)) return true;
+    if (/^[a-z]+:/i.test(val) && !/^https?:/i.test(val)) return true;
     return false;
 }
 
 function getValidatedImageUrl(rawUrl) {
-    if (_isMalformedImageUrl(rawUrl)) return '';
+    if (_isMalformedImageUrl(rawUrl)) {
+        console.warn('[getValidatedImageUrl] Rejected (malformed):', rawUrl);
+        return '';
+    }
 
     var original = String(rawUrl || '').trim();
     var resolved = resolveAssetUrl(original);
-    if (_isMalformedImageUrl(resolved)) return '';
+    if (_isMalformedImageUrl(resolved)) {
+        console.warn('[getValidatedImageUrl] Rejected (malformed after resolve):', resolved);
+        return '';
+    }
 
+    console.log('[getValidatedImageUrl] Accepted:', resolved);
     // Keep validation permissive for Samsung TV runtime quirks; only block empty/script URLs.
     return resolved;
 }
 
 function setImageSource(imgEl, rawUrl, options) {
+    console.log('[setImageSource] RAW URL from API:', rawUrl);
+    
     var freshUrl = getValidatedImageUrl(rawUrl);
     var finalUrl = freshUrl || '';
 
-    console.log('IMAGE URL:', finalUrl);
+    console.log('[setImageSource] FINAL URL to load:', finalUrl);
 
     if (!imgEl) return finalUrl;
 
     var prevOnError = imgEl.onerror;
-    var rawFallbackTried = false;
 
     imgEl.onerror = function () {
-        // If normalized URL fails, retry the raw URL once before delegating.
-        if (!rawFallbackTried) {
-            rawFallbackTried = true;
-            var raw = String(rawUrl || '').trim();
-            if (raw && raw !== finalUrl) {
-                imgEl.setAttribute('src', raw);
-                return;
-            }
-        }
+        // Strict mode: use only API-provided normalized image URL once.
+        console.error('[IMAGE] Failed to load:', finalUrl, 'from raw:', rawUrl);
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
@@ -262,13 +264,146 @@ function setImageSource(imgEl, rawUrl, options) {
 
     if (finalUrl) {
         imgEl.style.display = '';
-        imgEl.setAttribute('src', finalUrl);
+        imgEl.setAttribute('crossorigin', 'anonymous');
+        
+        // For Samsung Tizen TV running from file://, fetch() + blob URL bypasses CORS
+        if (window.location.protocol === 'file:' && typeof fetch !== 'undefined') {
+            console.log('[setImageSource] Using fetch+blob for file:// protocol (Tizen TV)');
+            fetch(finalUrl, { mode: 'cors', credentials: 'omit' })
+                .then(function (response) {
+                    console.log('[FETCH] Response status:', response.status, 'for', finalUrl);
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.blob();
+                })
+                .then(function (blob) {
+                    console.log('[FETCH] Blob created, size:', blob.size, 'type:', blob.type);
+                    var blobUrl = URL.createObjectURL(blob);
+                    imgEl.src = blobUrl;
+                    console.log('[FETCH] Blob URL set:', blobUrl);
+                })
+                .catch(function (err) {
+                    console.error('[FETCH] Failed to load image:', finalUrl, 'Error:', err.message);
+                    if (typeof prevOnError === 'function') {
+                        try { prevOnError.call(imgEl); } catch (e) {}
+                    }
+                });
+        } else {
+            // Standard direct img.src for http/https protocol apps
+            console.log('[setImageSource] Using direct src for http(s) protocol');
+            imgEl.setAttribute('src', finalUrl);
+        }
     } else {
+        console.warn('[setImageSource] No valid URL, calling error handler');
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
     }
     return finalUrl;
+}
+
+/**
+ * Generate alternative image URL paths when primary fails
+ * Handles cases where API returns wrong folder structure
+ */
+function _generateAlternativeImagePaths(primaryUrl) {
+    var alts = [];
+    if (!primaryUrl) return alts;
+    
+    try {
+        // Try removing /netmon/cabletvapis prefix
+        if (primaryUrl.indexOf('/netmon/cabletvapis/') > -1) {
+            var withoutPrefix = primaryUrl.replace(/\/netmon\/cabletvapis\//g, '/');
+            if (withoutPrefix !== primaryUrl) {
+                alts.push(withoutPrefix);
+                if (window.__BBNL_DEBUG) console.log('[IMAGE] Alt path (no prefix):', withoutPrefix);
+            }
+        }
+        
+        // Try with /netmon/cabletvapis prefix (in case missing)
+        if (primaryUrl.indexOf('/netmon/cabletvapis/') === -1 && primaryUrl.indexOf('/images/') > -1) {
+            var withPrefix = primaryUrl.replace(/\/images\//g, '/netmon/cabletvapis/images/');
+            if (withPrefix !== primaryUrl) {
+                alts.push(withPrefix);
+                if (window.__BBNL_DEBUG) console.log('[IMAGE] Alt path (with prefix):', withPrefix);
+            }
+        }
+        
+        // Try moving /images to root level
+        if (primaryUrl.indexOf('/netmon/cabletvapis/images/') > -1) {
+            var rootImages = primaryUrl.replace(/\/netmon\/cabletvapis\//g, '/');
+            if (rootImages !== primaryUrl) {
+                alts.push(rootImages);
+                if (window.__BBNL_DEBUG) console.log('[IMAGE] Alt path (images at root):', rootImages);
+            }
+        }
+        
+        // Try replacing domain while keeping path (in case hostname changed)
+        var urlObj = new URL(primaryUrl, window.location.href);
+        var preferredOrigin = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL) 
+            ? new URL(BBNL_API.BASE_URL, window.location.href).origin 
+            : '';
+        
+        if (preferredOrigin && preferredOrigin !== urlObj.origin) {
+            var swappedHost = preferredOrigin + urlObj.pathname + (urlObj.search || '') + (urlObj.hash || '');
+            if (swappedHost !== primaryUrl) {
+                alts.push(swappedHost);
+                if (window.__BBNL_DEBUG) console.log('[IMAGE] Alt path (swapped host):', swappedHost);
+            }
+        }
+
+        // TV production payload frequently returns cdn1/cabletest paths that may be stale.
+        // Try known alternate hosts/folders using same filename.
+        var fileName = '';
+        try {
+            var p = urlObj.pathname || '';
+            var lastSlash = p.lastIndexOf('/');
+            fileName = (lastSlash > -1) ? p.substring(lastSlash + 1) : '';
+        } catch (eName) { fileName = ''; }
+
+        if (fileName) {
+            var hostCandidates = [
+                'https://netmontest.bbnl.in/netmon/assets/site_images/',
+                'http://netmontest.bbnl.in/netmon/assets/site_images/',
+                'https://images.bbnl.in/cabletest/',
+                'http://images.bbnl.in/cabletest/',
+                'https://netmontest.bbnl.in/netmon/cabletvapis/images/',
+                'http://netmontest.bbnl.in/netmon/cabletvapis/images/'
+            ];
+
+            for (var hi = 0; hi < hostCandidates.length; hi++) {
+                var candidate = hostCandidates[hi] + fileName;
+                if (candidate && candidate !== primaryUrl) {
+                    alts.push(candidate);
+                    if (window.__BBNL_DEBUG) console.log('[IMAGE] Alt path (filename host-swap):', candidate);
+                }
+            }
+
+            // Specific fallback for popup error images under errimgs.
+            if (/\/errimgs\//i.test(urlObj.pathname || '')) {
+                var errCandidates = [
+                    'https://netmontest.bbnl.in/netmon/assets/site_images/' + fileName,
+                    'http://netmontest.bbnl.in/netmon/assets/site_images/' + fileName
+                ];
+                for (var ei = 0; ei < errCandidates.length; ei++) {
+                    if (errCandidates[ei] !== primaryUrl) alts.push(errCandidates[ei]);
+                }
+            }
+        }
+    } catch (e) {
+        if (window.__BBNL_DEBUG) console.warn('[IMAGE] Error generating alternative paths:', e);
+    }
+
+    // De-duplicate while preserving order.
+    var seen = {};
+    var unique = [];
+    for (var i = 0; i < alts.length; i++) {
+        var u = String(alts[i] || '');
+        if (!u || seen[u]) continue;
+        seen[u] = true;
+        unique.push(u);
+    }
+
+    return unique;
 }
 
 function invalidateImageUrlCaches() {
@@ -297,6 +432,8 @@ function migrateImageCachesIfNeeded() {
         var current = localStorage.getItem('bbnl_image_cache_schema') || '0';
         if (current === IMAGE_CACHE_SCHEMA_VERSION) return;
 
+        console.log("[ImageCache] Performing migration from schema " + current + " to " + IMAGE_CACHE_SCHEMA_VERSION);
+
         // Remove image-related caches that may contain stale/legacy hosts from old builds.
         var localKeys = [
             'bbnl_error_images',
@@ -304,7 +441,7 @@ function migrateImageCachesIfNeeded() {
             'home_ads_cache_persistent'
         ];
         localKeys.forEach(function (k) {
-            try { localStorage.removeItem(k); } catch (e) {}
+            try { localStorage.removeItem(k); console.log("[ImageCache] Cleared: " + k); } catch (e) {}
         });
 
         var sessionKeys = [
@@ -314,7 +451,7 @@ function migrateImageCachesIfNeeded() {
             'home_fofi_logo_url'
         ];
         sessionKeys.forEach(function (k) {
-            try { sessionStorage.removeItem(k); } catch (e) {}
+            try { sessionStorage.removeItem(k); console.log("[ImageCache] Cleared: " + k); } catch (e) {}
         });
 
         // Clear dynamic channels cache buckets (channels_cache_*) that can carry stale logo fields.
@@ -327,13 +464,20 @@ function migrateImageCachesIfNeeded() {
                 }
             }
             toDelete.forEach(function (k) {
-                try { sessionStorage.removeItem(k); } catch (e) {}
+                try { sessionStorage.removeItem(k); console.log("[ImageCache] Cleared: " + k); } catch (e) {}
             });
         } catch (e2) {}
 
+        // CRITICAL: Also clear any image URL maps that may contain old hosts
+        try {
+            sessionStorage.removeItem('bbnl_image_cache_urls_v1');
+            console.log("[ImageCache] Cleared: bbnl_image_cache_urls_v1");
+        } catch (e_map) {}
+
         localStorage.setItem('bbnl_image_cache_schema', IMAGE_CACHE_SCHEMA_VERSION);
+        console.log("[ImageCache] Migration complete - all stale image URLs cleared");
     } catch (e3) {
-        // Ignore storage errors on constrained TVs.
+        console.warn("[ImageCache] Migration error:", e3);
     }
 }
 migrateImageCachesIfNeeded();
@@ -342,6 +486,18 @@ function resolveAssetUrl(rawUrl) {
     if (rawUrl === null || rawUrl === undefined) return '';
     var value = String(rawUrl).trim();
     if (!value) return '';
+
+    console.log('[resolveAssetUrl] Input:', value);
+
+    // Normalize malformed slashes/schemes often seen in backend payloads.
+    value = value.replace(/\\/g, '/');
+    value = value.replace(/^https?:\/(?!\/)/i, function (m) {
+        return /^https:/i.test(m) ? 'https://' : 'http://';
+    });
+    value = value.replace(/^([a-z]+):\/\/+/, '$1://');
+
+    // Only allow http/https URLs here.
+    if (/^[a-z]+:/i.test(value) && !/^https?:/i.test(value)) return '';
 
     var apiBase = String(API_CONFIG.BASE_URL || '').trim();
     var appOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null')
@@ -363,12 +519,11 @@ function resolveAssetUrl(rawUrl) {
         var host = String(hostname).toLowerCase();
         return host === 'localhost'
             || host === '127.0.0.1'
-            || host === '124.40.244.211'
             || host === '0.0.0.0';
     }
 
     if (preferredOrigin) {
-        value = value.replace(/^https?:\/\/(localhost|127\.0\.0\.1|124\.40\.244\.211|0\.0\.0\.0)(:\d+)?/i, preferredOrigin);
+           value = value.replace(/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i, preferredOrigin);
     }
 
     if (/^https?:\/\//i.test(value)) {
@@ -379,26 +534,31 @@ function resolveAssetUrl(rawUrl) {
                 return targetOrigin + parsedAbs.pathname + (parsedAbs.search || '') + (parsedAbs.hash || '');
             }
         } catch (eAbs) {}
+        console.log('[resolveAssetUrl] Output (absolute URL):', value);
         return value;
     }
     if (value.indexOf('//') === 0) {
         var result = ((typeof window !== 'undefined' && window.location && window.location.protocol) ? window.location.protocol : 'https:') + value;
+        console.log('[resolveAssetUrl] Output (protocol-relative):', result);
         return result;
     }
 
     try {
         if (value.charAt(0) === '/' && preferredOrigin) {
             var result = preferredOrigin + value;
+            console.log('[resolveAssetUrl] Output (absolute path):', result);
             return result;
         }
         if (apiBase) {
             var result = new URL(value, apiBase + '/').href;
+            console.log('[resolveAssetUrl] Output (relative URL):', result);
             return result;
         }
     } catch (e2) {
         console.warn("[resolveAssetUrl] Failed to resolve relative URL:", value, e2.message);
     }
 
+    console.log('[resolveAssetUrl] Output (pass-through):', value);
     return value;
 }
 
@@ -1278,6 +1438,21 @@ const DeviceInfo = {
     _detectPublicIP: function () {
         var self = this;
 
+        // Check if network changed by comparing cached local IP with current local IP
+        var currentLocalIP = DEVICE_INFO.ip_address || "";
+        var cachedLocalIP = sessionStorage.getItem('_lastLocalIP') || localStorage.getItem('_lastLocalIP') || "";
+        var networkChanged = (currentLocalIP && cachedLocalIP && currentLocalIP !== cachedLocalIP);
+        
+        if (networkChanged) {
+            console.log("[DeviceInfo] Network changed detected: " + cachedLocalIP + " → " + currentLocalIP + " | Clearing cached public IP");
+            try { sessionStorage.removeItem('_publicIP'); } catch (e) {}
+            try { localStorage.removeItem('_publicIP'); } catch (e) {}
+        }
+        
+        // Cache current local IP for next detection
+        try { sessionStorage.setItem('_lastLocalIP', currentLocalIP); } catch (e) {}
+        try { localStorage.setItem('_lastLocalIP', currentLocalIP); } catch (e) {}
+
         // If we already have a public IP from localStorage, skip external detection
         if (!this._isPrivateIP(DEVICE_INFO.ip_address)) {
             console.log("[DeviceInfo] Public IP already available from cache, skipping detection");
@@ -1285,15 +1460,26 @@ const DeviceInfo = {
             return;
         }
 
+        // On real Samsung TV builds, external IP services are frequently blocked and can throw URL scheme errors.
+        // Keep local IP (office/home LAN IP) and avoid noisy failing requests.
+        if (IS_TIZEN_TV) {
+            console.log("[DeviceInfo] Skipping external public IP lookup on Samsung TV; using local IP:", DEVICE_INFO.ip_address);
+            this._publicIPPromise = Promise.resolve(false);
+            return;
+        }
+
         var services = [
             'https://api.ipify.org?format=json',
-            'https://api64.ipify.org?format=json'
+            'https://api64.ipify.org?format=json',
+            'http://api.ipify.org?format=json',
+            'http://api64.ipify.org?format=json'
         ];
 
         this._publicIPPromise = new Promise(function (resolve) {
             function tryService(i) {
                 if (i >= services.length) {
-                    console.warn("[DeviceInfo] All public IP services failed");
+                    console.warn("[DeviceInfo] All public IP services failed - keeping local IP: " + currentLocalIP);
+                    console.log("[DeviceInfo] This is normal for office networks behind firewalls. Using local IP: " + DEVICE_INFO.ip_address);
                     resolve(false);
                     return;
                 }
@@ -2148,6 +2334,38 @@ const ChannelsAPI = {
             CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
             console.log("[ChannelsAPI] 💾 Cached " + channels.length + " channels (expires in 1 hour)");
 
+            // ==========================================
+            // DEBUG: Log exactly what logo URLs API returned
+            // ==========================================
+            var logoHostStats = {};
+            var sampleLogos = [];
+            for (var dci = 0; dci < Math.min(5, channels.length); dci++) {
+                var dch = channels[dci] || {};
+                var dlogo = dch.chlogo || dch.chnllogo || dch.logo_url || dch.channel_logo || dch.channellogo || dch.logo || dch.image || dch.img || '';
+                if (dlogo) sampleLogos.push('[' + (dch.chtitle || dch.chname || 'Channel') + '] ' + dlogo);
+            }
+            
+            for (var lci = 0; lci < channels.length; lci++) {
+                var lch = channels[lci] || {};
+                var llogo = lch.chlogo || lch.chnllogo || lch.logo_url || lch.channel_logo || lch.channellogo || lch.logo || lch.image || lch.img || '';
+                if (llogo) {
+                    // Extract host from URL
+                    var hostMatch = llogo.match(/https?:\/\/([^\/]+)/i);
+                    var host = hostMatch ? hostMatch[1] : 'relative-path';
+                    logoHostStats[host] = (logoHostStats[host] || 0) + 1;
+                }
+            }
+            
+            console.log("[ChannelsAPI] LOGO URLs SUMMARY - First 5 channels:");
+            sampleLogos.forEach(function(s) { console.log("  " + s); });
+            console.log("[ChannelsAPI] LOGO HOSTS DETECTED:");
+            Object.keys(logoHostStats).forEach(function(host) {
+                var count = logoHostStats[host];
+                var isOldHost = /^124\.40\.244\.211|localhost|127\.0\.0\.1/i.test(host);
+                var marker = isOldHost ? "⚠️ OLD HOST" : "✅";
+                console.log("  " + marker + " - " + host + ": " + count + " channels");
+            });
+            
             // Prime channel logos once so they do not reload on page switches.
             var channelImages = [];
             for (var ci = 0; ci < channels.length; ci++) {

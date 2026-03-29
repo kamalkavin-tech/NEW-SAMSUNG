@@ -171,6 +171,21 @@ video {
     object-fit: contain;
 }
 
+.info-bar-premium .channel-logo-box .channel-logo-fallback {
+    width: 100%;
+    height: 100%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e3a8a;
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 6px;
+}
+
 .info-bar-premium .channel-lcn {
     color: rgba(255, 255, 255, 0.75);
     font-size: 28px;

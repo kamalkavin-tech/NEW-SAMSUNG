@@ -1220,9 +1220,18 @@ function createChannelCard(ch) {
     if (chLogo) {
         const img = document.createElement("img");
         // Always prefer fresh validated API URL; do not use stale cached src values.
-        var normalizedLogo = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
-            ? BBNL_API.getValidatedImageUrl(chLogo)
-            : BBNL_API.resolveAssetUrl(chLogo);
+        var normalizedLogo = '';
+        if (typeof BBNL_API !== 'undefined') {
+            if (BBNL_API.getValidatedImageUrl) {
+                normalizedLogo = BBNL_API.getValidatedImageUrl(chLogo);
+            } else if (BBNL_API.resolveAssetUrl) {
+                normalizedLogo = BBNL_API.resolveAssetUrl(chLogo);
+            } else {
+                normalizedLogo = chLogo;
+            }
+        } else {
+            normalizedLogo = chLogo;
+        }
 
         var logoKey = normalizeChannelLogoKey(chLogo);
 
@@ -1241,8 +1250,34 @@ function createChannelCard(ch) {
                 channelLogoCache[logoKey] = true;
                 channelLogoSourceMap[logoKey] = this.src;
             }
+            // Remove placeholder if it's there
+            var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
+            if (placeholder) {
+                placeholder.style.display = 'none';
+            }
         };
+        
+        img.onerror = function () {
+            console.warn("[Channels] Logo failed to load: ch=" + chName + " url=" + this.src + " — showing channel name fallback");
+            // Image failed — show placeholder
+            var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
+            if (!placeholder) {
+                placeholder = document.createElement("div");
+                placeholder.className = "channel-logo-placeholder";
+                placeholder.innerHTML = '<span>' + (chName ? chName.substring(0, 2).toUpperCase() : '?') + '</span>';
+                logoDiv.appendChild(placeholder);
+            }
+            placeholder.style.display = 'flex';
+            this.style.display = 'none';
+        };
+        
         logoDiv.appendChild(img);
+    } else {
+        // No logo URL provided — show placeholder with channel name initials
+        var placeholder = document.createElement("div");
+        placeholder.className = "channel-logo-placeholder";
+        placeholder.innerHTML = '<span>' + (chName ? chName.substring(0, 2).toUpperCase() : '?') + '</span>';
+        logoDiv.appendChild(placeholder);
     }
     card.appendChild(logoDiv);
 

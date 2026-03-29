@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1920, user-scalable=no">
+    <!-- CSP for Samsung Tizen widget - allow fetch from any origin for image loading -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
     <title>Fo-Fi TV - OTT Apps</title>
     <!-- Base Styles -->
     <link rel="stylesheet" href="css/style.css">
@@ -41,7 +43,7 @@
     <div class="error-popup-overlay" id="noAppsPopup" style="display: none;">
         <div class="error-popup">
             <div class="error-popup-image">
-                <img id="errorImg_comingSoonOtt" src="" alt="Coming soon">
+                <img id="errorImg_comingSoonOtt" src="" alt="Coming soon" crossorigin="anonymous">
             </div>
             <h2 class="error-popup-title">Coming Soon</h2>
             <p class="error-popup-message">OTT Apps feature is coming soon. Stay tuned!</p>

@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://yourdomain/BBNLIPTV"
-    version="1.0.3"
+    version="1.0.4"
         viewmodes="maximized">
     
     <!-- Samsung TV profile -->
@@ -21,8 +21,11 @@
     <!-- ============================================ -->
     <!-- ACCESS ORIGINS (Allow external resources) -->
     <!-- ============================================ -->
-    <access origin="http://124.40.244.211" subdomains="true"/>
+    <!-- Wildcard for widget-to-external-resource fetch requests -->
+    <access origin="*" subdomains="true"/>
+    <!-- Specific domains -->
     <access origin="https://netmontest.bbnl.in" subdomains="true"/>
+    <access origin="http://netmontest.bbnl.in" subdomains="true"/>
     <!-- Stream domains - both HTTP and HTTPS -->
     <access origin="http://livestream.bbnl.in" subdomains="true"/>
     <access origin="https://livestream.bbnl.in" subdomains="true"/>
@@ -31,6 +34,21 @@
     <!-- Samsung HTTP/1.1 compatible server -->
     <access origin="http://livestream3.bbnl.in" subdomains="true"/>
     <access origin="https://livestream3.bbnl.in" subdomains="true"/>
+    <!-- Image & content CDN domains -->
+    <access origin="https://images.bbnl.in" subdomains="true"/>
+    <access origin="http://images.bbnl.in" subdomains="true"/>
+    <access origin="https://cdn1.bbnl.in" subdomains="true"/>
+    <access origin="http://cdn1.bbnl.in" subdomains="true"/>
+    <!-- External IP discovery endpoints (browser/emulator fallback) -->
+    <access origin="https://api.ipify.org" subdomains="false"/>
+    <access origin="http://api.ipify.org" subdomains="false"/>
+    <access origin="https://api64.ipify.org" subdomains="false"/>
+    <access origin="http://api64.ipify.org" subdomains="false"/>
+    
+    <!-- ============================================ -->
+    <!-- NAVIGATION WHITELIST (Allow navigation to external URLs) -->
+    <!-- ============================================ -->
+    <tizen:allow-navigation href="*"/>
     
     <!-- ============================================ -->
     <!-- NETWORK PRIVILEGES (CRITICAL FOR STREAMING) -->
