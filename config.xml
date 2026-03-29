@@ -23,9 +23,9 @@
     <!-- ============================================ -->
     <!-- Wildcard for widget-to-external-resource fetch requests -->
     <access origin="*" subdomains="true"/>
-    <!-- Specific domains -->
-    <access origin="https://netmontest.bbnl.in" subdomains="true"/>
-    <access origin="http://netmontest.bbnl.in" subdomains="true"/>
+    <!-- Production API domain -->
+    <access origin="https://bbnlnetmon.bbnl.in" subdomains="true"/>
+    <access origin="http://bbnlnetmon.bbnl.in" subdomains="true"/>
     <!-- Stream domains - both HTTP and HTTPS -->
     <access origin="http://livestream.bbnl.in" subdomains="true"/>
     <access origin="https://livestream.bbnl.in" subdomains="true"/>

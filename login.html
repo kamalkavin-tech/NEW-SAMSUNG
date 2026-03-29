@@ -13,14 +13,25 @@
         (function () {
             try {
                 // Always clear FoFi flag on every app launch (login.html is the entry point).
-                // Ensures FoFi auto-plays on re-launch even if TV suspended the app
-                // instead of killing it (sessionStorage would otherwise persist).
                 sessionStorage.removeItem('fofi_autoplay_done');
                 sessionStorage.removeItem('home_init_done');
 
                 if (localStorage.getItem("hasLoggedInOnce") === "true") {
                     var ud = localStorage.getItem("bbnl_user");
-                    if (ud && JSON.parse(ud).userid) {
+                    var parsed = null;
+                    try { parsed = ud ? JSON.parse(ud) : null; } catch (e) { parsed = null; }
+
+                    // If primary session data is corrupted/missing, try backup
+                    if (!parsed || !parsed.userid) {
+                        var backup = localStorage.getItem("bbnl_user_backup");
+                        try { parsed = backup ? JSON.parse(backup) : null; } catch (e) { parsed = null; }
+                        if (parsed && parsed.userid) {
+                            // Restore from backup
+                            localStorage.setItem("bbnl_user", JSON.stringify(parsed));
+                        }
+                    }
+
+                    if (parsed && parsed.userid) {
                         window.location.replace("home.html");
                     }
                 }

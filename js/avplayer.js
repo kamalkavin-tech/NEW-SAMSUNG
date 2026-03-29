@@ -6,6 +6,10 @@
  */
 
 var AVPlayer = (function () {
+    // Production mode: suppress verbose logging for performance on Samsung TV hardware
+    var _VERBOSE = false;
+    function _log() { if (_VERBOSE) console.log.apply(console, arguments); }
+
     var playerState = "NONE";
     var avplay = null;
     var isTizenProp = false;
@@ -43,7 +47,7 @@ var AVPlayer = (function () {
         try {
             if (typeof tizen !== 'undefined' && tizen.tvwindow) {
                 tvWindow = tizen.tvwindow;
-                console.log("[AVPlayer] ✓ TV Window API available for FTA playback");
+                _log("[AVPlayer] ✓ TV Window API available for FTA playback");
                 return true;
             }
         } catch (e) {
@@ -101,13 +105,13 @@ var AVPlayer = (function () {
 
         var originalUrl = url;
         if (url.includes('127.0.0.1') || url.includes('localhost')) {
-            console.log("[AVPlayer] ⚠️⚠️⚠️ LOCALHOST URL DETECTED ⚠️⚠️⚠️");
-            console.log("[AVPlayer] Original URL:", originalUrl);
+            _log("[AVPlayer] ⚠️⚠️⚠️ LOCALHOST URL DETECTED ⚠️⚠️⚠️");
+            _log("[AVPlayer] Original URL:", originalUrl);
 
             url = url.replace(/127\.0\.0\.1/g, SERVER_IP);
             url = url.replace(/localhost/g, SERVER_IP);
 
-            console.log("[AVPlayer] ✓ Fixed URL:", url);
+            _log("[AVPlayer] ✓ Fixed URL:", url);
         }
 
         return url;
@@ -119,7 +123,7 @@ var AVPlayer = (function () {
     function tryHttpFallback(url) {
         if (url && url.startsWith('https://')) {
             var httpUrl = url.replace('https://', 'http://');
-            console.log("[AVPlayer] 🔄 HTTP Fallback URL:", httpUrl);
+            _log("[AVPlayer] 🔄 HTTP Fallback URL:", httpUrl);
             return httpUrl;
         }
         return url;
@@ -138,7 +142,7 @@ var AVPlayer = (function () {
 
     return {
         init: function (options) {
-            console.log("[AVPlayer] Init called");
+            _log("[AVPlayer] Init called");
             checkEnv();
             checkTVWindowEnv(); // Check for FTA/DVB support
             if (options && options.callbacks) {
@@ -167,7 +171,7 @@ var AVPlayer = (function () {
                 ];
 
                 var headerString = httpHeaders.join("|");
-                console.log("[AVPlayer] Setting HTTP headers (browser-like)");
+                _log("[AVPlayer] Setting HTTP headers (browser-like)");
                 avplay.setStreamingProperty("CUSTOM_MESSAGE", headerString);
 
             } catch (e) {
@@ -175,22 +179,15 @@ var AVPlayer = (function () {
             }
 
             try {
-                // Set adaptive streaming properties
+                // Start with lowest bitrate for fastest initial playback
                 avplay.setStreamingProperty("ADAPTIVE_INFO", "BITRATES=LOWEST|LOW|MEDIUM");
                 avplay.setStreamingProperty("START_BITRATE", "LOWEST");
-                console.log("[AVPlayer] Adaptive streaming configured");
+            } catch (e) {}
 
-            } catch (e) {
-                console.warn("[AVPlayer] Streaming properties warning:", e);
-            }
-
-            // Try to set SSL verification (for self-signed certs)
+            // Enable prebuffering for faster perceived start
             try {
-                avplay.setStreamingProperty("SET_MODE_4K", "FALSE");
-                console.log("[AVPlayer] 4K mode disabled for compatibility");
-            } catch (e) {
-                // Ignore if not supported
-            }
+                avplay.setStreamingProperty("PREBUFFER_MODE", "0");
+            } catch (e) {}
         },
 
         setUrl: function (url) {
@@ -200,10 +197,10 @@ var AVPlayer = (function () {
             }
 
             try {
-                console.log("[AVPlayer] ========================================");
-                console.log("[AVPlayer] STARTING STREAM SETUP");
-                console.log("[AVPlayer] Original URL:", url);
-                console.log("[AVPlayer] ========================================");
+                _log("[AVPlayer] ========================================");
+                _log("[AVPlayer] STARTING STREAM SETUP");
+                _log("[AVPlayer] Original URL:", url);
+                _log("[AVPlayer] ========================================");
 
                 // Validate and clean URL
                 if (!url || url.trim() === "") {
@@ -216,72 +213,58 @@ var AVPlayer = (function () {
                 url = fixLocalhostUrl(url);
 
                 currentStreamUrl = url;
-                console.log("[AVPlayer] Final URL to use:", url);
 
-                // STEP 1: Complete cleanup
-                try {
-                    console.log("[AVPlayer] Cleaning up previous instance...");
-                    avplay.stop();
-                    avplay.close();
-                    playerState = "NONE";
-                    console.log("[AVPlayer] ✓ Cleanup complete");
-                } catch (cleanupError) {
-                    console.log("[AVPlayer] No previous instance to clean");
-                }
+                // NOTE: No stop/close here — changeStream() already called destroy().
+                // Double stop/close on Samsung TV freezes the hardware decoder (black screen).
 
-                // Minimal delay for cleanup to complete
+                // Minimal delay for Samsung TV hardware to release decoder after destroy()
                 var self = this;
                 var myGeneration = _streamGeneration;
                 _setUrlTimer = setTimeout(function () {
                     _setUrlTimer = null;
-                    // Abort if a newer changeStream call has been made
+                    // Abort if a newer changeStream call was made during the delay
                     if (myGeneration !== _streamGeneration) {
-                        console.log("[AVPlayer] setUrl aborted — stale generation", myGeneration, "vs", _streamGeneration);
+                        _log("[AVPlayer] setUrl aborted — stale generation", myGeneration, "vs", _streamGeneration);
                         return;
                     }
                     try {
                         // STEP 2: Open stream FIRST (required before setting properties)
-                        console.log("[AVPlayer] Opening stream...");
+                        _log("[AVPlayer] Opening stream...");
                         avplay.open(url);
                         playerState = "IDLE";
-                        console.log("[AVPlayer] ✓ Stream opened");
+                        _log("[AVPlayer] ✓ Stream opened");
 
                         // STEP 3: Set HTTP headers AFTER opening (Samsung TV requirement)
-                        console.log("[AVPlayer] Setting streaming headers...");
+                        _log("[AVPlayer] Setting streaming headers...");
                         self.setStreamingHeaders(url);
-                        console.log("[AVPlayer] ✓ Headers set");
+                        _log("[AVPlayer] ✓ Headers set");
 
-                        // STEP 4: Configure timeout and buffering (ULTRA-FAST START)
+                        // STEP 4: Configure buffering (Samsung recommended values)
+                        // API reference: https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html
                         try {
-                            console.log("[AVPlayer] Configuring ULTRA-FAST buffering...");
+                            // setTimeoutForBuffering takes SECONDS (not ms!)
+                            // Default is 20s. Samsung recommends 3-10s for IPTV.
+                            avplay.setTimeoutForBuffering(8);
 
-                            // AGGRESSIVE: Minimum buffering for instant start
-                            avplay.setTimeoutForBuffering(2000); // 2 seconds timeout (very fast)
+                            // Initial buffer: 3 seconds (Samsung minimum recommended for stable playback)
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
 
-                            // CRITICAL: Reduce to MINIMUM buffer (1 second for play, 1 second for resume)
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
+                            // Resume buffer after stall: 8 seconds (prevents repeated re-buffering)
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
 
-                            // Try to set even more aggressive buffering if supported
-                            try {
-                                avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_BYTE", 1024 * 100); // 100KB min
-                            } catch (e) {
-                                console.log("[AVPlayer] Byte-based buffering not supported");
-                            }
-
-                            console.log("[AVPlayer] ✓ ULTRA-FAST buffering configured (1s initial)");
+                            // NOTE: PLAYER_BUFFER_SIZE_IN_BYTE is deprecated since Tizen 5.0 — removed.
                         } catch (bufferError) {
                             console.warn("[AVPlayer] Buffering config warning:", bufferError);
                         }
 
                         // STEP 5: Set display rectangle and method for FULL SCREEN
                         try {
-                            console.log("[AVPlayer] Setting FULL SCREEN display (1920x1080)...");
+                            _log("[AVPlayer] Setting FULL SCREEN display (1920x1080)...");
                             
                             // CRITICAL: Set display area to full screen dimensions (1920x1080)
                             // x=0, y=0, width=1920, height=1080
                             avplay.setDisplayRect(0, 0, 1920, 1080);
-                            console.log("[AVPlayer] ✓ Display rect set: 0, 0, 1920, 1080");
+                            _log("[AVPlayer] ✓ Display rect set: 0, 0, 1920, 1080");
 
                             // Try multiple display modes for TRUE FULL SCREEN (no black bars)
                             var displayModeSet = false;
@@ -290,20 +273,20 @@ var AVPlayer = (function () {
                             // Best for filling 100% of TV screen without any borders
                             try {
                                 avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
-                                console.log("[AVPlayer] ✓ Display method: FULL_SCREEN (fills entire screen, no black bars)");
+                                _log("[AVPlayer] ✓ Display method: FULL_SCREEN (fills entire screen, no black bars)");
                                 displayModeSet = true;
                             } catch (e1) {
-                                console.log("[AVPlayer] FULL_SCREEN not available, trying ZOOM_16_9...");
+                                _log("[AVPlayer] FULL_SCREEN not available, trying ZOOM_16_9...");
                             }
                             
                             // Option 2: ZOOM_16_9 - Zooms to 16:9 ratio, fills screen
                             if (!displayModeSet) {
                                 try {
                                     avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9');
-                                    console.log("[AVPlayer] ✓ Display method: ZOOM_16_9 (fills 16:9 screen)");
+                                    _log("[AVPlayer] ✓ Display method: ZOOM_16_9 (fills 16:9 screen)");
                                     displayModeSet = true;
                                 } catch (e2) {
-                                    console.log("[AVPlayer] ZOOM_16_9 not available, trying ZOOM...");
+                                    _log("[AVPlayer] ZOOM_16_9 not available, trying ZOOM...");
                                 }
                             }
                             
@@ -311,10 +294,10 @@ var AVPlayer = (function () {
                             if (!displayModeSet) {
                                 try {
                                     avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM');
-                                    console.log("[AVPlayer] ✓ Display method: ZOOM (zooms to fill)");
+                                    _log("[AVPlayer] ✓ Display method: ZOOM (zooms to fill)");
                                     displayModeSet = true;
                                 } catch (e3) {
-                                    console.log("[AVPlayer] ZOOM not available, trying AUTO_ASPECT_RATIO...");
+                                    _log("[AVPlayer] ZOOM not available, trying AUTO_ASPECT_RATIO...");
                                 }
                             }
                             
@@ -322,22 +305,22 @@ var AVPlayer = (function () {
                             if (!displayModeSet) {
                                 try {
                                     avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
-                                    console.log("[AVPlayer] ✓ Display method: AUTO_ASPECT_RATIO");
+                                    _log("[AVPlayer] ✓ Display method: AUTO_ASPECT_RATIO");
                                     displayModeSet = true;
                                 } catch (e4) {
                                     console.warn("[AVPlayer] No display method could be set, using default");
                                 }
                             }
 
-                            console.log("[AVPlayer] ✓ FULL SCREEN display configured");
+                            _log("[AVPlayer] ✓ FULL SCREEN display configured");
                         } catch (displayError) {
                             console.error("[AVPlayer] Display error:", displayError);
                         }
 
-                        console.log("[AVPlayer] ========================================");
-                        console.log("[AVPlayer] ✓✓✓ STREAM SETUP COMPLETE ✓✓✓");
-                        console.log("[AVPlayer] Ready to play:", currentStreamUrl);
-                        console.log("[AVPlayer] ========================================");
+                        _log("[AVPlayer] ========================================");
+                        _log("[AVPlayer] ✓✓✓ STREAM SETUP COMPLETE ✓✓✓");
+                        _log("[AVPlayer] Ready to play:", currentStreamUrl);
+                        _log("[AVPlayer] ========================================");
 
                     } catch (setupError) {
                         console.error("[AVPlayer] ========================================");
@@ -353,7 +336,7 @@ var AVPlayer = (function () {
                             });
                         }
                     }
-                }, 10); // ULTRA-FAST: Minimal 10ms delay for instant start
+                }, 10); // 10ms: minimum delay for Samsung TV hardware decoder release
 
             } catch (e) {
                 console.error("[AVPlayer] setUrl Exception:", e);
@@ -370,34 +353,34 @@ var AVPlayer = (function () {
             }
 
             try {
-                console.log("[AVPlayer] ========================================");
-                console.log("[AVPlayer] STARTING PLAYBACK");
-                console.log("[AVPlayer] Current state:", playerState);
-                console.log("[AVPlayer] Stream URL:", currentStreamUrl);
-                console.log("[AVPlayer] ========================================");
+                _log("[AVPlayer] ========================================");
+                _log("[AVPlayer] STARTING PLAYBACK");
+                _log("[AVPlayer] Current state:", playerState);
+                _log("[AVPlayer] Stream URL:", currentStreamUrl);
+                _log("[AVPlayer] ========================================");
 
                 if (playerState === "IDLE") {
                     // SAMSUNG TV REQUIREMENT: Always use prepareAsync before play
                     // Direct play without prepare causes InvalidAccessError on real TV
-                    console.log("[AVPlayer] Preparing stream (prepareAsync required for Samsung TV)...");
+                    _log("[AVPlayer] Preparing stream (prepareAsync required for Samsung TV)...");
 
                     var playGeneration = _streamGeneration;
                     avplay.prepareAsync(
                         function () {
                             if (playGeneration !== _streamGeneration) {
-                                console.log("[AVPlayer] prepareAsync success aborted — stale generation", playGeneration, "vs", _streamGeneration);
+                                _log("[AVPlayer] prepareAsync success aborted — stale generation", playGeneration, "vs", _streamGeneration);
                                 return;
                             }
-                            console.log("[AVPlayer] ✓✓✓ PREPARE SUCCESS ✓✓✓");
+                            _log("[AVPlayer] ✓✓✓ PREPARE SUCCESS ✓✓✓");
                             playerState = "READY";
 
                             try {
-                                console.log("[AVPlayer] Starting playback...");
+                                _log("[AVPlayer] Starting playback...");
                                 avplay.play();
                                 playerState = "PLAYING";
-                                console.log("[AVPlayer] ========================================");
-                                console.log("[AVPlayer] ✓✓✓ PLAYBACK STARTED SUCCESSFULLY ✓✓✓");
-                                console.log("[AVPlayer] ========================================");
+                                _log("[AVPlayer] ========================================");
+                                _log("[AVPlayer] ✓✓✓ PLAYBACK STARTED SUCCESSFULLY ✓✓✓");
+                                _log("[AVPlayer] ========================================");
                             } catch (playError) {
                                 console.error("[AVPlayer] ✗✗✗ PLAY FAILED ✗✗✗");
                                 console.error("[AVPlayer] Error:", playError);
@@ -408,7 +391,7 @@ var AVPlayer = (function () {
                         },
                         function (prepareError) {
                             if (playGeneration !== _streamGeneration) {
-                                console.log("[AVPlayer] prepareAsync error ignored — stale generation", playGeneration, "vs", _streamGeneration);
+                                _log("[AVPlayer] prepareAsync error ignored — stale generation", playGeneration, "vs", _streamGeneration);
                                 return;
                             }
                             console.error("[AVPlayer] ========================================");
@@ -429,17 +412,17 @@ var AVPlayer = (function () {
                     );
 
                 } else if (playerState === "PAUSED") {
-                    console.log("[AVPlayer] Resuming from pause...");
+                    _log("[AVPlayer] Resuming from pause...");
                     avplay.play();
                     playerState = "PLAYING";
-                    console.log("[AVPlayer] ✓ Resumed");
+                    _log("[AVPlayer] ✓ Resumed");
                 } else if (playerState === "READY") {
-                    console.log("[AVPlayer] Already prepared, playing...");
+                    _log("[AVPlayer] Already prepared, playing...");
                     avplay.play();
                     playerState = "PLAYING";
-                    console.log("[AVPlayer] ✓ Playing");
+                    _log("[AVPlayer] ✓ Playing");
                 } else {
-                    console.log("[AVPlayer] Attempting direct play...");
+                    _log("[AVPlayer] Attempting direct play...");
                     avplay.play();
                     playerState = "PLAYING";
                 }
@@ -456,7 +439,7 @@ var AVPlayer = (function () {
             try {
                 avplay.pause();
                 playerState = "PAUSED";
-                console.log("[AVPlayer] Paused");
+                _log("[AVPlayer] Paused");
             } catch (e) {
                 console.error("[AVPlayer] Pause Error", e);
             }
@@ -473,7 +456,7 @@ var AVPlayer = (function () {
             try {
                 avplay.stop();
                 playerState = "IDLE";
-                console.log("[AVPlayer] Stopped");
+                _log("[AVPlayer] Stopped");
             } catch (e) {
                 console.error("[AVPlayer] Stop Error", e);
             }
@@ -484,23 +467,20 @@ var AVPlayer = (function () {
             if (isDVBStream) {
                 this.stopDVBStream();
             }
-            
+
             if (!isTizenProp) return;
-            try {
-                console.log("[AVPlayer] Destroying player...");
-                avplay.stop();
-                avplay.close();
-                playerState = "NONE";
-                currentStreamUrl = "";
-                isDVBStream = false;
-                console.log("[AVPlayer] ✓ Destroyed");
-            } catch (e) {
-                console.log("[AVPlayer] Destroy cleanup:", e);
-            }
+            // CRITICAL: stop() and close() in SEPARATE try-catch blocks.
+            // If stop() throws (player already stopped / first launch), close() MUST still run.
+            // Without this, avplay.open() on an unclosed player freezes Samsung TV hardware.
+            try { avplay.stop(); } catch (e) {}
+            try { avplay.close(); } catch (e) {}
+            playerState = "NONE";
+            currentStreamUrl = "";
+            isDVBStream = false;
         },
 
         changeStream: function (url) {
-            console.log("[AVPlayer] Changing stream to:", url);
+            _log("[AVPlayer] Changing stream to:", url);
 
             // CRITICAL: Cancel any pending timers from previous changeStream calls
             if (_setUrlTimer) { clearTimeout(_setUrlTimer); _setUrlTimer = null; }
@@ -510,11 +490,11 @@ var AVPlayer = (function () {
             // Increment generation — all stale callbacks will check and abort
             _streamGeneration++;
             var myGeneration = _streamGeneration;
-            console.log("[AVPlayer] Stream generation:", myGeneration);
+            _log("[AVPlayer] Stream generation:", myGeneration);
 
             // Check if this is a DVB/FTA stream
             if (isDVBUrl(url)) {
-                console.log("[AVPlayer] DVB/FTA stream detected");
+                _log("[AVPlayer] DVB/FTA stream detected");
                 this.playDVBStream(url);
                 return;
             }
@@ -532,7 +512,7 @@ var AVPlayer = (function () {
                 _playTimer = null;
                 // Abort if a newer changeStream call has been made
                 if (myGeneration !== _streamGeneration) {
-                    console.log("[AVPlayer] play() aborted — stale generation", myGeneration, "vs", _streamGeneration);
+                    _log("[AVPlayer] play() aborted — stale generation", myGeneration, "vs", _streamGeneration);
                     return;
                 }
                 self.play();
@@ -544,23 +524,19 @@ var AVPlayer = (function () {
          * @param {string} url - DVB URL like dvb://ONID.TSID.SID
          */
         playDVBStream: function (url) {
-            console.log("[AVPlayer] ========================================");
-            console.log("[AVPlayer] 📡 STARTING DVB/FTA PLAYBACK");
-            console.log("[AVPlayer] DVB URL:", url);
-            console.log("[AVPlayer] ========================================");
+            _log("[AVPlayer] ========================================");
+            _log("[AVPlayer] 📡 STARTING DVB/FTA PLAYBACK");
+            _log("[AVPlayer] DVB URL:", url);
+            _log("[AVPlayer] ========================================");
             
             isDVBStream = true;
             currentStreamUrl = url;
             
-            // Stop any current IPTV playback
-            try {
-                if (avplay && playerState !== "NONE") {
-                    avplay.stop();
-                    avplay.close();
-                    playerState = "NONE";
-                }
-            } catch (e) {
-                console.log("[AVPlayer] Cleanup before DVB:", e);
+            // Stop any current IPTV playback (separate try-catch to prevent freeze)
+            if (avplay && playerState !== "NONE") {
+                try { avplay.stop(); } catch (e) {}
+                try { avplay.close(); } catch (e) {}
+                playerState = "NONE";
             }
             
             // Check if TV Window API is available
@@ -572,7 +548,7 @@ var AVPlayer = (function () {
                 try {
                     // Get available video sources
                     var videoSourceList = tvWindow.getAvailableWindows();
-                    console.log("[AVPlayer] Available video sources:", videoSourceList);
+                    _log("[AVPlayer] Available video sources:", videoSourceList);
                     
                     // Show TV window in full screen (MAIN window)
                     // Rectangle: [x, y, width, height] - full screen 1920x1080
@@ -581,7 +557,7 @@ var AVPlayer = (function () {
                     // Show the broadcast TV window
                     tvWindow.show(
                         function() {
-                            console.log("[AVPlayer] ✓✓✓ DVB/FTA WINDOW SHOWN FULLSCREEN ✓✓✓");
+                            _log("[AVPlayer] ✓✓✓ DVB/FTA WINDOW SHOWN FULLSCREEN ✓✓✓");
                             playerState = "PLAYING";
                             
                             // Notify buffering complete
@@ -604,7 +580,7 @@ var AVPlayer = (function () {
                     if (typeof tizen !== 'undefined' && tizen.tvchannel) {
                         var dvbParams = parseDVBUrl(url);
                         if (dvbParams) {
-                            console.log("[AVPlayer] DVB params:", dvbParams);
+                            _log("[AVPlayer] DVB params:", dvbParams);
                             // The tuning would happen via tizen.tvchannel.tune() if needed
                             // For now, tvwindow.show displays the current broadcast
                         }
@@ -618,14 +594,14 @@ var AVPlayer = (function () {
                 }
             } else {
                 // Fallback: Try using AVPlay with DVB URL (some Samsung TVs support this)
-                console.log("[AVPlayer] TV Window not available, trying AVPlay for DVB...");
+                _log("[AVPlayer] TV Window not available, trying AVPlay for DVB...");
                 try {
                     this.destroy();
                     avplay.open(url);
                     avplay.setDisplayRect(0, 0, 1920, 1080);
                     try {
                         avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
-                        console.log("[AVPlayer] ✓ Display: FULL_SCREEN (no black bars)");
+                        _log("[AVPlayer] ✓ Display: FULL_SCREEN (no black bars)");
                     } catch (e) {
                         try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9'); } catch (e2) {
                             try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e3) {}
@@ -633,7 +609,7 @@ var AVPlayer = (function () {
                     }
                     avplay.prepareAsync(
                         function() {
-                            console.log("[AVPlayer] ✓ DVB via AVPlay prepared");
+                            _log("[AVPlayer] ✓ DVB via AVPlay prepared");
                             avplay.play();
                             playerState = "PLAYING";
                         },
@@ -659,13 +635,13 @@ var AVPlayer = (function () {
         stopDVBStream: function () {
             if (!isDVBStream) return;
             
-            console.log("[AVPlayer] Stopping DVB/FTA stream...");
+            _log("[AVPlayer] Stopping DVB/FTA stream...");
             
             if (tvWindow) {
                 try {
                     tvWindow.hide(
                         function() {
-                            console.log("[AVPlayer] ✓ DVB window hidden");
+                            _log("[AVPlayer] ✓ DVB window hidden");
                         },
                         function(error) {
                             console.warn("[AVPlayer] DVB hide error:", error);
@@ -707,7 +683,7 @@ var AVPlayer = (function () {
                 var currentTime = this.getCurrentTime();
                 var newTime = currentTime + milliseconds;
                 avplay.jumpForward(milliseconds);
-                console.log("[AVPlayer] Jumped forward:", milliseconds, "ms to", newTime);
+                _log("[AVPlayer] Jumped forward:", milliseconds, "ms to", newTime);
             } catch (e) {
                 console.warn("[AVPlayer] Jump forward not supported:", e);
             }
@@ -719,7 +695,7 @@ var AVPlayer = (function () {
                 var currentTime = this.getCurrentTime();
                 var newTime = Math.max(0, currentTime - milliseconds);
                 avplay.jumpBackward(milliseconds);
-                console.log("[AVPlayer] Jumped backward:", milliseconds, "ms to", newTime);
+                _log("[AVPlayer] Jumped backward:", milliseconds, "ms to", newTime);
             } catch (e) {
                 console.warn("[AVPlayer] Jump backward not supported:", e);
             }
@@ -733,7 +709,7 @@ var AVPlayer = (function () {
             try {
                 avplay.seekTo(milliseconds,
                     function() {
-                        console.log("[AVPlayer] Seeked to:", milliseconds);
+                        _log("[AVPlayer] Seeked to:", milliseconds);
                         if (successCallback) successCallback();
                     },
                     function(err) {
@@ -758,19 +734,19 @@ var AVPlayer = (function () {
             if (isTizenProp) {
                 var listener = {
                     onbufferingstart: function () {
-                        console.log("[AVPlayer] ►►► BUFFERING STARTED ◄◄◄");
+                        _log("[AVPlayer] ►►► BUFFERING STARTED ◄◄◄");
                         eventCallbacks.onBufferingStart();
                     },
                     onbufferingprogress: function (percent) {
-                        console.log("[AVPlayer] Buffering:", percent + "%");
+                        _log("[AVPlayer] Buffering:", percent + "%");
                         eventCallbacks.onBufferingProgress(percent);
                     },
                     onbufferingcomplete: function () {
-                        console.log("[AVPlayer] ►►► BUFFERING COMPLETE ◄◄◄");
+                        _log("[AVPlayer] ►►► BUFFERING COMPLETE ◄◄◄");
                         eventCallbacks.onBufferingComplete();
                     },
                     onstreamcompleted: function () {
-                        console.log("[AVPlayer] Stream completed");
+                        _log("[AVPlayer] Stream completed");
                         eventCallbacks.onStreamCompleted();
                     },
                     oncurrentplaytime: function (time) {
@@ -796,21 +772,19 @@ var AVPlayer = (function () {
                             httpsFailedUrls[currentStreamUrl] = true;
                             var httpUrl = tryHttpFallback(currentStreamUrl);
 
-                            console.log("[AVPlayer] 🔄 HTTPS failed, auto-retrying with HTTP...");
-                            console.log("[AVPlayer] HTTP URL:", httpUrl);
+                            _log("[AVPlayer] 🔄 HTTPS failed, auto-retrying with HTTP...");
+                            _log("[AVPlayer] HTTP URL:", httpUrl);
 
                             // Try HTTP version (tracked timer so changeStream can cancel it)
                             _httpFallbackTimer = setTimeout(function() {
                                 _httpFallbackTimer = null;
                                 // Abort if user already switched channels
                                 if (errorGeneration !== _streamGeneration) {
-                                    console.log("[AVPlayer] HTTP fallback aborted — stale generation", errorGeneration, "vs", _streamGeneration);
+                                    _log("[AVPlayer] HTTP fallback aborted — stale generation", errorGeneration, "vs", _streamGeneration);
                                     return;
                                 }
-                                try {
-                                    avplay.stop();
-                                    avplay.close();
-                                } catch(e) {}
+                                try { avplay.stop(); } catch(e) {}
+                                try { avplay.close(); } catch(e) {}
 
                                 try {
                                     avplay.open(httpUrl);
@@ -818,7 +792,7 @@ var AVPlayer = (function () {
                                     avplay.setDisplayRect(0, 0, 1920, 1080);
                                     try {
                                         avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
-                                        console.log("[AVPlayer] ✓ HTTP fallback: Display FULL_SCREEN");
+                                        _log("[AVPlayer] ✓ HTTP fallback: Display FULL_SCREEN");
                                     } catch (e) {
                                         try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9'); } catch (e2) {
                                             try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e3) {}
@@ -828,11 +802,11 @@ var AVPlayer = (function () {
                                         function() {
                                             // Abort if user switched channels during prepare
                                             if (errorGeneration !== _streamGeneration) {
-                                                console.log("[AVPlayer] HTTP fallback play aborted — stale generation");
-                                                try { avplay.stop(); avplay.close(); } catch(ig) {}
+                                                _log("[AVPlayer] HTTP fallback play aborted — stale generation");
+                                                try { avplay.stop(); } catch(ig) {} try { avplay.close(); } catch(ig) {}
                                                 return;
                                             }
-                                            console.log("[AVPlayer] ✓ HTTP fallback succeeded!");
+                                            _log("[AVPlayer] ✓ HTTP fallback succeeded!");
                                             avplay.play();
                                             playerState = "PLAYING";
                                         },
@@ -855,7 +829,7 @@ var AVPlayer = (function () {
 
                         // Suppress stale errors from previous channel
                         if (errorGeneration !== _streamGeneration) {
-                            console.log("[AVPlayer] Error suppressed — stale generation", errorGeneration, "vs", _streamGeneration);
+                            _log("[AVPlayer] Error suppressed — stale generation", errorGeneration, "vs", _streamGeneration);
                             return;
                         }
 
@@ -899,7 +873,7 @@ var AVPlayer = (function () {
                     },
 
                     onevent: function (eventType, eventData) {
-                        console.log("[AVPlayer] Event:", eventType, eventData);
+                        _log("[AVPlayer] Event:", eventType, eventData);
                         eventCallbacks.onEvent(eventType, eventData);
                     },
 
@@ -908,13 +882,13 @@ var AVPlayer = (function () {
                     },
 
                     ondrmevent: function (drmEvent, drmData) {
-                        console.log("[AVPlayer] DRM Event:", drmEvent);
+                        _log("[AVPlayer] DRM Event:", drmEvent);
                     }
                 };
 
                 try {
                     avplay.setListener(listener);
-                    console.log("[AVPlayer] ✓ Listener registered successfully");
+                    _log("[AVPlayer] ✓ Listener registered successfully");
                 } catch (e) {
                     console.error("[AVPlayer] SetListener Failed:", e);
                 }
@@ -925,28 +899,28 @@ var AVPlayer = (function () {
          * Test if a stream URL is accessible before trying to play it
          */
         testStreamUrl: function (url, callback) {
-            console.log("[AVPlayer] ========================================");
-            console.log("[AVPlayer] TESTING STREAM ACCESSIBILITY");
-            console.log("[AVPlayer] URL:", url);
-            console.log("[AVPlayer] ========================================");
+            _log("[AVPlayer] ========================================");
+            _log("[AVPlayer] TESTING STREAM ACCESSIBILITY");
+            _log("[AVPlayer] URL:", url);
+            _log("[AVPlayer] ========================================");
 
             // Fix localhost URLs before testing
             url = fixLocalhostUrl(url);
-            console.log("[AVPlayer] Testing URL (after localhost fix):", url);
+            _log("[AVPlayer] Testing URL (after localhost fix):", url);
 
             fetch(url, {
                 method: 'GET',
                 mode: 'cors'
             })
                 .then(function (response) {
-                    console.log("[AVPlayer] ✓ Stream test response:", response.status);
+                    _log("[AVPlayer] ✓ Stream test response:", response.status);
                     return response.text();
                 })
                 .then(function (data) {
-                    console.log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
-                    console.log("[AVPlayer] M3U8 content preview:");
+                    _log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
+                    _log("[AVPlayer] M3U8 content preview:");
                     console.log(data.substring(0, 300));
-                    console.log("[AVPlayer] ========================================");
+                    _log("[AVPlayer] ========================================");
                     if (callback) callback(true, data);
                 })
                 .catch(function (error) {
@@ -964,10 +938,10 @@ var AVPlayer = (function () {
          */
         testWithPublicStream: function () {
             var testUrl = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
-            console.log("[AVPlayer] ========================================");
-            console.log("[AVPlayer] TESTING WITH PUBLIC STREAM");
-            console.log("[AVPlayer] URL:", testUrl);
-            console.log("[AVPlayer] ========================================");
+            _log("[AVPlayer] ========================================");
+            _log("[AVPlayer] TESTING WITH PUBLIC STREAM");
+            _log("[AVPlayer] URL:", testUrl);
+            _log("[AVPlayer] ========================================");
             this.setUrl(testUrl);
             var self = this;
             setTimeout(function () {
@@ -980,7 +954,7 @@ var AVPlayer = (function () {
          */
         setServerIP: function (ip) {
             SERVER_IP = ip;
-            console.log("[AVPlayer] Server IP updated to:", SERVER_IP);
+            _log("[AVPlayer] Server IP updated to:", SERVER_IP);
         }
     };
 })();

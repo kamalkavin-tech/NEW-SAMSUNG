@@ -5,10 +5,9 @@
     border-radius: 15px;
     padding: 0;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease;
     border: 2px solid transparent;
     overflow: hidden;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
 .app-card:hover,
@@ -16,7 +15,7 @@
 .channel-card:hover,
 .channel-card:focus {
     outline: none;
-    transform: translateY(-10px);
+    transform: translateY(-4px);
     border-color: var(--accent-color);
     box-shadow: 0 10px 30px var(--shadow-card);
 }

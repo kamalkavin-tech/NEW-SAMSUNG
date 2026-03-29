@@ -20,10 +20,12 @@ function primeHomeAds(ads, maxCount) {
     for (var i = 0; i < limit; i++) {
         var ad = ads[i] || {};
         var url = normalizeHomeAssetUrl(ad.adpath || '');
-        if (!url || homeAdImageCache[url]) continue;
+        var globalAdCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(url);
+        if (!url || homeAdImageCache[url] || globalAdCached) continue;
         var img = new Image();
         img.onload = function () {
             homeAdImageCache[this.src] = true;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
         };
         img.onerror = function () {
             this.removeAttribute('src');
@@ -215,26 +217,29 @@ var fofiShouldAutoPlay = false;
         return;
     }
 
-    // Validate bbnl_user has actual user data (not just OTP response)
-    // NOTE: Never remove hasLoggedInOnce — it must persist even if bbnl_user is invalid.
-    // The login page's checkAuthRedirect validates both before redirecting to home,
-    // so keeping hasLoggedInOnce is safe and prevents session loss on HOME relaunch.
+    // Validate bbnl_user has actual user data — try backup if primary is missing/corrupted
     try {
         var userData = localStorage.getItem("bbnl_user");
-        if (userData) {
-            var user = JSON.parse(userData);
-            if (!user.userid) {
-                console.log("[Auth] bbnl_user has no userid - redirecting to login for re-auth");
-                window.location.replace("login.html");
-                return;
+        var user = null;
+        try { user = userData ? JSON.parse(userData) : null; } catch (pe) { user = null; }
+
+        // Try backup if primary is missing or corrupted
+        if (!user || !user.userid) {
+            var backup = localStorage.getItem("bbnl_user_backup");
+            try { user = backup ? JSON.parse(backup) : null; } catch (pe2) { user = null; }
+            if (user && user.userid) {
+                localStorage.setItem("bbnl_user", JSON.stringify(user));
+                console.log("[Auth] Restored bbnl_user from backup");
             }
-        } else {
-            console.log("[Auth] No bbnl_user found - redirecting to login for re-auth");
+        }
+
+        if (!user || !user.userid) {
+            console.log("[Auth] No valid user session found - redirecting to login");
             window.location.replace("login.html");
             return;
         }
     } catch (e) {
-        console.error("[Auth] Error validating session (corrupted data?) - redirecting to login:", e);
+        console.error("[Auth] Error validating session - redirecting to login:", e);
         window.location.replace("login.html");
         return;
     }
@@ -1375,13 +1380,15 @@ function prefetchHomeLanguageLogos(languages, maxCount) {
         var lang = languages[i] || {};
         var logoUrl = getHomeLanguageLogoUrl(lang);
         if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
-        if (homeLanguageLogoCache[logoUrl] || homeLanguageLogoPrefetchInFlight[logoUrl]) continue;
+        var globalLangCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(logoUrl);
+        if (homeLanguageLogoCache[logoUrl] || homeLanguageLogoPrefetchInFlight[logoUrl] || globalLangCached) continue;
 
         homeLanguageLogoPrefetchInFlight[logoUrl] = true;
         var pre = new Image();
         pre.onload = function () {
             homeLanguageLogoCache[this.src] = true;
             delete homeLanguageLogoPrefetchInFlight[this.src];
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
         };
         pre.onerror = function () {
             var failedSrc = this.src;
@@ -2238,16 +2245,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // === FULL PATH: First visit - wait for IP, run all startup checks ===
         console.log("[HOME] First visit - running full initialization");
 
-        // Ensure public IP is ready before making any API calls
-        // On subsequent pages, cached public IP is available instantly (resolves immediately)
-        // On first launch, waits up to 3 seconds for ipify.org response
-        var ipReady = (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP)
-            ? DeviceInfo.ensurePublicIP(3000)
-            : Promise.resolve(false);
+        // Start API calls immediately — public IP is metadata only (auth is by device MAC/serial from Tizen hardware)
+        // IP detection runs in the background; subsequent API calls will include it once detected
+        console.log("[HOME] Starting API calls immediately (no IP wait). IP:", (typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo().ip_address : 'unknown'));
 
-        ipReady.then(function () {
-            console.log("[HOME] Public IP ready, starting API calls. IP:", DeviceInfo.getDeviceInfo().ip_address);
-
+        (function () {
             // Check app lock status
             setTimeout(checkAppLockStatus, 50);
 
@@ -2302,7 +2304,7 @@ document.addEventListener('DOMContentLoaded', function () {
             try { sessionStorage.setItem('home_init_done', String(Date.now())); } catch (e) {}
 
             console.log("[HOME] All data loading started (parallel)");
-        });
+        })();
     }
 
     // Failed to Load - Retry

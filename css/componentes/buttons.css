@@ -7,7 +7,7 @@
     cursor: pointer;
     padding: 5px 15px;
     border-radius: 5px;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .menu-btn:focus {
@@ -23,7 +23,7 @@
     cursor: pointer;
     padding: 5px 10px;
     border-radius: 5px;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .settings-btn:focus {
@@ -40,7 +40,7 @@
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-watch:hover,
@@ -60,7 +60,7 @@
     border-radius: 50%;
     font-size: 28px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-add:hover,
@@ -98,7 +98,7 @@
     color: var(--text-main);
     border: none;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .icon-btn:hover,
@@ -123,7 +123,7 @@
     font-size: 16px;
     font-weight: 500;
     white-space: nowrap;
-    transition: all 0.2s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -162,7 +162,7 @@
     font-size: 22px;
     font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     box-shadow: 0 5px 20px rgba(59, 108, 255, 0.3);
 }
 
@@ -186,7 +186,7 @@
     font-size: 28px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .num-btn:focus {

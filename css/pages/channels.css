@@ -67,7 +67,7 @@ body.channels-page-pills {
     justify-content: center;
     cursor: pointer;
     color: #fff;
-    transition: all 0.2s;
+    /* No transition — instant focus for TV remote */
 }
 
 .lang-arrow:focus {
@@ -105,7 +105,7 @@ body.channels-page-pills {
     justify-content: space-between;
     padding: 12px 20px;
     cursor: pointer;
-    transition: all 0.2s;
+    /* No transition — instant focus for TV remote */
     border: 2px solid transparent;
     margin: 2px 10px;
     border-radius: 8px;
@@ -188,7 +188,7 @@ body.channels-page-pills {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    /* No transition — instant focus for TV remote */
     justify-self: start;
     /* Grid Alignment */
     z-index: 10;
@@ -237,7 +237,7 @@ body.channels-page-pills {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    /* No transition — instant focus for TV remote */
     justify-self: end;
 }
 
@@ -263,7 +263,7 @@ body.channels-page-pills {
     border-radius: 25px;
     padding: 8px 20px;
     width: 350px;
-    transition: all 0.3s ease;
+    /* No transition — instant focus for TV remote */
     justify-self: end;
 }
 
@@ -337,7 +337,7 @@ body.channels-page-pills {
     cursor: pointer;
     outline: none;
     white-space: nowrap;
-    transition: background 0.1s ease-out, border-color 0.1s ease-out, color 0.1s ease-out;
+    /* No transition — instant focus feedback for Samsung TV remote navigation */
     flex-shrink: 0;
 }
 
@@ -410,7 +410,7 @@ body.channels-page-pills {
     color: #dedede;
     cursor: pointer;
     border-radius: 8px;
-    transition: all 0.2s;
+    /* No transition — instant focus for TV remote */
 }
 
 .language-option:hover,
@@ -466,6 +466,7 @@ body.channels-page-pills {
     margin: 0;
     padding: 0;
     width: 100% !important;
+    contain: layout style; /* Limit repaint scope to grid only */
 }
 
 .channels-grid-smooth {
@@ -501,8 +502,9 @@ body.channels-page-pills {
     padding: 10px;
     height: 155px;
     border: 2px solid rgba(255, 255, 255, 0.08);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    will-change: transform;
+    contain: layout style;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
 .channel-card:hover {

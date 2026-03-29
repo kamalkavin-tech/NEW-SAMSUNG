@@ -114,7 +114,31 @@ document.addEventListener('keydown', function (e) {
         return;
     }
 
-    switch (e.keyCode) {
+    var code = e.keyCode;
+
+    // Number keys (0-9 standard + numpad): append to search input without opening keyboard
+    if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            if (searchInput.value.length < 4) {
+                var digit = code >= 96 ? code - 96 : code - 48;
+                searchInput.value += digit.toString();
+                searchInput.focus();
+            }
+        }
+        return;
+    }
+
+    // Backspace: clear last digit in search
+    if (code === 8) {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput && searchInput.value.length > 0) {
+            searchInput.value = searchInput.value.slice(0, -1);
+        }
+        return;
+    }
+
+    switch (code) {
         case 37: // LEFT
             e.preventDefault();
             handleLeftNavigation();

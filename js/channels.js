@@ -52,7 +52,7 @@ var channelLogoSourceMap = {}; // Normalized logo key -> last successful src
 var channelsSearchActivated = false; // Only activate keypad after explicit user action
 var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
-var CHANNELS_CACHE_TTL_MS = 5 * 60 * 1000;
+var CHANNELS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes — reduces API calls on page navigation
 
 function normalizeChannelLogoKey(url) {
     if (!url) return '';
@@ -190,7 +190,7 @@ function addZoneTrackingListeners() {
     sidebarElements.forEach(function(el) {
         el.addEventListener('focus', function() {
             currentZone = 'sidebar';
-            console.log('[Channels Navigation] Zone: Sidebar');
+            // [Channels Navigation] Zone: Sidebar');
         });
     });
     
@@ -200,7 +200,7 @@ function addZoneTrackingListeners() {
         el.addEventListener('focus', function () {
             currentZone = 'topControls';
             lastTopControlElement = el; // Remember which top control was focused
-            console.log('[Channels Navigation] Zone: Top Controls');
+            // [Channels Navigation] Zone: Top Controls');
         });
     });
 
@@ -209,7 +209,7 @@ function addZoneTrackingListeners() {
     pills.forEach(function (pill) {
         pill.addEventListener('focus', function () {
             currentZone = 'tabs';
-            console.log('[Channels Navigation] Zone: Tabs');
+            // [Channels Navigation] Zone: Tabs');
         });
     });
 
@@ -217,17 +217,37 @@ function addZoneTrackingListeners() {
     document.addEventListener('focus', function (e) {
         if (e.target.classList.contains('channel-card')) {
             currentZone = 'cards';
-            console.log('[Channels Navigation] Zone: Cards');
+            // [Channels Navigation] Zone: Cards');
         }
     }, true);
 }
 
 async function initPage() {
     try {
-        // Ensure public IP is ready before API calls
-        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP) {
-            await DeviceInfo.ensurePublicIP(3000);
-        }
+        // INSTANT RENDER: Determine which filter the user had, check its cache, and render
+        // immediately BEFORE any async work — this replaces the "Loading Channels..." HTML
+        // default with real content on the same JS tick (no visible loading on return visits).
+        (function instantRenderFromCache() {
+            try {
+                var langId = sessionStorage.getItem('selectedLanguageId') || '';
+                var langName = sessionStorage.getItem('selectedLanguageName') || '';
+                var instantOptions = {};
+                if (langName) {
+                    if (!langId || langId === '') instantOptions = {};
+                    else if (langId === 'subs') instantOptions = { subscribed: 'yes' };
+                    else instantOptions = { langid: langId };
+                }
+                var cached = getCachedChannels(instantOptions);
+                if (cached && cached.length > 0) {
+                    allChannels = cached.slice();
+                    renderAllChannels(allChannels);
+                    setChannelsLoadingState(false);
+                }
+            } catch (e) {}
+        })();
+
+        // No IP wait — API auth uses device MAC/serial from Tizen hardware, not public IP.
+        // IP detection runs in background; headers will include it once resolved.
 
         // Load master channel list + categories IN PARALLEL for faster loading
         var [masterResult, categoryResponse] = await Promise.all([
@@ -328,15 +348,32 @@ async function loadMasterChannelList() {
         console.log("[Channels] Master list already loaded:", masterChannelList.length, "channels");
         return;
     }
-    
+
+    // Check sessionStorage cache first to avoid API call on page reload (e.g. returning from player)
+    try {
+        var raw = sessionStorage.getItem('master_channel_list_cache');
+        if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < CHANNELS_CACHE_TTL_MS) {
+                masterChannelList = parsed.data;
+                masterListLoaded = true;
+                console.log("[Channels] Master list loaded from sessionStorage cache:", masterChannelList.length, "channels");
+                return;
+            }
+        }
+    } catch (e) {}
+
     try {
         console.log("[Channels] Loading MASTER channel list (all channels, no filters)...");
         const response = await BBNL_API.getChannelList({}); // No filters = ALL channels
-        
+
         if (Array.isArray(response) && response.length > 0) {
             masterChannelList = response;
             masterListLoaded = true;
             console.log("[Channels] Master channel list loaded:", masterChannelList.length, "channels");
+            try {
+                sessionStorage.setItem('master_channel_list_cache', JSON.stringify({ ts: Date.now(), data: response }));
+            } catch (e) {}
         } else {
             console.warn("[Channels] Failed to load master channel list");
         }
@@ -799,29 +836,30 @@ function initLanguageDropdown() {
 function initSearchFunctionality() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        searchInput.setAttribute('type', 'number');
-        searchInput.setAttribute('inputmode', 'numeric');
+        searchInput.setAttribute('type', 'tel');
+        searchInput.setAttribute('inputmode', 'numeric'); // Samsung native numeric keypad (same as login page)
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
+        searchInput.readOnly = false; // Allow Samsung native keypad to open on focus/OK
         searchInput.value = '';
+
+        // Re-ensure readOnly=false on focus (same pattern as login page phone input)
+        searchInput.addEventListener('focus', function () {
+            searchInput.readOnly = false;
+        });
 
         // Prevent wheel/trackpad value scroll behavior while focused.
         searchInput.addEventListener('wheel', function (e) {
             e.preventDefault();
         }, { passive: false });
 
-        // Keep editable so Samsung native numeric keypad can appear.
-        searchInput.readOnly = false;
-
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
-            searchInput.readOnly = false;
             searchInput.focus();
         });
 
         searchInput.addEventListener('blur', function () {
             channelsSearchActivated = false;
-            searchInput.readOnly = false;
         });
 
         searchInput.addEventListener('input', function () {
@@ -935,6 +973,8 @@ function primeChannelLogoCache(channels, maxCount) {
     if (!Array.isArray(channels) || channels.length === 0) return;
     var limit = Math.min(maxCount || 36, channels.length);
 
+    // Build a queue of URLs to prefetch (skip already cached)
+    var queue = [];
     for (var i = 0; i < limit; i++) {
         var ch = channels[i] || {};
         var logoUrl = getChannelCardLogo(ch);
@@ -942,28 +982,46 @@ function primeChannelLogoCache(channels, maxCount) {
             logoUrl = BBNL_API.getValidatedImageUrl(logoUrl);
         }
         var logoKey = normalizeChannelLogoKey(logoUrl);
-        if (!logoUrl) continue;
-        if (!logoKey) continue;
-        if (channelLogoCache[logoKey] || _channelLogoPrefetchInFlight[logoKey]) continue;
-
-        _channelLogoPrefetchInFlight[logoKey] = true;
-        (function (urlKey, srcUrl) {
-            var img = new Image();
-            img.onload = function () {
-                channelLogoCache[urlKey] = true;
-                channelLogoCache[this.src] = true;
-                channelLogoSourceMap[urlKey] = this.src;
-                delete _channelLogoPrefetchInFlight[urlKey];
-                delete _channelLogoPrefetchInFlight[this.src];
-            };
-            img.onerror = function () {
-                var failedSrc = this.src;
-                delete _channelLogoPrefetchInFlight[urlKey];
-                delete _channelLogoPrefetchInFlight[failedSrc];
-            };
-            img.src = srcUrl;
-        })(logoKey, logoUrl);
+        if (!logoUrl || !logoKey) continue;
+        var globalCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(logoUrl);
+        if (channelLogoCache[logoKey] || _channelLogoPrefetchInFlight[logoKey] || globalCached) {
+            if (globalCached) channelLogoCache[logoKey] = true;
+            continue;
+        }
+        queue.push({ key: logoKey, url: logoUrl });
     }
+
+    // Throttled loader: max 4 concurrent image loads (prevents TV bandwidth/memory flood)
+    var MAX_CONCURRENT = 4;
+    var active = 0;
+    var idx = 0;
+
+    function loadNext() {
+        while (active < MAX_CONCURRENT && idx < queue.length) {
+            var item = queue[idx++];
+            active++;
+            _channelLogoPrefetchInFlight[item.key] = true;
+            (function (urlKey, srcUrl) {
+                var img = new Image();
+                img.onload = function () {
+                    channelLogoCache[urlKey] = true;
+                    channelLogoCache[this.src] = true;
+                    channelLogoSourceMap[urlKey] = this.src;
+                    delete _channelLogoPrefetchInFlight[urlKey];
+                    if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
+                    active--;
+                    loadNext();
+                };
+                img.onerror = function () {
+                    delete _channelLogoPrefetchInFlight[urlKey];
+                    active--;
+                    loadNext();
+                };
+                img.src = srcUrl;
+            })(item.key, item.url);
+        }
+    }
+    loadNext();
 }
 
 function getChannelCardLogo(ch) {
@@ -1096,10 +1154,10 @@ async function loadChannels(options = {}) {
 
         let response = await BBNL_API.getChannelList(apiOptions);
 
-        // Retry once if response is empty (race condition with session/IP init)
+        // Retry once if response is empty
         if ((!Array.isArray(response) || response.length === 0) && !isNetworkDisconnected()) {
-            console.log("[Channels Page] Empty response, retrying after 1s...");
-            await new Promise(function (r) { setTimeout(r, 1000); });
+            console.log("[Channels Page] Empty response, retrying after 200ms...");
+            await new Promise(function (r) { setTimeout(r, 200); });
             response = await BBNL_API.getChannelList(apiOptions);
         }
 
@@ -1139,35 +1197,37 @@ async function loadChannels(options = {}) {
 }
 
 function renderAllChannels(channels) {
-    const container = document.getElementById("channel-grid-container");
+    var container = document.getElementById("channel-grid-container");
 
     // Store currently displayed channels for LCN search
     currentDisplayedChannels = channels;
 
     if (channels.length === 0) {
         container.innerHTML = '<div class="loading-spinner">No channels found</div>';
-        refreshFocusables();
+        _cachedFocusables = null;
         return;
     }
 
-    const grid = document.createElement("div");
+    // PERFORMANCE: Properly remove old grid to free event listeners + DOM nodes.
+    // innerHTML="" orphans listeners. removeChild lets GC collect them.
+    while (container.firstChild) { container.removeChild(container.firstChild); }
+
+    var grid = document.createElement("div");
     grid.className = "channels-grid channels-grid-smooth";
 
-        // Prefetch logos for the filtered set to reduce category-switch delay.
-    primeChannelLogoCache(channels, channels.length);
+    // Prefetch logos (limit to first 12 visible cards, not all 200+)
+    primeChannelLogoCache(channels, 12);
 
-    channels.forEach(ch => {
-        const card = createChannelCard(ch);
-        grid.appendChild(card);
-    });
+    var len = channels.length;
+    for (var i = 0; i < len; i++) {
+        grid.appendChild(createChannelCard(channels[i]));
+    }
 
-    container.innerHTML = "";
     container.appendChild(grid);
     requestAnimationFrame(function () {
         grid.classList.add('is-visible');
     });
-    refreshFocusables();
-    // All images now load immediately on page render (no lazy loading)
+    _cachedFocusables = null; // invalidate cache so next keypress rebuilds it
 }
 
 // ==========================================
@@ -1190,8 +1250,8 @@ function createChannelCard(ch) {
     card.dataset.name = chName;
     card.dataset.logo = chLogo;
     card.dataset.channelno = chNo;
-    // Store full channel data for player navigation
-    card.dataset.channelData = JSON.stringify(ch);
+    // Store channel index for player navigation (avoid JSON.stringify per card — blocks main thread)
+    card.dataset.channelIdx = String(allChannels.indexOf(ch));
 
     // LCN Badge - Top Left
     const lcnBadge = document.createElement("div");
@@ -1235,26 +1295,32 @@ function createChannelCard(ch) {
 
         var logoKey = normalizeChannelLogoKey(chLogo);
 
+        // If globally cached: set src directly and skip loading state (instant render)
+        var alreadyCached = (typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(normalizedLogo))
+            || channelLogoCache[chLogo] || channelLogoCache[normalizedLogo];
+
+        img.alt = chName;
+        img.className = "channel-logo-img";
+
         if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
             BBNL_API.setImageSource(img, normalizedLogo);
         } else {
             img.src = normalizedLogo;
         }
-        img.alt = chName;
-        img.className = "channel-logo-img";
+
         img.onload = function () {
-            console.log("[Channels] Logo successfully displayed: ch=" + chName + " final-url=" + this.src);
             channelLogoCache[chLogo] = true;
             channelLogoCache[this.src] = true;
             if (logoKey) {
                 channelLogoCache[logoKey] = true;
                 channelLogoSourceMap[logoKey] = this.src;
             }
-            // Remove placeholder if it's there
-            var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
-            if (placeholder) {
-                placeholder.style.display = 'none';
+            // Persist to global cross-page cache
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
+                BBNL_API.markImageCached(this.src);
             }
+            var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
+            if (placeholder) placeholder.style.display = 'none';
         };
         
         img.onerror = function () {
@@ -1305,20 +1371,41 @@ function createChannelCard(ch) {
     return card;
 }
 
-function refreshFocusables() {
-    focusables = document.querySelectorAll(".focusable");
+// Cached focusables list — avoids expensive querySelectorAll on every keypress
+var _cachedFocusables = null;
 
-    // Re-add zone tracking for dynamically loaded elements
+function refreshFocusables() {
+    _cachedFocusables = null; // invalidate cache
+    focusables = document.querySelectorAll(".focusable");
     addZoneTrackingListeners();
+}
+
+function getFocusables() {
+    if (!_cachedFocusables) {
+        _cachedFocusables = document.querySelectorAll(".focusable");
+        focusables = _cachedFocusables;
+    }
+    return _cachedFocusables;
 }
 
 // ==========================================
 // KEYBOARD NAVIGATION
 // ==========================================
 
+var _chLastKeyTime = 0;
+var _CH_KEY_THROTTLE_MS = 120;
+
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
-    console.log('[Channels] Key pressed:', code, 'Zone:', currentZone);
+    getFocusables(); // use cached list (rebuilds only when invalidated)
+
+    // Throttle navigation keys to prevent Samsung TV remote flooding
+    var isNav = (code >= 37 && code <= 40) || code === 13;
+    if (isNav) {
+        var now = Date.now();
+        if (now - _chLastKeyTime < _CH_KEY_THROTTLE_MS) { e.preventDefault(); return; }
+        _chLastKeyTime = now;
+    }
 
     // BACK key
     if (code === 10009) {
@@ -1374,14 +1461,12 @@ document.addEventListener("keydown", function (e) {
         // DOWN - leave search input, go to category pills
         if (code === 40) {
             e.preventDefault();
-            document.activeElement.readOnly = false;
             moveToFirstCategoryPill();
             return;
         }
         // LEFT - leave search input, go to back button
         if (code === 37) {
             e.preventDefault();
-            document.activeElement.readOnly = false;
             moveToBackButton();
             return;
         }
@@ -1446,7 +1531,7 @@ document.addEventListener("keydown", function (e) {
 
 // Handle DOWN navigation
 function handleDownNavigation() {
-    console.log('[DOWN] Zone:', currentZone);
+    // [DOWN] Zone:', currentZone);
 
     if (currentZone === 'sidebar') {
         // DOWN in sidebar: Navigate through sidebar elements
@@ -1465,21 +1550,21 @@ function handleDownNavigation() {
 
 // Handle UP navigation
 function handleUpNavigation() {
-    console.log('[UP] Zone:', currentZone);
+    // [UP] Zone:', currentZone);
 
     if (currentZone === 'sidebar') {
         // UP in sidebar: Navigate through sidebar elements
         handleSidebarUpNavigation();
     } else if (currentZone === 'topControls') {
         // Already at top, do nothing
-        console.log('[UP] Already at top controls');
+        // [UP] Already at top controls');
     } else if (currentZone === 'tabs') {
         // UP from tabs: Move to back button (top controls)
         var backBtn = document.querySelector('.back-btn');
         if (backBtn) {
             backBtn.focus();
             currentZone = 'topControls';
-            console.log('[UP] Moved from tabs to back button');
+            // [UP] Moved from tabs to back button');
         }
     } else if (currentZone === 'cards') {
         // UP in cards: Try to move up in grid, or go to tabs
@@ -1493,7 +1578,7 @@ function handleUpNavigation() {
 
 // Handle LEFT navigation
 function handleLeftNavigation() {
-    console.log('[LEFT] Zone:', currentZone);
+    // [LEFT] Zone:', currentZone);
 
     if (currentZone === 'topControls') {
         // LEFT in top controls: Move between Search and Back
@@ -1517,7 +1602,7 @@ function handleLeftNavigation() {
 
 // Handle RIGHT navigation
 function handleRightNavigation() {
-    console.log('[RIGHT] Zone:', currentZone);
+    // [RIGHT] Zone:', currentZone);
 
     if (currentZone === 'sidebar') {
         // RIGHT from sidebar: Move to main content
@@ -1778,30 +1863,24 @@ function scrollCardIntoView(card) {
     var container = document.getElementById('channel-grid-container');
     if (!container) return;
 
+    // BATCH ALL READS FIRST to avoid forced reflow (layout thrashing)
     var containerRect = container.getBoundingClientRect();
     var cardRect = card.getBoundingClientRect();
-
-    // Extra space for the focus transform (scale + translateY + shadow)
-    var focusPadding = 30;
-
-    // Account for fixed header + category pills overlapping the top of container
     var categorySection = document.querySelector('.category-section');
-    var visibleTop = containerRect.top;
-    if (categorySection) {
-        var categoryBottom = categorySection.getBoundingClientRect().bottom;
-        if (categoryBottom > visibleTop) {
-            visibleTop = categoryBottom;
-        }
+    var categoryBottom = categorySection ? categorySection.getBoundingClientRect().bottom : containerRect.top;
+
+    // All reads done — now compute and write once
+    var focusPadding = 30;
+    var visibleTop = Math.max(containerRect.top, categoryBottom);
+
+    var scrollOffset = 0;
+    if (cardRect.top - focusPadding < visibleTop) {
+        scrollOffset = cardRect.top - visibleTop - focusPadding;
+    } else if (cardRect.bottom + focusPadding > containerRect.bottom) {
+        scrollOffset = cardRect.bottom - containerRect.bottom + focusPadding;
     }
 
-    // Check if card is above visible area (behind fixed header/pills)
-    if (cardRect.top - focusPadding < visibleTop) {
-        var scrollOffset = cardRect.top - visibleTop - focusPadding;
-        container.scrollTop += scrollOffset;
-    }
-    // Check if card is below visible area
-    else if (cardRect.bottom + focusPadding > containerRect.bottom) {
-        var scrollOffset = cardRect.bottom - containerRect.bottom + focusPadding;
+    if (scrollOffset !== 0) {
         container.scrollTop += scrollOffset;
     }
 }
@@ -1841,11 +1920,12 @@ function handleEnter(el) {
             return;
         }
 
-        // Use full channel data if available, otherwise construct from data attributes
+        // Look up channel from allChannels by index (avoids JSON.stringify/parse per card)
         var channel;
-        try {
-            channel = JSON.parse(el.dataset.channelData);
-        } catch (e) {
+        var chIdx = parseInt(el.dataset.channelIdx, 10);
+        if (!isNaN(chIdx) && chIdx >= 0 && allChannels[chIdx]) {
+            channel = allChannels[chIdx];
+        } else {
             channel = {
                 chtitle: channelName,
                 channel_name: channelName,

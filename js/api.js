@@ -61,9 +61,9 @@ if (USE_PROXY) {
         console.warn("[API CONFIG] ⚠️  CORS errors expected in browser - use proxy-server.js or Tizen emulator");
     }
     // HTTPS endpoint for Samsung TV (HTTP is blocked by proxy on TV)
-    // Using secure HTTPS endpoint: https://netmontest.bbnl.in/netmon/cabletvapis/
-    API_BASE_URL_PROD = "https://netmontest.bbnl.in/netmon/cabletvapis";
-    API_BASE_URL_IPTV = "https://netmontest.bbnl.in/netmon/cabletvapis";
+    // Production API endpoint: https://bbnlnetmon.bbnl.in/prod/cabletvapis
+    API_BASE_URL_PROD = "https://bbnlnetmon.bbnl.in/prod/cabletvapis";
+    API_BASE_URL_IPTV = "https://bbnlnetmon.bbnl.in/prod/cabletvapis";
 }
 
 // Enhanced logging for debugging
@@ -362,12 +362,12 @@ function _generateAlternativeImagePaths(primaryUrl) {
 
         if (fileName) {
             var hostCandidates = [
-                'https://netmontest.bbnl.in/netmon/assets/site_images/',
-                'http://netmontest.bbnl.in/netmon/assets/site_images/',
+                'https://bbnlnetmon.bbnl.in/prod/assets/site_images/',
+                'http://bbnlnetmon.bbnl.in/prod/assets/site_images/',
                 'https://images.bbnl.in/cabletest/',
                 'http://images.bbnl.in/cabletest/',
-                'https://netmontest.bbnl.in/netmon/cabletvapis/images/',
-                'http://netmontest.bbnl.in/netmon/cabletvapis/images/'
+                'https://bbnlnetmon.bbnl.in/prod/cabletvapis/images/',
+                'http://bbnlnetmon.bbnl.in/prod/cabletvapis/images/'
             ];
 
             for (var hi = 0; hi < hostCandidates.length; hi++) {
@@ -381,8 +381,8 @@ function _generateAlternativeImagePaths(primaryUrl) {
             // Specific fallback for popup error images under errimgs.
             if (/\/errimgs\//i.test(urlObj.pathname || '')) {
                 var errCandidates = [
-                    'https://netmontest.bbnl.in/netmon/assets/site_images/' + fileName,
-                    'http://netmontest.bbnl.in/netmon/assets/site_images/' + fileName
+                    'https://bbnlnetmon.bbnl.in/prod/assets/site_images/' + fileName,
+                    'http://bbnlnetmon.bbnl.in/prod/assets/site_images/' + fileName
                 ];
                 for (var ei = 0; ei < errCandidates.length; ei++) {
                     if (errCandidates[ei] !== primaryUrl) alts.push(errCandidates[ei]);
@@ -1095,7 +1095,7 @@ async function apiCall(endpoint, payload, customHeaders) {
     var timeoutId = null;
     try {
         controller = new AbortController();
-        timeoutId = setTimeout(function () { controller.abort(); }, 10000);
+        timeoutId = setTimeout(function () { controller.abort(); }, 6000);
     } catch (e) {
         // AbortController not supported on older Tizen — proceed without timeout
         controller = null;
@@ -1483,12 +1483,12 @@ const DeviceInfo = {
                     resolve(false);
                     return;
                 }
-                // 5-second timeout per service to prevent hanging
+                // 2-second timeout per service (runs in background, doesn't block API calls)
                 var controller = null;
                 var timeoutId = null;
                 try {
                     controller = new AbortController();
-                    timeoutId = setTimeout(function () { controller.abort(); }, 5000);
+                    timeoutId = setTimeout(function () { controller.abort(); }, 2000);
                 } catch (e) { controller = null; }
 
                 var fetchOpts = { method: 'GET' };
@@ -2002,17 +2002,22 @@ const AuthAPI = {
             var userJson = JSON.stringify(userData);
             try {
                 localStorage.setItem("bbnl_user", userJson);
+                // Keep a backup copy to survive storage corruption on HOME relaunch
+                localStorage.setItem("bbnl_user_backup", userJson);
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
                 console.warn("[AuthAPI] localStorage full — clearing caches to save session");
                 CacheManager.clearAll();
                 try {
                     localStorage.setItem("bbnl_user", userJson);
+                    localStorage.setItem("bbnl_user_backup", userJson);
                 } catch (retryErr) {
-                    // Last resort — clear everything except hasLoggedInOnce, then retry
+                    // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
+                    var savedBackup = localStorage.getItem("bbnl_user_backup");
                     localStorage.clear();
                     if (savedFlag) localStorage.setItem("hasLoggedInOnce", savedFlag);
+                    if (savedBackup) localStorage.setItem("bbnl_user_backup", savedBackup);
                     localStorage.setItem("bbnl_user", userJson);
                 }
             }
@@ -2410,7 +2415,7 @@ const ChannelsAPI = {
                 };
 
                 var timeoutPromise = new Promise(function (_, reject) {
-                    setTimeout(function () { reject(new Error("Expiry API timeout")); }, 10000);
+                    setTimeout(function () { reject(new Error("Expiry API timeout")); }, 6000);
                 });
                 var response = await Promise.race([
                     apiCall(API_ENDPOINTS.CHANNEL_EXPIRING, payload, { "devmac": device.mac_address, "devslno": device.devslno }),
@@ -3429,6 +3434,23 @@ const BBNL_API = {
     getImagePlaceholderUrl: getImagePlaceholderUrl,
     invalidateImageUrlCaches: invalidateImageUrlCaches,
 
+    // Global cross-page image cache helpers
+    isImageCached: function (url) {
+        if (!url) return false;
+        var v = getValidatedImageUrl(url);
+        return !!(v && _IMAGE_CACHE_MAP[v]);
+    },
+    markImageCached: function (url) {
+        if (!url) return;
+        var v = getValidatedImageUrl(url) || url;
+        if (v && !_IMAGE_CACHE_MAP[v]) {
+            _IMAGE_CACHE_MAP[v] = 1;
+            _persistImageCache();
+        }
+    },
+    preloadImage: _preloadImage,
+    preloadImageBatch: _preloadImageBatch,
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -3680,19 +3702,19 @@ document.addEventListener('visibilitychange', function () {
         console.log("[App] App going to background (HOME pressed) - performing cleanup...");
         _wasBackgrounded = true;
 
-        // 1. Stop any active media playback (prevents background audio)
+        // 1. Suspend media playback (preserves decoder state for faster resume)
+        // Samsung docs: use suspend() instead of stop()+close() for background
         try {
             if (typeof webapis !== 'undefined' && webapis.avplay) {
-                webapis.avplay.stop();
-                webapis.avplay.close();
+                webapis.avplay.suspend();
             }
-        } catch (e) {}
-
-        try {
-            if (typeof AVPlayer !== 'undefined') {
-                AVPlayer.stop();
+        } catch (e) {
+            // Fallback: stop+close if suspend not supported
+            if (typeof webapis !== 'undefined' && webapis.avplay) {
+                try { webapis.avplay.stop(); } catch (e2) {}
+                try { webapis.avplay.close(); } catch (e2) {}
             }
-        } catch (e) {}
+        }
 
         // 2. NO server logout here — session must stay alive for relaunch.
         //    Server logout only happens from Settings > Logout (explicit user action).

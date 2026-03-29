@@ -92,18 +92,15 @@ video {
     width: calc(100% - 80px);
     max-width: 1800px;
     height: 120px;
-    background: rgba(15, 15, 15, 0.90);
+    background: rgba(10, 10, 18, 0.96);
     border-radius: 14px;
     padding: 0 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     transition: left 0.3s ease, transform 0.3s ease, width 0.3s ease, opacity 0.3s ease;
-    animation: infoBarFadeIn 0.3s ease-out;
     overflow: hidden;
 }
 
@@ -523,10 +520,9 @@ video {
     top: 0;
     width: 420px;
     height: 100%;
-    background: rgba(0, 0, 0, 0.60);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(6, 6, 14, 0.96);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
+    contain: layout style;
     z-index: 2100; /* Above error popup (2000) so sidebar overrides it */
     display: flex;
     flex-direction: column;
@@ -590,7 +586,7 @@ video {
     justify-content: center;
     cursor: pointer;
     color: #fff;
-    transition: all 0.2s;
+    transition: background 0.15s ease;
 }
 
 .lang-nav-arrow:hover {
@@ -675,7 +671,6 @@ video {
     margin: 3px 10px 3px 6px;
     cursor: pointer;
     outline: none;
-    transition: all 0.2s ease;
 }
 
 .category-item:hover {
@@ -685,14 +680,12 @@ video {
 .category-item:focus {
     background: rgba(255, 255, 255, 0.12);
     border: 2px solid #ffffff;
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
     outline: none;
 }
 
 .category-item.active {
     background: rgba(255, 255, 255, 0.12);
     border: 2px solid #ffffff;
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.12);
 }
 
 .category-name {
@@ -762,7 +755,7 @@ video {
     margin: 5px 12px;
     cursor: pointer;
     outline: none;
-    transition: all 0.25s ease;
+    /* No transition — instant focus for TV remote navigation */
     gap: 20px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -772,17 +765,15 @@ video {
 }
 
 .channel-item:focus {
-    background: linear-gradient(135deg, rgba(30, 144, 255, 0.25) 0%, rgba(30, 144, 255, 0.15) 100%);
+    background: rgba(30, 144, 255, 0.22);
     border: 2px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 0 25px rgba(30, 144, 255, 0.35), inset 0 0 20px rgba(255, 255, 255, 0.05);
     outline: none;
     transform: scale(1.01);
 }
 
 .channel-item.active {
-    background: linear-gradient(135deg, rgba(30, 144, 255, 0.25) 0%, rgba(30, 144, 255, 0.15) 100%);
+    background: rgba(30, 144, 255, 0.22);
     border: 2px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 0 25px rgba(30, 144, 255, 0.35), inset 0 0 20px rgba(255, 255, 255, 0.05);
 }
 
 /* Channel Info - Name and Price */
@@ -1035,4 +1026,56 @@ video {
     background: #ffffff;
     color: #000000;
     border: 3px solid #ffffff;
+}
+/* ==========================================
+   CHANNEL NUMBER PAD (LEFT key overlay)
+   ========================================== */
+/* ==========================================
+   CHANNEL NUMBER INPUT (Samsung native keypad)
+   Same pattern as login page phone input
+   ========================================== */
+.numpad-container {
+    background: rgba(8, 8, 20, 0.97);
+    border: 2px solid rgba(59, 92, 255, 0.75);
+    border-radius: 18px;
+    padding: 22px 28px 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    min-width: 280px;
+    box-shadow: 0 8px 48px rgba(0, 0, 0, 0.85);
+}
+
+.numpad-title {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.numpad-input {
+    width: 100%;
+    font-size: 44px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 10px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 10px 16px;
+    outline: none;
+    caret-color: rgba(59, 92, 255, 0.9);
+}
+
+.numpad-input:focus {
+    border-color: rgba(59, 92, 255, 0.8);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.numpad-input::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+    letter-spacing: 14px;
 }

@@ -30,10 +30,15 @@
 // ==========================================
 var playerDateTimeInterval = null; // Interval for date/time updates
 
-// Clean up background intervals when leaving page
+// Clean up ALL background timers when leaving page (prevents memory leaks on Samsung TV)
 window.addEventListener('beforeunload', function () {
-    if (playerDateTimeInterval) clearInterval(playerDateTimeInterval);
-    if (playerNetworkWatchInterval) clearInterval(playerNetworkWatchInterval);
+    if (playerDateTimeInterval) { clearInterval(playerDateTimeInterval); playerDateTimeInterval = null; }
+    if (playerNetworkWatchInterval) { clearInterval(playerNetworkWatchInterval); playerNetworkWatchInterval = null; }
+    if (typeof streamAdTimer !== 'undefined' && streamAdTimer) { clearTimeout(streamAdTimer); }
+    if (typeof streamAdRotateTimer !== 'undefined' && streamAdRotateTimer) { clearInterval(streamAdRotateTimer); }
+    if (typeof overlayTimeout !== 'undefined' && overlayTimeout) { clearTimeout(overlayTimeout); }
+    // Release AVPlayer resources
+    try { if (typeof AVPlayer !== 'undefined') AVPlayer.destroy(); } catch (e) {}
 });
 
 const PLAYER_CONFIG = {
@@ -99,7 +104,7 @@ var playerErrorActionMode = 'retry'; // retry | paynow
 var PAYMENT_GATEWAY_URL = 'https://bbnl.in/renew';
 var playerErrorUiTimeout = null;
 var PLAYER_ERROR_UI_HIDE_DELAY = 10000; // 10 seconds
-var PLAYER_STREAM_START_TIMEOUT_MS = 3800; // Keep dead-stream detection under 4s for faster popup feedback
+var PLAYER_STREAM_START_TIMEOUT_MS = 10000; // 10s — IPTV streams on Samsung TV can take 5-8s to buffer
 var playerNetworkWatchInterval = null;
 var playerNetworkDisconnectSince = 0;
 var PLAYER_NETWORK_WATCH_INTERVAL_MS = 1000;
@@ -600,6 +605,43 @@ window.onload = function () {
     // Events
     document.addEventListener("keydown", handleKeydown);
 
+    // Channel number input: sync Samsung native keypad input → channelNumberBuffer
+    var _chNumField = document.getElementById('channel-number-field');
+    if (_chNumField) {
+        _chNumField.readOnly = false;
+        _chNumField.addEventListener('focus', function () { this.readOnly = false; });
+        _chNumField.addEventListener('input', function () {
+            var digits = this.value.replace(/\D/g, '').slice(0, 4);
+            this.value = digits;
+            channelNumberBuffer = digits;
+            resetChannelInputTimer();
+        });
+        _chNumField.addEventListener('keydown', function (e) {
+            var code = e.keyCode;
+            // BACK key closes the pad
+            if (code === 10009 || code === 27) {
+                e.preventDefault();
+                e.stopPropagation();
+                channelNumberBuffer = '';
+                hideChannelNumberInput();
+                return;
+            }
+            // Enter/OK: if digits entered, navigate immediately; otherwise let Samsung open keypad
+            if (code === 13) {
+                if (channelNumberBuffer.length > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
+                    navigateToChannelNumber(channelNumberBuffer);
+                    return;
+                }
+                // No digits yet: allow default → Samsung native keypad opens
+                this.readOnly = false;
+                return;
+            }
+        });
+    }
+
     var backBtn = document.getElementById("back-btn");
     if (backBtn) {
         backBtn.addEventListener("click", () => {
@@ -640,10 +682,7 @@ var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
 
 async function loadChannelList(lookupName = null) {
     try {
-        // Ensure public IP is ready before API calls
-        if (typeof DeviceInfo !== 'undefined' && DeviceInfo.ensurePublicIP) {
-            await DeviceInfo.ensurePublicIP(3000);
-        }
+        // No IP wait — auth uses device MAC/serial, not public IP.
 
         // We reuse the API used in channels page
         let response = await BBNL_API.getChannelList();
@@ -877,12 +916,15 @@ function updatePlayerChannelLogo(channel) {
         return;
     }
 
-    if (_logoCache[normalizedLogo]) {
+    // Check global cross-page cache first (survives page navigation)
+    var globalCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(normalizedLogo);
+    if (_logoCache[normalizedLogo] || globalCached) {
         if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
             BBNL_API.setImageSource(uiLogo, normalizedLogo);
         } else {
             uiLogo.src = normalizedLogo;
         }
+        _logoCache[normalizedLogo] = true;
         uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
         clearInfoBarLogoPlaceholder();
@@ -903,6 +945,10 @@ function updatePlayerChannelLogo(channel) {
     preloader.onload = function () {
         if (requestToken !== _playerLogoRequestToken) return;
         _logoCache[normalizedLogo] = true;
+        // Persist to global cross-page cache
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
+            BBNL_API.markImageCached(normalizedLogo);
+        }
         if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
             BBNL_API.setImageSource(uiLogo, normalizedLogo);
         } else {
@@ -1030,6 +1076,9 @@ function setupPlayer(channel) {
 
     // Expiry Date - use shared function
     updateExpiryDisplay(channel);
+
+    // Show infobar now that channel info is populated (not on page load — only after real channel set)
+    showOverlay();
 
     // Program Title (Live Stream)
     const uiTitle = document.getElementById("ui-program-title");
@@ -1246,7 +1295,7 @@ function setupPlayer(channel) {
             // Abort if a newer setupPlayer call was made (user switched channels)
             if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
-            console.warn("[Player] Stream timeout - playback did not start within " + PLAYER_STREAM_START_TIMEOUT_MS + "ms");
+                console.warn("[Player] Stream timeout - playback did not start within " + PLAYER_STREAM_START_TIMEOUT_MS + "ms");
                 hideBufferingIndicator();
 
                 var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
@@ -1254,12 +1303,13 @@ function setupPlayer(channel) {
                 var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
 
                 if (ch && !isSubs && price > 0) {
+                    // Not subscribed — always show subscription popup
                     showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
                 } else if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
+                    // Only show error popup when network is actually bad
                     showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
-                } else {
-                    showPlayerErrorPopup('Playback Error', 'Unable to play this channel. The stream may not be available.');
                 }
+                // On good network: stream is just slow — stay silent, AVPlayer STATE_ERROR will handle real failures
             }
         }, PLAYER_STREAM_START_TIMEOUT_MS);
 
@@ -1447,11 +1497,10 @@ function changeChannel(step) {
     setupPlayer(nextCh);
 
     // Keep menu state in sync with remote zapping (UP/DOWN/CH+/CH-) automatically.
-    // This updates language/category/channel selection even without pressing OK.
     syncSidebarWithCurrentPlayback(true);
-    setTimeout(function () {
+    requestAnimationFrame(function () {
         syncSidebarWithCurrentPlayback(false);
-    }, 120);
+    });
 
     // Show info bar for 5 seconds when channel is changed
     showOverlay();
@@ -2136,11 +2185,15 @@ function renderChannelsList() {
         if (logoUrl && logoUrl.trim() !== '') {
             var logoImg = document.createElement('img');
             logoImg.alt = ch.chtitle || 'Channel';
+            logoImg.crossOrigin = 'anonymous';
             logoImg.addEventListener('error', function () {
                 this.style.display = 'none';
                 ensureSidebarLogoPlaceholder(logoDiv, ch);
             }, { once: true });
-            // Load immediately (no lazy loading)
+            // Check global cache — if already seen before, browser HTTP cache serves instantly
+            var sidebarGlobalCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(logoUrl);
+            if (sidebarGlobalCached) _logoCache[logoUrl] = true;
+
             if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(logoImg, logoUrl);
             } else {
@@ -2148,6 +2201,9 @@ function renderChannelsList() {
             }
             logoImg.addEventListener('load', function () {
                 _logoCache[logoUrl] = true;
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
+                    BBNL_API.markImageCached(logoUrl);
+                }
             }, { once: true });
             logoDiv.appendChild(logoImg);
         } else {
@@ -2922,13 +2978,46 @@ function isSidebarFocused() {
            el.classList.contains('channel-item');
 }
 
+var _lastKeyTime = 0;
+var _KEY_THROTTLE_MS = 120; // prevent rapid-fire key flooding on Samsung TV remote
+
 function handleKeydown(e) {
-    const code = e.keyCode;
+    var code;
+    try { code = e.keyCode; } catch (_) { return; }
+
+    // Throttle navigation keys (arrows, OK, CH+/-) to prevent UI flood.
+    // Volume, BACK, and number keys are exempt (must always respond instantly).
+    var isNav = (code >= 37 && code <= 40) || code === 13 || code === 33 || code === 34 || code === 427 || code === 428;
+    if (isNav) {
+        var now = Date.now();
+        if (now - _lastKeyTime < _KEY_THROTTLE_MS) { e.preventDefault(); return; }
+        _lastKeyTime = now;
+    }
+
     var infoBarVisible = isInfoBarVisible();
-    console.log("Player Key:", code);
 
     if (playerErrorPopupOpen) {
         resetPlayerErrorUiTimer();
+    }
+
+    // When channel number input is open, let the input field handle keys.
+    // Only intercept BACK (to close) and number keys (direct entry via remote).
+    if (isNumpadOpen()) {
+        if (code === 10009 || code === 27) {
+            e.preventDefault();
+            channelNumberBuffer = '';
+            hideChannelNumberInput();
+            return;
+        }
+        // Number keys on remote: feed directly into the input field
+        if ((code >= 48 && code <= 57) || (code >= 96 && code <= 105)) {
+            e.preventDefault();
+            var d = (code >= 96) ? String(code - 96) : String(code - 48);
+            handleNumberInput(d);
+            return;
+        }
+        // Allow all other keys (arrows, OK) to pass through to the native input/keypad
+        return;
     }
 
     // Handle sidebar navigation first if sidebar is open
@@ -3075,9 +3164,7 @@ function handleKeydown(e) {
                 channelInputTimeout = null;
             }
             navigateToChannelNumber(channelNumberBuffer);
-            channelNumberBuffer = '';
-            hideChannelNumberInput();
-            return;
+            return; // navigateToChannelNumber manages buffer and overlay
         }
 
         // FEAT-002: OK opens menu/category overlay.
@@ -3339,115 +3426,65 @@ document.addEventListener('DOMContentLoaded', function () {
 // ==========================================
 var channelNumberBuffer = "";
 var channelInputTimeout = null;
-var CHANNEL_INPUT_DELAY = 0; // Keep input visible until explicit user action (OK/Back)
+var CHANNEL_INPUT_DELAY = 2500; // Auto-navigate after 2.5s of inactivity (Samsung TV remote friendly)
 
 function resetChannelInputTimer() {
     if (channelInputTimeout) {
         clearTimeout(channelInputTimeout);
         channelInputTimeout = null;
     }
+    // Auto-navigate when user stops pressing digits (no OK button needed)
+    if (channelNumberBuffer.length > 0 && CHANNEL_INPUT_DELAY > 0) {
+        channelInputTimeout = setTimeout(function () {
+            if (channelNumberBuffer.length > 0) {
+                navigateToChannelNumber(channelNumberBuffer);
+            }
+        }, CHANNEL_INPUT_DELAY);
+    }
 }
 
 /**
- * Handle number key input for direct channel navigation
+ * Handle number key input (remote number keys) for direct channel navigation
  */
 function handleNumberInput(digit) {
     console.log("[Player] Number key pressed:", digit);
-
-    // Add digit to buffer
     channelNumberBuffer = String(channelNumberBuffer + digit).replace(/\D/g, '').slice(0, 4);
-
-    // Show the channel number input display
     showChannelNumberInput(channelNumberBuffer);
-
-    var inputEl = document.getElementById('channel-number-field');
-    if (inputEl) {
-        inputEl.value = channelNumberBuffer;
-        try { inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length); } catch (e) {}
-    }
-
     resetChannelInputTimer();
 }
 
 /**
- * Show channel number input overlay
+ * Returns true when the channel number input overlay is visible
+ */
+function isNumpadOpen() {
+    var pad = document.getElementById('channel-number-input');
+    return !!(pad && pad.style.display !== 'none');
+}
+
+/**
+ * Show channel number input and focus the field to trigger Samsung native keypad.
+ * Same pattern as login page: type="tel" inputmode="numeric" readOnly=false + focus().
  */
 function showChannelNumberInput(number) {
-    var container = document.getElementById('player-container');
-    if (!container) return;
-
-    var inputWrap = document.getElementById('channel-number-input');
-    if (!inputWrap) {
-        inputWrap = document.createElement('div');
-        inputWrap.id = 'channel-number-input';
-        inputWrap.style.cssText = 'position:absolute; top:72px; right:72px; z-index:10000; ' +
-            'background:rgba(0,0,0,0.88); border:2px solid rgba(59,92,255,0.6); border-radius:14px; ' +
-            'padding:14px 18px; min-width:220px; box-shadow:0 10px 40px rgba(0,0,0,0.55);';
-
-        var title = document.createElement('div');
-        title.textContent = 'Channel Number';
-        title.style.cssText = 'font-size:16px; color:rgba(255,255,255,0.8); margin-bottom:8px;';
-
-        var input = document.createElement('input');
-        input.id = 'channel-number-field';
-        input.type = 'text';
-        input.inputMode = 'numeric';
-        input.pattern = '[0-9]*';
-        input.maxLength = '4';
-        input.autocomplete = 'off';
-        input.style.cssText = 'width:190px; height:58px; border-radius:10px; border:2px solid #ffffff; ' +
-            'background:rgba(15,15,15,0.92); color:#fff; font-size:42px; font-weight:700; ' +
-            'text-align:center; outline:none;';
-
-        input.addEventListener('input', function () {
-            this.value = String(this.value || '').replace(/\D/g, '').slice(0, 4);
-            channelNumberBuffer = this.value;
-            resetChannelInputTimer();
-        });
-
-        input.addEventListener('keydown', function (e) {
-            if (e.keyCode === 13 && channelNumberBuffer.length > 0) {
-                e.preventDefault();
-                if (channelInputTimeout) clearTimeout(channelInputTimeout);
-                navigateToChannelNumber(channelNumberBuffer);
-                channelNumberBuffer = '';
-                hideChannelNumberInput();
-                return;
-            }
-            if (e.keyCode === 10009 || e.keyCode === 27) {
-                e.preventDefault();
-                channelNumberBuffer = '';
-                hideChannelNumberInput();
-            }
-        });
-
-        inputWrap.appendChild(title);
-        inputWrap.appendChild(input);
-        container.appendChild(inputWrap);
-    }
-
-    inputWrap.style.display = 'block';
-
-    var inputEl = document.getElementById('channel-number-field');
-    if (inputEl) {
-        inputEl.value = number && number.length ? number : '';
-        inputEl.readOnly = false;
-        inputEl.focus();
-        if (typeof inputEl.click === 'function') inputEl.click();
-        try { inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length); } catch (e) {}
+    var pad = document.getElementById('channel-number-input');
+    if (!pad) return;
+    var field = document.getElementById('channel-number-field');
+    pad.style.display = 'flex';
+    if (field) {
+        field.value = number || '';
+        field.readOnly = false;
+        field.focus();
     }
 }
 
 /**
- * Hide channel number input overlay
+ * Hide channel number input and close Samsung native keypad
  */
 function hideChannelNumberInput() {
-    var inputWrap = document.getElementById('channel-number-input');
-    if (inputWrap) {
-        inputWrap.style.display = 'none';
-        var inputEl = document.getElementById('channel-number-field');
-        if (inputEl && typeof inputEl.blur === 'function') inputEl.blur();
-    }
+    var pad = document.getElementById('channel-number-input');
+    if (pad) pad.style.display = 'none';
+    var field = document.getElementById('channel-number-field');
+    if (field) { field.blur(); field.value = ''; }
 }
 
 /**
@@ -3472,12 +3509,12 @@ function navigateToChannelNumber(number) {
 
     if (channel) {
         console.log("[Player] Found channel:", channel.chtitle || channel.channel_name);
-        // CRITICAL: Close number input overlay BEFORE setup to ensure proper focus transfer
+        // Hide number pad immediately and clear buffer
+        if (channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
+        channelNumberBuffer = '';
         hideChannelNumberInput();
-        // Now start playing the found channel
+        // Start playing
         setupPlayer(channel);
-        // Show info bar for 5 seconds when channel is found by number pad
-        showOverlay();
     } else {
         console.warn("[Player] Channel not found for number:", number);
         showChannelNotFound(number);
@@ -3553,6 +3590,9 @@ function showInfoBarForced() {
  * Resets timer on each call (for OK button or channel change)
  */
 function showOverlay() {
+    // Don't show info bar before channel data is ready (prevents blank ghost on slow load)
+    if (!_lastAttemptedChannel) return;
+
     // Don't show info bar if sidebar is open (sidebar handles timing)
     if (sidebarState.isOpen) {
         syncInfoBarSidebarState();
@@ -3651,11 +3691,7 @@ var handleOKButton = function () {
 // Keep mouse/touch interactions refreshing info bar visibility.
 document.addEventListener('mousemove', showOverlay);
 document.addEventListener('click', showOverlay);
-
-// Show overlay initially for 5 seconds when page loads
-setTimeout(function () {
-    showOverlay();
-}, 100);
+// NOTE: showOverlay() is called from inside setupPlayer() once channel info is populated
 
 // ==========================================
 // DATE AND TIME UPDATES

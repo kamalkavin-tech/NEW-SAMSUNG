@@ -24,6 +24,7 @@
         <video id="video-player"
             style="width:1920px; height:1080px; position:absolute; top:0; left:0; display:none; margin:0; padding:0;"></video>
 
+
         <!-- Stream Ad Panel (right side overlay) -->
         <div class="stream-ad-panel" id="streamAdPanel" style="display: none;">
             <img id="streamAdImage" src="" alt="Ad" crossorigin="anonymous">
@@ -79,15 +80,15 @@
     </div>
 
     <!-- Premium Info Bar - position:fixed, z-index:9998 in ROOT stacking context (above error popup z-index:2000) -->
-    <div class="info-bar-premium" id="infoBarPremium">
+    <div class="info-bar-premium info-bar-hidden" id="infoBarPremium">
         <!-- LEFT SECTION: Logo + Channel Number & Name stacked -->
         <div class="info-left-section">
             <div class="channel-logo-box">
                 <img src="" alt="Channel Logo" id="ui-channel-logo" crossorigin="anonymous">
             </div>
             <div class="channel-info-stack">
-                <span class="channel-lcn" id="ui-channel-number">11</span>
-                <span class="channel-name" id="ui-channel-name">DD CHANDANA</span>
+                <span class="channel-lcn" id="ui-channel-number"></span>
+                <span class="channel-name" id="ui-channel-name"></span>
             </div>
         </div>
 
@@ -140,10 +141,20 @@
         </div>
     </div>
 
+    <!-- Channel Number Input - Samsung native numeric keypad (same pattern as login page) -->
+    <div id="channel-number-input" style="display:none; position:fixed; top:60px; right:60px; z-index:10000;">
+        <div class="numpad-container">
+            <div class="numpad-title">CHANNEL NUMBER</div>
+            <input type="tel" id="channel-number-field" class="numpad-input"
+                inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                placeholder="----" autocomplete="off" tabindex="0">
+        </div>
+    </div>
+
     <!-- Scripts -->
-    <script src="js/api.js"></script>
-    <script src="js/avplayer.js"></script>
-    <script src="js/player.js"></script>
+    <script src="js/api.js" defer></script>
+    <script src="js/avplayer.js" defer></script>
+    <script src="js/player.js" defer></script>
 </body>
 
 </html>
