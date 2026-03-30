@@ -867,11 +867,6 @@ function handleOK() {
                 localStorage.setItem('loginTime', new Date().toISOString());
                 localStorage.setItem('hasLoggedInOnce', 'true');
 
-                // Prime static assets once per session to reduce first navigation latency.
-                if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
-                    AppPerformanceCache.primeAfterLogin(true);
-                }
-
                 console.log("[Verify] OTP verified successfully - navigating to home");
                 window.location.replace("home.html");
             } else {

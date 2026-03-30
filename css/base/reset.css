@@ -6,7 +6,7 @@
 
 /* Global smooth scrolling for all scrollable containers */
 html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
 }
 
 body {
@@ -17,9 +17,7 @@ body {
     font-family: 'Inter', 'Segoe UI', Arial, Helvetica, sans-serif;
     overflow-x: hidden;
     overflow-y: auto;
-    transition: background 0.3s, color 0.3s;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
+    scroll-behavior: auto;
 }
 
 /* ==========================================

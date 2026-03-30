@@ -139,6 +139,9 @@ var AVPlayer = (function () {
     // Stale callbacks check this to avoid acting on old streams
     var _streamGeneration = 0;
     var _httpFallbackTimer = null;
+    // Serialization lock — prevents overlapping destroy/setUrl/play on hardware decoder
+    var _changeLocked = false;
+    var _pendingStreamUrl = null;
 
     return {
         init: function (options) {
@@ -180,13 +183,13 @@ var AVPlayer = (function () {
 
             try {
                 // Start with lowest bitrate for fastest initial playback
-                avplay.setStreamingProperty("ADAPTIVE_INFO", "BITRATES=LOWEST|LOW|MEDIUM");
+                avplay.setStreamingProperty("ADAPTIVE_INFO", "BITRATES=LOWEST");
                 avplay.setStreamingProperty("START_BITRATE", "LOWEST");
             } catch (e) {}
 
-            // Enable prebuffering for faster perceived start
+            // Enable prebuffering for faster stream start
             try {
-                avplay.setStreamingProperty("PREBUFFER_MODE", "0");
+                avplay.setStreamingProperty("PREBUFFER_MODE", "1");
             } catch (e) {}
         },
 
@@ -197,10 +200,7 @@ var AVPlayer = (function () {
             }
 
             try {
-                _log("[AVPlayer] ========================================");
-                _log("[AVPlayer] STARTING STREAM SETUP");
-                _log("[AVPlayer] Original URL:", url);
-                _log("[AVPlayer] ========================================");
+                _log("[AVPlayer] Stream setup:", url);
 
                 // Validate and clean URL
                 if (!url || url.trim() === "") {
@@ -239,88 +239,30 @@ var AVPlayer = (function () {
                         self.setStreamingHeaders(url);
                         _log("[AVPlayer] ✓ Headers set");
 
-                        // STEP 4: Configure buffering (Samsung recommended values)
-                        // API reference: https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html
+                        // STEP 4: Configure buffering — FAST START for live IPTV
                         try {
-                            // setTimeoutForBuffering takes SECONDS (not ms!)
-                            // Default is 20s. Samsung recommends 3-10s for IPTV.
-                            avplay.setTimeoutForBuffering(8);
+                            // Timeout reduced: fail fast so stale cache can show sooner
+                            avplay.setTimeoutForBuffering(4);
 
-                            // Initial buffer: 3 seconds (Samsung minimum recommended for stable playback)
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
+                            // Initial buffer: 1 second — starts playback ASAP
+                            // (was 3s — that's 3 seconds of black screen before anything plays!)
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
 
-                            // Resume buffer after stall: 8 seconds (prevents repeated re-buffering)
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
-
-                            // NOTE: PLAYER_BUFFER_SIZE_IN_BYTE is deprecated since Tizen 5.0 — removed.
+                            // Resume buffer: 3 seconds (was 8s — too long for channel switching)
+                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
                         } catch (bufferError) {
                             console.warn("[AVPlayer] Buffering config warning:", bufferError);
                         }
 
-                        // STEP 5: Set display rectangle and method for FULL SCREEN
+                        // STEP 5: Set display — single call, no cascading try-catches
                         try {
-                            _log("[AVPlayer] Setting FULL SCREEN display (1920x1080)...");
-                            
-                            // CRITICAL: Set display area to full screen dimensions (1920x1080)
-                            // x=0, y=0, width=1920, height=1080
                             avplay.setDisplayRect(0, 0, 1920, 1080);
-                            _log("[AVPlayer] ✓ Display rect set: 0, 0, 1920, 1080");
+                            try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {
+                                try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e2) {}
+                            }
+                        } catch (displayError) {}
 
-                            // Try multiple display modes for TRUE FULL SCREEN (no black bars)
-                            var displayModeSet = false;
-                            
-                            // Option 1: FULL_SCREEN - Stretches to fill entire screen (no black bars)
-                            // Best for filling 100% of TV screen without any borders
-                            try {
-                                avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
-                                _log("[AVPlayer] ✓ Display method: FULL_SCREEN (fills entire screen, no black bars)");
-                                displayModeSet = true;
-                            } catch (e1) {
-                                _log("[AVPlayer] FULL_SCREEN not available, trying ZOOM_16_9...");
-                            }
-                            
-                            // Option 2: ZOOM_16_9 - Zooms to 16:9 ratio, fills screen
-                            if (!displayModeSet) {
-                                try {
-                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9');
-                                    _log("[AVPlayer] ✓ Display method: ZOOM_16_9 (fills 16:9 screen)");
-                                    displayModeSet = true;
-                                } catch (e2) {
-                                    _log("[AVPlayer] ZOOM_16_9 not available, trying ZOOM...");
-                                }
-                            }
-                            
-                            // Option 3: ZOOM - Zooms to fill screen
-                            if (!displayModeSet) {
-                                try {
-                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM');
-                                    _log("[AVPlayer] ✓ Display method: ZOOM (zooms to fill)");
-                                    displayModeSet = true;
-                                } catch (e3) {
-                                    _log("[AVPlayer] ZOOM not available, trying AUTO_ASPECT_RATIO...");
-                                }
-                            }
-                            
-                            // Option 4: AUTO_ASPECT_RATIO - Auto adjusts
-                            if (!displayModeSet) {
-                                try {
-                                    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
-                                    _log("[AVPlayer] ✓ Display method: AUTO_ASPECT_RATIO");
-                                    displayModeSet = true;
-                                } catch (e4) {
-                                    console.warn("[AVPlayer] No display method could be set, using default");
-                                }
-                            }
-
-                            _log("[AVPlayer] ✓ FULL SCREEN display configured");
-                        } catch (displayError) {
-                            console.error("[AVPlayer] Display error:", displayError);
-                        }
-
-                        _log("[AVPlayer] ========================================");
-                        _log("[AVPlayer] ✓✓✓ STREAM SETUP COMPLETE ✓✓✓");
-                        _log("[AVPlayer] Ready to play:", currentStreamUrl);
-                        _log("[AVPlayer] ========================================");
+                        _log("[AVPlayer] Stream setup complete:", currentStreamUrl);
 
                     } catch (setupError) {
                         console.error("[AVPlayer] ========================================");
@@ -336,7 +278,7 @@ var AVPlayer = (function () {
                             });
                         }
                     }
-                }, 10); // 10ms: minimum delay for Samsung TV hardware decoder release
+                }, 0); // yield to event loop — hardware decoder released by destroy() already
 
             } catch (e) {
                 console.error("[AVPlayer] setUrl Exception:", e);
@@ -495,7 +437,25 @@ var AVPlayer = (function () {
             // Check if this is a DVB/FTA stream
             if (isDVBUrl(url)) {
                 _log("[AVPlayer] DVB/FTA stream detected");
+                // Wait for any DVB hide to complete before showing new DVB
+                if (isDVBStream && tvWindow) {
+                    var self = this;
+                    this.stopDVBStream();
+                    // Give TV window time to fully hide before re-showing
+                    setTimeout(function () {
+                        if (myGeneration !== _streamGeneration) return;
+                        self.playDVBStream(url);
+                    }, 150);
+                    return;
+                }
                 this.playDVBStream(url);
+                return;
+            }
+
+            // SERIALIZATION: If hardware is busy with previous switch, queue this one
+            if (_changeLocked) {
+                _log("[AVPlayer] Hardware busy — queuing stream:", url);
+                _pendingStreamUrl = url;
                 return;
             }
 
@@ -505,18 +465,42 @@ var AVPlayer = (function () {
             }
 
             isDVBStream = false;
+            _changeLocked = true;
             this.destroy();
-            this.setUrl(url);
+
             var self = this;
-            _playTimer = setTimeout(function () {
-                _playTimer = null;
-                // Abort if a newer changeStream call has been made
+            // Give hardware decoder minimal time to release after destroy
+            _setUrlTimer = setTimeout(function () {
+                _setUrlTimer = null;
                 if (myGeneration !== _streamGeneration) {
-                    _log("[AVPlayer] play() aborted — stale generation", myGeneration, "vs", _streamGeneration);
+                    _changeLocked = false;
+                    if (_pendingStreamUrl) {
+                        var next = _pendingStreamUrl;
+                        _pendingStreamUrl = null;
+                        self.changeStream(next);
+                    }
                     return;
                 }
-                self.play();
-            }, 50);
+                self.setUrl(url);
+                _playTimer = setTimeout(function () {
+                    _playTimer = null;
+                    _changeLocked = false;
+                    if (myGeneration !== _streamGeneration) {
+                        if (_pendingStreamUrl) {
+                            var next = _pendingStreamUrl;
+                            _pendingStreamUrl = null;
+                            self.changeStream(next);
+                        }
+                        return;
+                    }
+                    self.play();
+                    if (_pendingStreamUrl) {
+                        var next = _pendingStreamUrl;
+                        _pendingStreamUrl = null;
+                        setTimeout(function () { self.changeStream(next); }, 30);
+                    }
+                }, 15);
+            }, 15);
         },
 
         /**
@@ -633,10 +617,15 @@ var AVPlayer = (function () {
          * Stop DVB/FTA stream and hide TV window
          */
         stopDVBStream: function () {
-            if (!isDVBStream) return;
-            
+            if (!isDVBStream && !tvWindow) return;
+
             _log("[AVPlayer] Stopping DVB/FTA stream...");
-            
+
+            // Mark as stopped BEFORE async hide to prevent race conditions
+            isDVBStream = false;
+            playerState = "NONE";
+            currentStreamUrl = "";
+
             if (tvWindow) {
                 try {
                     tvWindow.hide(
@@ -651,9 +640,6 @@ var AVPlayer = (function () {
                     console.warn("[AVPlayer] Error hiding DVB window:", e);
                 }
             }
-            
-            isDVBStream = false;
-            playerState = "NONE";
         },
 
         /**

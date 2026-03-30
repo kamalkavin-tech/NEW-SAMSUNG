@@ -224,7 +224,7 @@ body.channels-page {
     max-height: 75%;
     object-fit: contain;
     z-index: 1;
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+    /* filter removed for TV performance */
 }
 
 /* ========================================
@@ -254,7 +254,7 @@ body.channels-page {
     height: 6px;
     background: #fff;
     border-radius: 50%;
-    animation: pulse 1.5s ease-in-out infinite;
+    /* animation removed for TV performance */
 }
 
 @keyframes pulse {
@@ -1353,9 +1353,7 @@ body.light-mode .exit-btn-yes {
     top: -20px;
     right: -10px;
     z-index: 2;
-    filter: drop-shadow(0 4px 12px rgba(245, 166, 35, 0.4));
 }
 
 .applock-mascot-svg {
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.3));
 }

@@ -1245,6 +1245,22 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
         return;
     }
 
+    // Check persistent cache (localStorage) — survives page reloads & app relaunches.
+    // Gateway IPs rarely change; 10-minute TTL avoids redundant external API calls.
+    try {
+        var persistedGw = localStorage.getItem('bbnl_gateway_cache');
+        if (persistedGw) {
+            var gwCache = JSON.parse(persistedGw);
+            if (gwCache && gwCache.ip && (now - Number(gwCache.ts)) < 600000) { // 10 min
+                settingsLastKnownGateway = gwCache.ip;
+                settingsGatewayLastResolvedAt = now;
+                gatewayEl.innerText = gwCache.ip;
+                console.log('[Settings] Gateway IP from persistent cache:', gwCache.ip);
+                return;
+            }
+        }
+    } catch (e) {}
+
     // If a previous fetch is still in progress, do not start another one.
     if (settingsGatewayFetchInFlight) {
         if (settingsLastKnownGateway) gatewayEl.innerText = settingsLastKnownGateway;
@@ -1270,6 +1286,8 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
             settingsGatewayLastResolvedAt = Date.now();
             settingsGatewayFetchInFlight = false;
             gatewayEl.innerText = v;
+            // Persist to localStorage so page reloads don't re-fetch
+            try { localStorage.setItem('bbnl_gateway_cache', JSON.stringify({ ip: v, ts: Date.now() })); } catch (e) {}
             return true;
         }
         return false;
@@ -1358,7 +1376,7 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
             }
 
             var service = ipServices[index];
-            fetchWithTimeout(service, 15000)
+            fetchWithTimeout(service, 5000)
                 .then(function (response) {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     return response.json();
@@ -1386,9 +1404,31 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
 function loadIPv6Display() {
     var ipv6El = document.getElementById('device-ipv6');
     if (!ipv6El) return;
-    // Clear cache so detection runs fresh
-    DEVICE_INFO.ipv6 = "";
+
+    // Show cached IPv6 immediately if available (avoid slow re-detection on every page load)
+    if (DEVICE_INFO.ipv6) {
+        ipv6El.innerText = DEVICE_INFO.ipv6;
+        return;
+    }
+
+    // Check persistent cache (5-minute TTL)
+    try {
+        var cached = localStorage.getItem('bbnl_ipv6_cache');
+        if (cached) {
+            var parsed = JSON.parse(cached);
+            if (parsed && parsed.addr && (Date.now() - Number(parsed.ts)) < 300000) {
+                DEVICE_INFO.ipv6 = parsed.addr;
+                ipv6El.innerText = parsed.addr;
+                return;
+            }
+        }
+    } catch (e) {}
+
+    // Detect fresh only when no cache available
     DeviceInfo.detectIPv6().then(function (addr) {
         ipv6El.innerText = addr || "Not Available";
+        if (addr) {
+            try { localStorage.setItem('bbnl_ipv6_cache', JSON.stringify({ addr: addr, ts: Date.now() })); } catch (e) {}
+        }
     });
 }

@@ -468,14 +468,14 @@ window.onload = function () {
                     hasHiddenLoadingIndicator = false; // Reset flag on new buffering
                 },
                 onBufferingComplete: () => {
-                    console.log("Buffering Done");
                     hideBufferingIndicator();
                     hasHiddenLoadingIndicator = true;
-                    // Clear stream timeout - buffering complete means stream works
                     if (window._streamTimeoutTimer) {
                         clearTimeout(window._streamTimeoutTimer);
                         window._streamTimeoutTimer = null;
                     }
+                    // Stream is playing — NOW start the info bar auto-hide timer
+                    showOverlay();
                     // Load stream ads on successful playback
                     var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
                     if (ch) {
@@ -540,6 +540,20 @@ window.onload = function () {
     }
 
     startPlayerNetworkWatchdog();
+
+    // Set device ID and user info immediately — these are available right away
+    // (don't wait for setupPlayer's requestAnimationFrame)
+    try {
+        var devId = document.getElementById('ui-device-id');
+        if (devId) devId.innerText = DeviceInfo.getDeviceIdLabel();
+    } catch (e) {}
+    try {
+        var usr = document.getElementById('ui-user');
+        if (usr) {
+            var ud = AuthAPI.getUserData();
+            usr.innerText = (ud && (ud.userid || ud.userId || ud.username)) || 'guest';
+        }
+    } catch (e) {}
 
     // Parse URL params
     const urlParams = new URLSearchParams(window.location.search);
@@ -896,90 +910,61 @@ function updatePlayerChannelLogo(channel) {
     var uiLogo = document.getElementById("ui-channel-logo");
     if (!uiLogo) return;
 
-    var normalizedLogo = normalizeLogoCacheUrl(getChannelLogoUrl(channel));
+    // Use SAME URL path as sidebar: normalizeLogoCacheUrl → getValidatedImageUrl
+    var logoUrl = normalizeLogoCacheUrl(getChannelLogoUrl(channel));
     var requestToken = ++_playerLogoRequestToken;
 
     uiLogo.onload = null;
     uiLogo.onerror = null;
 
-    if (!normalizedLogo) {
+    if (!logoUrl) {
         uiLogo.style.display = 'none';
         uiLogo.removeAttribute('src');
-        uiLogo.dataset.logoUrl = '';
         setInfoBarLogoPlaceholder(channel);
         return;
     }
 
-    if (uiLogo.dataset.logoUrl === normalizedLogo && uiLogo.getAttribute('src')) {
+    // Same logo already loaded — skip
+    if (uiLogo.dataset.logoUrl === logoUrl && uiLogo.getAttribute('src')) {
         uiLogo.style.display = '';
         clearInfoBarLogoPlaceholder();
         return;
     }
 
-    // Check global cross-page cache first (survives page navigation)
-    var globalCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(normalizedLogo);
-    if (_logoCache[normalizedLogo] || globalCached) {
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-            BBNL_API.setImageSource(uiLogo, normalizedLogo);
-        } else {
-            uiLogo.src = normalizedLogo;
-        }
-        _logoCache[normalizedLogo] = true;
-        uiLogo.dataset.logoUrl = normalizedLogo;
+    // Check blob cache — use SAME validated URL as sidebar does
+    var validatedUrl = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
+        ? BBNL_API.getValidatedImageUrl(logoUrl) : logoUrl;
+
+    if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedUrl]) {
+        uiLogo.src = _BLOB_CACHE[validatedUrl];
+        uiLogo.dataset.logoUrl = logoUrl;
         uiLogo.style.display = '';
         clearInfoBarLogoPlaceholder();
-        uiLogo.onerror = function () {
-            if (requestToken !== _playerLogoRequestToken) return;
-            uiLogo.removeAttribute('src');
-            uiLogo.style.display = 'none';
-            setInfoBarLogoPlaceholder(channel);
-        };
         return;
     }
 
+    // Hide old logo while new one loads — show channel initials placeholder
+    uiLogo.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     uiLogo.style.display = 'none';
-    uiLogo.removeAttribute('src');
-    uiLogo.dataset.logoUrl = normalizedLogo;
+    uiLogo.dataset.logoUrl = logoUrl;
+    setInfoBarLogoPlaceholder(channel);
 
-    var preloader = new Image();
-    preloader.onload = function () {
+    uiLogo.onload = function () {
         if (requestToken !== _playerLogoRequestToken) return;
-        _logoCache[normalizedLogo] = true;
-        // Persist to global cross-page cache
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
-            BBNL_API.markImageCached(normalizedLogo);
-        }
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-            BBNL_API.setImageSource(uiLogo, normalizedLogo);
-        } else {
-            uiLogo.src = normalizedLogo;
-        }
-        uiLogo.dataset.logoUrl = normalizedLogo;
         uiLogo.style.display = '';
         clearInfoBarLogoPlaceholder();
-        uiLogo.onerror = function () {
-            if (requestToken !== _playerLogoRequestToken) return;
-            uiLogo.removeAttribute('src');
-            uiLogo.style.display = 'none';
-            setInfoBarLogoPlaceholder(channel);
-        };
     };
-    preloader.onerror = function () {
+    uiLogo.onerror = function () {
         if (requestToken !== _playerLogoRequestToken) return;
-        console.error('[LOGO LOAD FAILED] URL:', normalizedLogo, 'Channel:', channel.chtitle || 'unknown');
-        console.error('[LOGO LOAD FAILED] Network issue, CORS, Certificate, or 404 error');
         uiLogo.removeAttribute('src');
         uiLogo.style.display = 'none';
         setInfoBarLogoPlaceholder(channel);
     };
-    preloader.onabort = function () {
-        console.warn('[LOGO LOAD ABORTED] URL:', normalizedLogo);
-    };
-    console.log('[LOGO PRELOAD START] Attempting to load:', normalizedLogo, 'for channel:', channel.chtitle || 'unknown');
+    // Use SAME call as sidebar — setImageSource will cache in _BLOB_CACHE[validatedUrl]
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-        BBNL_API.setImageSource(preloader, normalizedLogo);
+        BBNL_API.setImageSource(uiLogo, logoUrl);
     } else {
-        preloader.src = normalizedLogo;
+        uiLogo.src = logoUrl;
     }
 }
 
@@ -1028,42 +1013,27 @@ function updateExpiryDisplay(channel) {
 }
 
 function setupPlayer(channel) {
-    console.log("=== Setting up player for channel ===", channel);
-
     // Increment stream generation — stale callbacks from previous channel will be ignored
     _playerStreamGen++;
     var myGen = _playerStreamGen;
 
-    // CRITICAL: Stop any previous stream IMMEDIATELY before anything else
-    // This prevents the old channel from continuing to play in the background
-    try {
-        if (typeof AVPlayer !== 'undefined') {
-            AVPlayer.stop();
-        }
-    } catch (e) {
-        console.log("[Player] Previous stream stop (cleanup):", e.message);
-    }
+    // Show loading overlay FIRST — covers the black screen from AVPlayer.stop()
+    showBufferingIndicator();
 
-    // Clear any pending stream timeout from previous channel
+    // Now stop previous stream (user sees "Loading Stream..." not black screen)
+    try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
+
     if (window._streamTimeoutTimer) {
         clearTimeout(window._streamTimeoutTimer);
         window._streamTimeoutTimer = null;
     }
 
-    // Reset loading state for this new channel
-    hasHiddenLoadingIndicator = false;
-
-    // Track current channel for retry
     _lastAttemptedChannel = channel;
-
-    // ==========================================
-    // UPDATE UI FIRST - Show selected channel context
-    // ==========================================
 
     const chName = channel.channel_name || channel.chtitle || "Unknown Channel";
 
-    // Channel Name
-    const uiName = document.getElementById("ui-channel-name");
+    // Minimal UI update — just channel name and number (fast)
+    var uiName = document.getElementById("ui-channel-name");
     if (uiName) uiName.innerText = chName;
 
     // Channel Number
@@ -1071,179 +1041,19 @@ function setupPlayer(channel) {
     const uiNum = document.getElementById("ui-channel-number");
     if (uiNum) uiNum.innerText = channelNum;
 
-    // Channel Logo - clear stale artwork immediately, then reuse cache or preload.
+    // Update channel logo IMMEDIATELY (not deferred — must change on each channel switch)
     updatePlayerChannelLogo(channel);
 
-    // Expiry Date - use shared function
-    updateExpiryDisplay(channel);
-
-    // Show infobar now that channel info is populated (not on page load — only after real channel set)
-    showOverlay();
-
-    // Program Title (Live Stream)
-    const uiTitle = document.getElementById("ui-program-title");
-    if (uiTitle) {
-        uiTitle.innerText = "Live Stream: " + chName;
-    }
-
-    // Program Time (Show as LIVE for live streams)
-    const uiProgramTime = document.getElementById("ui-program-time");
-    if (uiProgramTime) {
-        uiProgramTime.innerHTML = '<span style="color: #ef4444;">●</span> LIVE';
-    }
-
-    // Next Program (Not available from API)
-    const uiNext = document.getElementById("ui-next");
-    if (uiNext) {
-        uiNext.innerText = "--";
-    }
-
     // ==========================================
-    // FOOTER STATUS BAR
-    // ==========================================
-
-    // EPG (use channel ID or provider)
-    const uiEpg = document.getElementById("ui-epg");
-    if (uiEpg) {
-        const epgId = channel.chid || channel.provider || chName.substring(0, 10).toUpperCase();
-        uiEpg.innerText = epgId;
-    }
-
-    // Status (Subscription status and price)
-    const uiStatus = document.getElementById("ui-status");
-    const uiSubscription = document.getElementById("ui-subscription");
-
-    const isSubscribed = channel.subscribed === "yes" || channel.subscribed === "1" ||
-        channel.subscribed === true || channel.subscribed === 1;
-    const price = channel.chprice || channel.chPrice || channel.price || "0.00";
-
-    // Update ui-status if exists
-    if (uiStatus) {
-        if (isSubscribed) {
-            if (parseFloat(price) > 0) {
-                uiStatus.innerText = "Pay($" + price + "/mo)";
-                uiStatus.style.color = "#10b981"; // Green for paid subscription
-            } else {
-                uiStatus.innerText = "Subscribed (Free)";
-                uiStatus.style.color = "#10b981"; // Green
-            }
-        } else {
-            uiStatus.innerText = "Not Subscribed";
-            uiStatus.style.color = "#ef4444"; // Red
-        }
-    }
-
-    // Update Price display
-    const uiPrice = document.getElementById("ui-price");
-    if (uiPrice) {
-        uiPrice.classList.remove('price-paid');
-        const priceVal = parseFloat(price) || 0;
-        if (priceVal > 0) {
-            uiPrice.innerText = "₹" + priceVal.toFixed(2);
-            uiPrice.classList.add('price-paid');
-        } else {
-            uiPrice.innerText = "₹0.00";
-        }
-    }
-
-    // Update Device ID display (real TV DUID, not API serial number)
-    const uiDeviceId = document.getElementById("ui-device-id");
-    if (uiDeviceId) {
-        try {
-            uiDeviceId.innerText = DeviceInfo.getDeviceIdLabel();
-        } catch (e) {
-            uiDeviceId.innerText = "Not available";
-        }
-    }
-
-    // User Info (from session)
-    const uiUser = document.getElementById("ui-user");
-    if (uiUser) {
-        const userData = AuthAPI.getUserData();
-        if (userData && (userData.userid || userData.userId || userData.username)) {
-            const userId = userData.userid || userData.userId || userData.username || "user";
-            uiUser.innerText = userId;
-        } else {
-            uiUser.innerText = "guest";
-        }
-    }
-
-    // User Info in info bar (new element)
-    const uiUserInfo = document.getElementById("ui-user-info");
-    if (uiUserInfo) {
-        const userData = AuthAPI.getUserData();
-        if (userData) {
-            const mobile = userData.mobile || "";
-            const username = userData.userid || userData.userId || userData.username || "User";
-            if (mobile) {
-                uiUserInfo.innerText = "User: " + mobile;
-            } else {
-                uiUserInfo.innerText = "User: " + username;
-            }
-        } else {
-            uiUserInfo.innerText = "User: Guest";
-        }
-    }
-
-    // TV ID (from DeviceInfo)
-    const uiTvId = document.getElementById("ui-tvid");
-    if (uiTvId) {
-        try {
-            uiTvId.innerText = DeviceInfo.getDeviceIdLabel();
-        } catch (e) {
-            uiTvId.innerText = "Not available";
-        }
-    }
-
-    // Current Date and Time (live updating)
-    updateDateTime();
-    // Update time every second — only start if not already running
-    if (!playerDateTimeInterval) {
-        playerDateTimeInterval = setInterval(updateDateTime, 1000);
-    }
-
-    // Update Index if list loaded
-    // Use channel ID (channelno) for reliable lookup — names can have duplicates
-    if (allChannels.length > 0) {
-        var chId = channel.channelno || channel.urno || channel.chid || "";
-        if (chId) {
-            var foundIdx = allChannels.findIndex(function (ch) {
-                return (ch.channelno || ch.urno || ch.chid || "") === chId;
-            });
-            if (foundIdx >= 0) {
-                currentIndex = foundIdx;
-            }
-        } else {
-            // Fallback to name match only if no ID available
-            var nameIdx = allChannels.findIndex(function (ch) {
-                return (ch.channel_name || ch.chtitle || "") === chName;
-            });
-            if (nameIdx >= 0) {
-                currentIndex = nameIdx;
-            }
-        }
-    }
-
-    // ==========================================
-    // VALIDATION PHASE - Check stream before playback
-    // UI already shows selected channel context
+    // VALIDATION & STREAM START — do this FIRST, before slow UI updates
     // ==========================================
 
     const streamUrl = channel.streamlink || channel.channel_url;
     const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
 
-    console.log("=== STREAM URL DEBUG ===");
-    console.log("Channel:", chName);
-    console.log("Raw stream URL:", streamUrl);
-    if (streamUrl) {
-        console.log("Is DVB/FTA channel:", isDVBChannel);
-    }
-    console.log("========================");
-
     // Check stream URL exists
     if (!streamUrl) {
         console.warn("No Stream URL found for channel:", chName);
-        // Stop any background playback
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
         showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
         return;
@@ -1253,10 +1063,8 @@ function setupPlayer(channel) {
     var fixedStreamUrl = streamUrl;
     if (!isDVBChannel) {
         fixedStreamUrl = fixLocalhostUrl(streamUrl);
-        console.log("Stream URL (after fix):", fixedStreamUrl);
 
         if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
-            console.error("Invalid stream URL format:", streamUrl);
             try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
             showPlayerErrorPopup('Invalid Stream', 'Invalid stream URL format. Please try another channel.');
             return;
@@ -1267,56 +1075,38 @@ function setupPlayer(channel) {
     if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
         channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
         console.warn("[Player] Channel not subscribed, blocking playback:", chName, "subscribed:", channel.subscribed);
-        // Stop any background playback
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
         showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
         return;
     }
 
-    // Use only validated channels for current playing context/focus restoration.
     _lastPlayingChannel = channel;
 
     // ==========================================
-    // VALIDATION PASSED - Start playback
+    // START PLAYBACK IMMEDIATELY — UI updates happen after
     // ==========================================
 
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
-        console.log("Using AVPlayer (Tizen mode)");
-        if (isDVBChannel) {
-            console.log("📡 FTA channel - using TV Window for full screen playback");
-        }
+        // Buffering indicator already shown at top of setupPlayer
 
-        // Show loading indicator immediately
-        showBufferingIndicator();
-
-        // Stream timeout: if playback doesn't start quickly, show error
         if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
         window._streamTimeoutTimer = setTimeout(function () {
-            // Abort if a newer setupPlayer call was made (user switched channels)
             if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
-                console.warn("[Player] Stream timeout - playback did not start within " + PLAYER_STREAM_START_TIMEOUT_MS + "ms");
                 hideBufferingIndicator();
-
                 var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
                 var isSubs = ch && (ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1);
                 var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
-
                 if (ch && !isSubs && price > 0) {
-                    // Not subscribed — always show subscription popup
                     showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
                 } else if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
-                    // Only show error popup when network is actually bad
                     showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
                 }
-                // On good network: stream is just slow — stay silent, AVPlayer STATE_ERROR will handle real failures
             }
         }, PLAYER_STREAM_START_TIMEOUT_MS);
 
         try {
-            // Use the FIXED stream URL (with localhost replaced for IPTV, or DVB URL for FTA)
             AVPlayer.changeStream(fixedStreamUrl);
-            console.log("AVPlayer.changeStream called successfully with URL:", fixedStreamUrl);
         } catch (error) {
             console.error("Error calling AVPlayer.changeStream:", error);
             if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
@@ -1324,24 +1114,110 @@ function setupPlayer(channel) {
             showPlayerErrorPopup('Playback Error', 'Error starting playback. Please try another channel.');
         }
     } else {
-        // Fallback or Test Mode
-        console.warn("Non-Tizen Environment: Using Fallback HTML5 Video");
-
         if (isDVBChannel) {
-            console.warn("DVB/FTA channels cannot be played in browser - requires Samsung TV tuner");
             showPlayerErrorPopup('FTA Not Available', 'FTA channels require Samsung TV with antenna connection.');
             return;
         }
-
         const v = document.getElementById("video-player");
         if (v) {
-            // Use the FIXED stream URL
             v.src = fixedStreamUrl;
             v.play().catch(function (error) {
                 console.error("HTML5 video play error:", error);
             });
         }
     }
+
+    // ==========================================
+    // DEFERRED UI UPDATES — run after stream starts (non-blocking)
+    // Uses requestAnimationFrame so these don't delay playback
+    // ==========================================
+    var capturedChannel = channel;
+    var capturedChName = chName;
+    requestAnimationFrame(function () {
+        // Show overlay + program info (deferred from above)
+        updateExpiryDisplay(capturedChannel);
+        showOverlay();
+        var uiTitle = document.getElementById("ui-program-title");
+        if (uiTitle) uiTitle.innerText = "Live Stream: " + capturedChName;
+        var uiProgramTime = document.getElementById("ui-program-time");
+        if (uiProgramTime) uiProgramTime.innerHTML = '<span style="color: #ef4444;">●</span> LIVE';
+        var uiNext = document.getElementById("ui-next");
+        if (uiNext) uiNext.innerText = "--";
+
+        // Footer status bar
+        var isSubscribed = capturedChannel.subscribed === "yes" || capturedChannel.subscribed === "1" ||
+            capturedChannel.subscribed === true || capturedChannel.subscribed === 1;
+        var price = capturedChannel.chprice || capturedChannel.chPrice || capturedChannel.price || "0.00";
+
+        var uiEpg = document.getElementById("ui-epg");
+        if (uiEpg) uiEpg.innerText = capturedChannel.chid || capturedChannel.provider || capturedChName.substring(0, 10).toUpperCase();
+
+        var uiStatus = document.getElementById("ui-status");
+        if (uiStatus) {
+            if (isSubscribed) {
+                uiStatus.innerText = parseFloat(price) > 0 ? "Pay($" + price + "/mo)" : "Subscribed (Free)";
+                uiStatus.style.color = "#10b981";
+            } else {
+                uiStatus.innerText = "Not Subscribed";
+                uiStatus.style.color = "#ef4444";
+            }
+        }
+
+        var uiPrice = document.getElementById("ui-price");
+        if (uiPrice) {
+            uiPrice.classList.remove('price-paid');
+            var priceVal = parseFloat(price) || 0;
+            uiPrice.innerText = priceVal > 0 ? "₹" + priceVal.toFixed(2) : "₹0.00";
+            if (priceVal > 0) uiPrice.classList.add('price-paid');
+        }
+
+        var uiDeviceId = document.getElementById("ui-device-id");
+        if (uiDeviceId) {
+            try { uiDeviceId.innerText = DeviceInfo.getDeviceIdLabel(); } catch (e) { uiDeviceId.innerText = "Not available"; }
+        }
+
+        var uiUser = document.getElementById("ui-user");
+        if (uiUser) {
+            var userData = AuthAPI.getUserData();
+            uiUser.innerText = (userData && (userData.userid || userData.userId || userData.username)) || "guest";
+        }
+
+        var uiUserInfo = document.getElementById("ui-user-info");
+        if (uiUserInfo) {
+            var userData2 = AuthAPI.getUserData();
+            if (userData2) {
+                uiUserInfo.innerText = "User: " + (userData2.mobile || userData2.userid || userData2.userId || "User");
+            } else {
+                uiUserInfo.innerText = "User: Guest";
+            }
+        }
+
+        var uiTvId = document.getElementById("ui-tvid");
+        if (uiTvId) {
+            try { uiTvId.innerText = DeviceInfo.getDeviceIdLabel(); } catch (e) { uiTvId.innerText = "Not available"; }
+        }
+
+        updateDateTime();
+        if (!playerDateTimeInterval) {
+            playerDateTimeInterval = setInterval(updateDateTime, 1000);
+        }
+
+        // Update channel index
+        if (allChannels.length > 0) {
+            var chId = capturedChannel.channelno || capturedChannel.urno || capturedChannel.chid || "";
+            if (chId) {
+                var foundIdx = allChannels.findIndex(function (ch) {
+                    return (ch.channelno || ch.urno || ch.chid || "") === chId;
+                });
+                if (foundIdx >= 0) currentIndex = foundIdx;
+            } else {
+                var nameIdx = allChannels.findIndex(function (ch) {
+                    return (ch.channel_name || ch.chtitle || "") === capturedChName;
+                });
+                if (nameIdx >= 0) currentIndex = nameIdx;
+            }
+        }
+    });
 
 }
 
@@ -2022,6 +1898,7 @@ function getFilteredChannelsByLanguage() {
  * Render categories list
  */
 function renderCategoriesList() {
+    _cachedSidebarCategories = null; // invalidate cached DOM collection
     var container = document.getElementById('categoriesList');
     if (!container) return;
 
@@ -2157,6 +2034,7 @@ function loadSidebarChannels() {
  * Render channels list in HTML - Logo + Name + Price + LCN layout
  */
 function renderChannelsList() {
+    _cachedSidebarChannels = null; // invalidate cached DOM collection
     var container = document.getElementById('channelsList');
     if (!container) return;
 
@@ -2190,11 +2068,13 @@ function renderChannelsList() {
                 this.style.display = 'none';
                 ensureSidebarLogoPlaceholder(logoDiv, ch);
             }, { once: true });
-            // Check global cache — if already seen before, browser HTTP cache serves instantly
-            var sidebarGlobalCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(logoUrl);
-            if (sidebarGlobalCached) _logoCache[logoUrl] = true;
-
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            // FAST PATH: Use persistent blob cache (no fetch needed)
+            var validatedUrl = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
+                ? BBNL_API.getValidatedImageUrl(logoUrl) : logoUrl;
+            if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedUrl]) {
+                logoImg.src = _BLOB_CACHE[validatedUrl];
+                _logoCache[logoUrl] = true;
+            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(logoImg, logoUrl);
             } else {
                 logoImg.src = logoUrl;
@@ -2574,6 +2454,24 @@ function focusChannelItem(index) {
  * Returns true if keydown was handled by sidebar
  * Timer is reset on EVERY key press to keep sidebar visible during active navigation
  */
+// Cached DOM collections for sidebar — avoids querySelectorAll on every keypress.
+// Invalidated when sidebar content changes (renderSidebarCategories/renderSidebarChannels).
+var _cachedSidebarCategories = null;
+var _cachedSidebarChannels = null;
+
+function _getSidebarCategories() {
+    if (!_cachedSidebarCategories || _cachedSidebarCategories.length === 0) {
+        _cachedSidebarCategories = Array.from(document.querySelectorAll('.category-item'));
+    }
+    return _cachedSidebarCategories;
+}
+function _getSidebarChannels() {
+    if (!_cachedSidebarChannels || _cachedSidebarChannels.length === 0) {
+        _cachedSidebarChannels = Array.from(document.querySelectorAll('.channel-item'));
+    }
+    return _cachedSidebarChannels;
+}
+
 function handleSidebarKeydown(e) {
     if (!sidebarState.isOpen) return false;
 
@@ -2696,7 +2594,7 @@ function handleSidebarKeydown(e) {
     // CATEGORIES LIST
     // ==========================================
     if (isOnCategory) {
-        var categories = Array.from(document.querySelectorAll('.category-item'));
+        var categories = _getSidebarCategories();
         var currentCatIndex = categories.findIndex(function(el) { return el === activeEl; });
         if (currentCatIndex === -1) currentCatIndex = sidebarState.categoryIndex;
         var categoryCount = categories.length;
@@ -2793,7 +2691,7 @@ function handleSidebarKeydown(e) {
     // CHANNELS LIST
     // ==========================================
     if (isOnChannel) {
-        var channels = Array.from(document.querySelectorAll('.channel-item'));
+        var channels = _getSidebarChannels();
         // Use sidebarState.channelIndex as the source of truth
         var currentChIndex = sidebarState.channelIndex;
         // Clamp to valid range
@@ -2979,7 +2877,7 @@ function isSidebarFocused() {
 }
 
 var _lastKeyTime = 0;
-var _KEY_THROTTLE_MS = 120; // prevent rapid-fire key flooding on Samsung TV remote
+var _KEY_THROTTLE_MS = 40; // reduced from 120ms — real TV remotes already have 50-100ms RF lag
 
 function handleKeydown(e) {
     var code;
@@ -3040,10 +2938,10 @@ function handleKeydown(e) {
             // BACK
             if (sidebarState.isOpen) {
                 closeSidebar();
-                console.log('[Player] RETURN pressed - closing sidebar (popup open)');
             } else {
                 hidePlayerErrorPopup();
-                // Info bar now stays visible without auto-hide until channel change
+                // Show info bar with fresh auto-hide timer
+                showOverlay();
             }
         } else if (code === 13) {
             // ENTER - click Try Again button
@@ -3097,9 +2995,11 @@ function handleKeydown(e) {
 
         // If sidebar is closed, exit player
         closePlayer();
-        // Always go back to channels page
+        // Brief wait for Samsung TV hardware to release decoder before navigating
         console.log('[Player] Navigating back to channels page');
-        window.location.href = 'channels.html';
+        setTimeout(function () {
+            window.location.href = 'channels.html';
+        }, 60);
         return;
     }
 
@@ -3337,55 +3237,41 @@ function pad(num) {
 }
 
 function showBufferingIndicator() {
-    // Reset the hidden flag when showing indicator for new stream
     hasHiddenLoadingIndicator = false;
 
-    // Add a prominent loading indicator
     var container = document.getElementById('player-container');
-    if (container && !document.getElementById('buffering-indicator')) {
-        // Add spinner CSS if not already added
-        if (!document.getElementById('spinner-styles')) {
-            var style = document.createElement('style');
-            style.id = 'spinner-styles';
-            style.textContent = `
-                .spinner {
-                    border: 4px solid rgba(255, 255, 255, 0.3);
-                    border-top: 4px solid #fff;
-                    border-radius: 50%;
-                    width: 50px;
-                    height: 50px;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto;
-                }
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-            `;
-            document.head.appendChild(style);
-        }
+    if (!container) return;
 
-        var bufferingDiv = document.createElement('div');
-        bufferingDiv.id = 'buffering-indicator';
-        bufferingDiv.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 30px 50px; border-radius: 15px; font-size: 22px; z-index: 9999; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.8);';
-        bufferingDiv.innerHTML = '<div style="margin-bottom: 15px;"><div class="spinner"></div></div><div style="font-size: 20px; font-weight: 600;">Loading Stream...</div><div style="font-size: 14px; color: #aaa; margin-top: 8px;">Please wait</div>';
-        container.appendChild(bufferingDiv);
+    // Remove existing indicator first (handles rapid channel switches)
+    var existing = document.getElementById('buffering-indicator');
+    if (existing) existing.remove();
 
-        // SAFETY TIMEOUT: Auto-hide after 8 seconds max (for ultra-fast mode)
-        setTimeout(function () {
-            if (!hasHiddenLoadingIndicator) {
-                console.log("⏱️ Safety timeout: Force hiding loading indicator after 8 seconds");
-                hideBufferingIndicator();
-            }
-        }, 8000); // 8 seconds max for ultra-fast mode
+    // Add spinner CSS once
+    if (!document.getElementById('spinner-styles')) {
+        var style = document.createElement('style');
+        style.id = 'spinner-styles';
+        style.textContent = '.spinner{border:4px solid rgba(255,255,255,0.3);border-top:4px solid #fff;border-radius:50%;width:40px;height:40px;animation:spin 0.8s linear infinite;margin:0 auto}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+        document.head.appendChild(style);
     }
+
+    // FULL SCREEN dark overlay — hides the black screen from AVPlayer destroy
+    var bufferingDiv = document.createElement('div');
+    bufferingDiv.id = 'buffering-indicator';
+    bufferingDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+    bufferingDiv.innerHTML = '<div class="spinner"></div><div style="font-size:18px;font-weight:600;margin-top:16px;">Loading Stream...</div>';
+    container.appendChild(bufferingDiv);
+
+    // Safety timeout: auto-hide after 8 seconds
+    setTimeout(function () {
+        if (!hasHiddenLoadingIndicator) {
+            hideBufferingIndicator();
+        }
+    }, 8000);
 }
 
 function hideBufferingIndicator() {
     var indicator = document.getElementById('buffering-indicator');
-    if (indicator) {
-        indicator.remove();
-    }
+    if (indicator) indicator.remove();
 }
 
 // Make progress bar clickable for seeking (VOD only)
@@ -3540,14 +3426,18 @@ function showChannelNotFound(number) {
         container.appendChild(toast);
     }
 
-    toast.textContent = 'Channel ' + number + ' is not available';
+    toast.textContent = 'Channel ' + number + ' not found';
     toast.style.display = 'block';
     toast.style.opacity = '1';
+
+    // Clear number input and hide numpad
+    channelNumberBuffer = '';
+    hideChannelNumberInput();
 
     clearTimeout(toast._hideTimer);
     toast._hideTimer = setTimeout(function () {
         toast.style.display = 'none';
-    }, 2500);
+    }, 3000);
 }
 
 // ==========================================
@@ -3590,10 +3480,10 @@ function showInfoBarForced() {
  * Resets timer on each call (for OK button or channel change)
  */
 function showOverlay() {
-    // Don't show info bar before channel data is ready (prevents blank ghost on slow load)
+    // Don't show info bar before channel data is ready
     if (!_lastAttemptedChannel) return;
 
-    // Don't show info bar if sidebar is open (sidebar handles timing)
+    // Don't show info bar if sidebar is open
     if (sidebarState.isOpen) {
         syncInfoBarSidebarState();
         return;
@@ -3605,24 +3495,26 @@ function showOverlay() {
         overlay.classList.add('visible');
     }
 
-    // Show info bar directly (it is now outside player-overlay in DOM)
     var infoBar = document.querySelector('.info-bar-premium');
     if (infoBar) {
         infoBar.classList.remove('info-bar-hidden');
         syncInfoBarSidebarState();
     }
 
-    // Clear existing timeout BEFORE setting new one
+    // Clear existing timeout
     if (overlayTimeout) {
         clearTimeout(overlayTimeout);
+        overlayTimeout = null;
     }
 
-    // Set new timeout to auto-hide overlay after 5 seconds
-    overlayTimeout = setTimeout(function () {
-        hideOverlay();
-    }, OVERLAY_HIDE_DELAY);
-
-    console.log('[InfoBar] Shown, auto-hide timer reset');
+    // Only auto-hide if stream is actually playing (not buffering)
+    // While buffering, info bar stays visible so user sees channel info
+    if (hasHiddenLoadingIndicator) {
+        overlayTimeout = setTimeout(function () {
+            hideOverlay();
+        }, OVERLAY_HIDE_DELAY);
+    }
+    // If still buffering, info bar stays visible — onBufferingComplete will call showOverlay again
 }
 
 /**

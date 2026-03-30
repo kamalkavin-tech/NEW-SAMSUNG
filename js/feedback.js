@@ -281,10 +281,7 @@ function submitFeedback() {
     // Call API
     BBNL_API.submitFeedback(feedbackData)
         .then(function(response) {
-            console.log("[Feedback] ===== API RESPONSE =====");
-            console.log("[Feedback] Full response:", JSON.stringify(response, null, 2));
-            console.log("[Feedback] Response.status:", response ? response.status : "null");
-            console.log("[Feedback] Response.error:", response ? response.error : "null");
+            // response logging removed for TV performance
             console.log("[Feedback] ========================");
 
             // Reset button state

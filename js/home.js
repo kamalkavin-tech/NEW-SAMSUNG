@@ -389,13 +389,12 @@ window.onload = function () {
     // Load FoFi TV logo from API
     loadFoFiLogo();
 
-    // Auto-play FoFi channel (LCN 999) after 3 seconds - ONLY on fresh app launch
+    // Auto-play FoFi channel (LCN 999) after short delay for page to settle
+    // 500ms is enough for home page to render and API calls to start
     if (fofiShouldAutoPlay) {
-        console.log("[HOME] ✅ FoFi auto-play enabled - starting 3 second timer...");
         setTimeout(function () {
-            console.log("[HOME] ⏰ 3 seconds passed - Auto-playing FoFi channel...");
             playFoFiChannel();
-        }, 3000);
+        }, 500);
     } else {
         console.log("[HOME] ⏭️ Skipping FoFi auto-play (internal navigation)");
     }
@@ -1045,8 +1044,10 @@ function renderAdsInHeroBanner(ads) {
 
         var img = document.createElement('img');
         var adUrl = normalizeHomeAssetUrl(ad.adpath || '');
-        // Load all ads immediately (no deferred loading)
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+        var validatedAdUrl = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) ? BBNL_API.getValidatedImageUrl(adUrl) : adUrl;
+        if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedAdUrl]) {
+            img.src = _BLOB_CACHE[validatedAdUrl];
+        } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
             BBNL_API.setImageSource(img, adUrl);
         } else {
             img.src = adUrl;
@@ -1231,7 +1232,10 @@ function renderChannelsInHomeGrid(channels) {
 
         if (channelLogo && !channelLogo.includes('chnlnoimage')) {
             var img = document.createElement('img');
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            var validatedChLogo = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) ? BBNL_API.getValidatedImageUrl(channelLogo) : channelLogo;
+            if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedChLogo]) {
+                img.src = _BLOB_CACHE[validatedChLogo];
+            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(img, channelLogo);
             } else {
                 img.src = channelLogo;
@@ -1450,15 +1454,15 @@ function renderLanguagesInHomeGrid(languages) {
             var img = document.createElement('img');
             img.className = 'language-logo';
             img.decoding = 'async';
-            img.loading = 'eager';
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            img.alt = langName;
+            // Fast path: use in-memory blob cache if available
+            var validatedLang = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) ? BBNL_API.getValidatedImageUrl(langLogo) : langLogo;
+            if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedLang]) {
+                img.src = _BLOB_CACHE[validatedLang];
+            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(img, langLogo);
             } else {
                 img.src = langLogo;
-            }
-            img.alt = langName;
-            if (homeLanguageLogoCache[langLogo]) {
-                img.style.transition = 'none';
             }
             img.onload = function () {
                 homeLanguageLogoCache[langLogo] = true;
@@ -2230,11 +2234,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // Load data immediately from sessionStorage cache (no IP wait needed)
         loadHomeAds();
         loadHomeLanguages();
-        // Skip rendering channels if FoFi is about to auto-play (prevents brief channel card flash)
         if (!fofiShouldAutoPlay) {
             loadHomeChannels();
         } else {
-            console.log("[HOME] Skipping channel grid render - FoFi auto-play will navigate away");
+            // Pre-warm channel cache for FoFi lookup
+            BBNL_API.getChannelList().catch(function () {});
         }
 
         // Defer app lock check to background (still important for security)
@@ -2293,11 +2297,11 @@ document.addEventListener('DOMContentLoaded', function () {
             // sessionStorage cache makes repeat visits instant (no API calls)
             loadHomeAds();
             loadHomeLanguages();
-            // Skip rendering channels if FoFi is about to auto-play (prevents brief channel card flash)
             if (!fofiShouldAutoPlay) {
                 loadHomeChannels();
             } else {
-                console.log("[HOME] Skipping channel grid render - FoFi auto-play will navigate away");
+                // Pre-warm channel cache for FoFi lookup (don't render grid, just cache data)
+                BBNL_API.getChannelList().catch(function () {});
             }
 
             // Mark first init done - enables fast path for return visits

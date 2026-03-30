@@ -293,7 +293,7 @@ a.focusable:focus,
 .star-btn:focus,
 .rating-star:focus {
     transform: scale(1.2) !important;
-    filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.8));
+    /* filter removed for TV performance */
 }
 
 /* Textarea focus */
@@ -364,11 +364,7 @@ textarea.focusable:focus {
 }
 
 /* Subtle pulse animation for cards on focus */
-.channel-card:focus,
-.app-card:focus,
-.language-item:focus {
-    animation: focusPulse 2s ease-in-out infinite;
-}
+/* focusPulse animation removed — infinite animation on every focused card kills TV CPU */
 
 /* Language item focus - white border */
 .language-item:focus {

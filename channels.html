@@ -22,7 +22,7 @@
             <button class="back-btn focusable" tabindex="0">
                 <span class="back-icon">←</span>
             </button>
-            <h1 class="page-title">TV Channels<span id="titleLanguage"></span></h1>
+            <h1 class="page-title">TV Channels</h1>
             <!-- Search Bar (Same style as Home page) -->
             <div class="search-bar">
                 <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -33,16 +33,10 @@
             </div>
         </div>
 
-        <!-- Filter Pills Row - Below Header -->
+        <!-- Language Pills Row - Below Header -->
         <div class="category-section">
-            <div class="category-pills" id="categoryPills">
-                <!-- Category pills will be loaded dynamically -->
-                <button class="category-pill language-pill focusable" tabindex="0" id="languagePill">
-                    <span>Language - Hindi</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 6px;">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </button>
+            <div class="category-pills" id="languagePillsRow">
+                <!-- Language pills loaded dynamically from API -->
             </div>
         </div>
 

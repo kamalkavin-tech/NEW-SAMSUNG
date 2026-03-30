@@ -16,24 +16,17 @@
 
 .menu-backdrop {
     flex: 1;
-    background: rgba(0, 0, 0, 0.5);
-    /* Dimming the rest of the screen */
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.6);
 }
 
 .glass-menu {
     width: 350px;
     height: 100%;
-    /* Glassmorphism Logic */
-    background: rgba(10, 10, 10, 0.65);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: #0a0a0f;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
     padding: 40px 30px;
     display: flex;
     flex-direction: column;
-    animation: slideIn 0.3s ease-out;
 }
 
 @keyframes slideIn {

@@ -397,7 +397,7 @@ video {
 .progress-bar-fill.live {
     background: #ef4444;
     /* Red for LIVE */
-    animation: pulse 2s infinite;
+    /* animation removed for TV performance */
 }
 
 @keyframes pulse {
@@ -431,7 +431,7 @@ video {
     cursor: pointer;
     padding: 10px;
     border-radius: 50%;
-    transition: background 0.2s;
+    /* transition removed for TV performance */
 }
 
 .icon-btn:hover,
@@ -586,7 +586,7 @@ video {
     justify-content: center;
     cursor: pointer;
     color: #fff;
-    transition: background 0.15s ease;
+    /* transition removed — real TV CPU can't keep up, causes navigation lag */
 }
 
 .lang-nav-arrow:hover {
@@ -605,7 +605,7 @@ video {
     color: #00e5ff;
     min-width: 200px;
     text-align: center;
-    transition: color 0.3s ease;
+    /* transition removed — causes layout thrashing on real TV */
     text-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 
@@ -1037,18 +1037,17 @@ video {
 .numpad-container {
     background: rgba(8, 8, 20, 0.97);
     border: 2px solid rgba(59, 92, 255, 0.75);
-    border-radius: 18px;
-    padding: 22px 28px 26px;
+    border-radius: 12px;
+    padding: 14px 20px 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    min-width: 280px;
-    box-shadow: 0 8px 48px rgba(0, 0, 0, 0.85);
+    gap: 8px;
+    min-width: 200px;
 }
 
 .numpad-title {
-    font-size: 13px;
+    font-size: 11px;
     color: rgba(255, 255, 255, 0.5);
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -1057,15 +1056,15 @@ video {
 
 .numpad-input {
     width: 100%;
-    font-size: 44px;
+    font-size: 28px;
     font-weight: 700;
     color: #fff;
-    letter-spacing: 10px;
+    letter-spacing: 8px;
     text-align: center;
     background: rgba(255, 255, 255, 0.06);
     border: 2px solid rgba(255, 255, 255, 0.18);
-    border-radius: 10px;
-    padding: 10px 16px;
+    border-radius: 8px;
+    padding: 8px 12px;
     outline: none;
     caret-color: rgba(59, 92, 255, 0.9);
 }
@@ -1077,5 +1076,5 @@ video {
 
 .numpad-input::placeholder {
     color: rgba(255, 255, 255, 0.2);
-    letter-spacing: 14px;
+    letter-spacing: 10px;
 }

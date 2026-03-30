@@ -66,23 +66,8 @@ if (USE_PROXY) {
     API_BASE_URL_IPTV = "https://bbnlnetmon.bbnl.in/prod/cabletvapis";
 }
 
-// Enhanced logging for debugging
-console.log("=".repeat(60));
-console.log("[API CONFIG] Environment Detection:");
-console.log("[API CONFIG]   - webapis: " + (typeof webapis !== 'undefined' ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - tizen: " + (typeof tizen !== 'undefined' ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - Tizen TV: " + (IS_TIZEN_TV ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - Tizen Emulator: " + (IS_TIZEN_EMULATOR ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - File Protocol: " + (IS_FILE_PROTOCOL ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - Localhost: " + (IS_LOCALHOST ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - Force Proxy: " + (FORCE_PROXY_MODE ? "✅ YES" : "❌ NO"));
-console.log("[API CONFIG]   - hostname: " + window.location.hostname);
-console.log("[API CONFIG]   - protocol: " + window.location.protocol);
-console.log("[API CONFIG] Selected Mode: " + (USE_PROXY ? '🔧 PROXY (localhost:3000)' : '📡 PRODUCTION (Direct)'));
-console.log("[API CONFIG] Base URL (Prod): " + API_BASE_URL_PROD);
-console.log("[API CONFIG] Base URL (IPTV): " + API_BASE_URL_IPTV);
-console.log("[API CONFIG] Ads Endpoint: " + API_BASE_URL_PROD + "/iptvads");
-console.log("=".repeat(60));
+// Debug logging removed for production TV performance
+// To debug: set window.__BBNL_DEBUG = true before loading
 
 // Default headers for all API requests (devmac, devslno & deviceid populated dynamically by DeviceInfo.initializeDeviceInfo)
 const DEFAULT_HEADERS = {
@@ -242,21 +227,24 @@ function getValidatedImageUrl(rawUrl) {
     return resolved;
 }
 
+// ==========================================
+// IN-MEMORY BLOB URL CACHE
+// Caches blob URLs within the same page session so images don't re-fetch
+// when the channel grid re-renders (e.g. language filter switch).
+// Blob URLs die on page navigation — that's OK, browser HTTP cache handles cross-page.
+// ==========================================
+var _BLOB_CACHE = {};  // URL → blob URL (in-memory only, fast)
+var _blobFetchInFlight = {}; // URL → true (prevent duplicate fetches)
+
 function setImageSource(imgEl, rawUrl, options) {
-    console.log('[setImageSource] RAW URL from API:', rawUrl);
-    
     var freshUrl = getValidatedImageUrl(rawUrl);
     var finalUrl = freshUrl || '';
-
-    console.log('[setImageSource] FINAL URL to load:', finalUrl);
 
     if (!imgEl) return finalUrl;
 
     var prevOnError = imgEl.onerror;
 
     imgEl.onerror = function () {
-        // Strict mode: use only API-provided normalized image URL once.
-        console.error('[IMAGE] Failed to load:', finalUrl, 'from raw:', rawUrl);
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
@@ -264,36 +252,56 @@ function setImageSource(imgEl, rawUrl, options) {
 
     if (finalUrl) {
         imgEl.style.display = '';
-        imgEl.setAttribute('crossorigin', 'anonymous');
-        
-        // For Samsung Tizen TV running from file://, fetch() + blob URL bypasses CORS
+
+        // FAST PATH: Already fetched this session — use cached blob URL instantly
+        if (_BLOB_CACHE[finalUrl]) {
+            imgEl.src = _BLOB_CACHE[finalUrl];
+            return finalUrl;
+        }
+
+        // For Samsung Tizen TV (file:// protocol): fetch + blob URL
         if (window.location.protocol === 'file:' && typeof fetch !== 'undefined') {
-            console.log('[setImageSource] Using fetch+blob for file:// protocol (Tizen TV)');
-            fetch(finalUrl, { mode: 'cors', credentials: 'omit' })
+            // Dedup: if another element is already fetching this URL, queue up
+            if (_blobFetchInFlight[finalUrl]) {
+                var waitUrl = finalUrl;
+                var waitEl = imgEl;
+                setTimeout(function check() {
+                    if (_BLOB_CACHE[waitUrl]) {
+                        waitEl.src = _BLOB_CACHE[waitUrl];
+                    } else if (_blobFetchInFlight[waitUrl]) {
+                        setTimeout(check, 30);
+                    }
+                }, 30);
+                return finalUrl;
+            }
+
+            _blobFetchInFlight[finalUrl] = true;
+            var capturedUrl = finalUrl;
+            var capturedEl = imgEl;
+            var capturedPrevErr = prevOnError;
+
+            fetch(capturedUrl, { mode: 'cors', credentials: 'omit' })
                 .then(function (response) {
-                    console.log('[FETCH] Response status:', response.status, 'for', finalUrl);
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     return response.blob();
                 })
                 .then(function (blob) {
-                    console.log('[FETCH] Blob created, size:', blob.size, 'type:', blob.type);
                     var blobUrl = URL.createObjectURL(blob);
-                    imgEl.src = blobUrl;
-                    console.log('[FETCH] Blob URL set:', blobUrl);
+                    // Cache blob URL in memory — same-page re-renders are instant
+                    _BLOB_CACHE[capturedUrl] = blobUrl;
+                    capturedEl.src = blobUrl;
+                    delete _blobFetchInFlight[capturedUrl];
                 })
                 .catch(function (err) {
-                    console.error('[FETCH] Failed to load image:', finalUrl, 'Error:', err.message);
-                    if (typeof prevOnError === 'function') {
-                        try { prevOnError.call(imgEl); } catch (e) {}
+                    delete _blobFetchInFlight[capturedUrl];
+                    if (typeof capturedPrevErr === 'function') {
+                        try { capturedPrevErr.call(capturedEl); } catch (e) {}
                     }
                 });
         } else {
-            // Standard direct img.src for http/https protocol apps
-            console.log('[setImageSource] Using direct src for http(s) protocol');
             imgEl.setAttribute('src', finalUrl);
         }
     } else {
-        console.warn('[setImageSource] No valid URL, calling error handler');
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
@@ -883,12 +891,14 @@ const AppPerformanceCache = {
             if (!force && this._safeSessionGet(this.FLAGS.ASSETS_PRIMED) === '1') {
                 return;
             }
-            this._primeInMemoryAssets();
-            this._safeSessionSet(this.FLAGS.ASSETS_PRIMED, '1');
-            console.log('[AppPerformanceCache] Static assets primed for session');
-        } catch (e) {
-            console.warn('[AppPerformanceCache] Prime failed:', e.message);
-        }
+            // Defer asset priming by 5 seconds — don't compete with critical API calls
+            // (channel data, language list) that the user is waiting for
+            var self = this;
+            setTimeout(function () {
+                self._primeInMemoryAssets();
+                self._safeSessionSet(self.FLAGS.ASSETS_PRIMED, '1');
+            }, 5000);
+        } catch (e) {}
     },
 
     savePageState: function (pageKey, state) {
@@ -1087,7 +1097,7 @@ async function apiCall(endpoint, payload, customHeaders) {
         return _cloneCachedData(_API_MEMORY_CACHE[cacheKey]);
     }
 
-    console.log(`[API] Request: ${url}`, payload);
+    // Removed: logging payload builds expensive strings even when console is noop
 
     // Abort controller with 10-second timeout — prevents hanging requests
     // that accumulate across repeated Home→Relaunch cycles on Samsung TV
@@ -1095,7 +1105,7 @@ async function apiCall(endpoint, payload, customHeaders) {
     var timeoutId = null;
     try {
         controller = new AbortController();
-        timeoutId = setTimeout(function () { controller.abort(); }, 6000);
+        timeoutId = setTimeout(function () { controller.abort(); }, 4000);
     } catch (e) {
         // AbortController not supported on older Tizen — proceed without timeout
         controller = null;
@@ -1118,7 +1128,6 @@ async function apiCall(endpoint, payload, customHeaders) {
         }
 
         const data = await response.json();
-        console.log(`[API] Response: ${url}`, data);
 
         // Clear stale API failure marker after a successful response.
         try {
@@ -2264,7 +2273,7 @@ const ChannelsAPI = {
             mac_address: device.mac_address
         };
 
-        console.log("[ChannelsAPI] Getting Channel List with payload:", payload);
+        // payload logging removed for TV performance
 
         const response = await apiCall(
             API_ENDPOINTS.CHANNEL_LIST,
@@ -2275,7 +2284,7 @@ const ChannelsAPI = {
             }
         );
 
-        console.log("[ChannelsAPI] Raw Response:", response);
+        // response logging removed for TV performance
 
         // Handle error responses
         if (response && response.error) {
@@ -2766,9 +2775,7 @@ const AdsAPI = {
             displaytype: options.displaytype || "multiple"
         };
 
-        console.log("[AdsAPI] 📡 Fetching IPTV Ads...");
-        console.log("[AdsAPI] 📦 Final Payload:", payload);
-        console.log("[AdsAPI] 📦 Payload JSON:", JSON.stringify(payload));
+        // ads payload logging removed for TV performance
 
         try {
             // Use exact DEFAULT_HEADERS that work on Samsung TV and in Postman

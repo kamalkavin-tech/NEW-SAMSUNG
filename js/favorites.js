@@ -30,6 +30,15 @@ var currentFocus = 0;
 var allChannels = [];
 var comingSoonPopupOpen = false;
 
+window.addEventListener('beforeunload', function () {
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
+        AppPerformanceCache.savePageState('favorites', {
+            focusIndex: currentFocus,
+            scrollTop: window.scrollY || 0
+        });
+    }
+});
+
 window.onload = function () {
     console.log("=== BBNL Favorites Page Initialized ===");
 
@@ -46,6 +55,19 @@ window.onload = function () {
     } else if (focusables.length > 0) {
         currentFocus = 0;
         focusables[0].focus();
+    }
+
+    // Restore cached UI state for smoother return navigation
+    if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.getPageState) {
+        var cachedState = AppPerformanceCache.getPageState('favorites', 60 * 60 * 1000);
+        if (cachedState) {
+            if (typeof cachedState.focusIndex === 'number') {
+                currentFocus = cachedState.focusIndex;
+            }
+            if (typeof cachedState.scrollTop === 'number') {
+                setTimeout(function () { window.scrollTo(0, cachedState.scrollTop); }, 0);
+            }
+        }
     }
 
     // 3. Mouse Support
@@ -102,13 +124,30 @@ function showComingSoonPopup() {
     }
 }
 
+var FAVORITES_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
 /**
- * Load channels from API for favorites page
+ * Load channels from API for favorites page (with sessionStorage cache)
  */
 function loadFavoriteChannels() {
-    console.log("[Favorites] Loading channels from API...");
+    console.log("[Favorites] Loading channels...");
 
     var grid = document.getElementById('favoritesGrid');
+
+    // Fast path: render from sessionStorage cache instantly
+    try {
+        var raw = sessionStorage.getItem('favorites_channels_cache');
+        if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < FAVORITES_CACHE_TTL_MS) {
+                console.log("[Favorites] Cache hit:", parsed.data.length, "channels");
+                allChannels = parsed.data;
+                renderFavoriteChannels(allChannels);
+                return;
+            }
+        }
+    } catch (e) {}
+
     if (grid) {
         grid.innerHTML = '<div class="loading-spinner" style="grid-column: 1/-1; text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">Loading channels...</div>';
     }
@@ -119,6 +158,8 @@ function loadFavoriteChannels() {
 
             if (channels && Array.isArray(channels) && channels.length > 0) {
                 allChannels = channels;
+                // Cache in sessionStorage for instant reload
+                try { sessionStorage.setItem('favorites_channels_cache', JSON.stringify({ ts: Date.now(), data: channels })); } catch (e) {}
                 renderFavoriteChannels(channels);
             } else {
                 renderEmptyState();

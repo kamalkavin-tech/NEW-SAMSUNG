@@ -137,14 +137,7 @@ window.onload = function () {
     // Initialize UI
     initPage();
 
-    // Initialize category pills
-    initCategoryPills();
-
-    // Initialize language dropdown
-    initLanguageDropdown();
-    
-    // Initialize sidebar language selector
-    initLanguageSelector();
+    // Language pills are initialized dynamically in renderLanguagePills()
 
     // Initialize search functionality
     initSearchFunctionality();
@@ -223,43 +216,63 @@ function addZoneTrackingListeners() {
 }
 
 async function initPage() {
+    // Determine language filter early — needed for instant render AND channel loading
+    var urlParams = new URLSearchParams(window.location.search);
+    var urlLCN = urlParams.get('lcn');
+    var urlLang = urlParams.get('lang');
+    var selectedLangId = sessionStorage.getItem('selectedLanguageId') || '';
+    var selectedLangName = sessionStorage.getItem('selectedLanguageName') || '';
+
+    // Build channel load options from language filter
+    var channelOptions = {};
+    if (selectedLangId === 'subs' || (selectedLangName && selectedLangName.toLowerCase().indexOf('subscribed') !== -1)) {
+        channelOptions = { subscribed: 'yes' };
+    } else if (selectedLangId && selectedLangId !== '') {
+        channelOptions = { langid: selectedLangId };
+    } else if (urlLang) {
+        channelOptions = { langid: urlLang };
+    }
+
+    // INSTANT RENDER: Show cached channels + language pills immediately (no flash)
     try {
-        // INSTANT RENDER: Determine which filter the user had, check its cache, and render
-        // immediately BEFORE any async work — this replaces the "Loading Channels..." HTML
-        // default with real content on the same JS tick (no visible loading on return visits).
-        (function instantRenderFromCache() {
-            try {
-                var langId = sessionStorage.getItem('selectedLanguageId') || '';
-                var langName = sessionStorage.getItem('selectedLanguageName') || '';
-                var instantOptions = {};
-                if (langName) {
-                    if (!langId || langId === '') instantOptions = {};
-                    else if (langId === 'subs') instantOptions = { subscribed: 'yes' };
-                    else instantOptions = { langid: langId };
-                }
-                var cached = getCachedChannels(instantOptions);
-                if (cached && cached.length > 0) {
-                    allChannels = cached.slice();
-                    renderAllChannels(allChannels);
-                    setChannelsLoadingState(false);
-                }
-            } catch (e) {}
-        })();
+        var cached = getCachedChannels(channelOptions);
+        if (cached && cached.length > 0) {
+            allChannels = cached.slice();
+            renderAllChannels(allChannels);
+            setChannelsLoadingState(false);
+        }
+    } catch (e) {}
 
-        // No IP wait — API auth uses device MAC/serial from Tizen hardware, not public IP.
-        // IP detection runs in background; headers will include it once resolved.
+    // Render language pills from CacheManager instantly (cached from home page visit)
+    try {
+        if (typeof CacheManager !== 'undefined') {
+            var cachedLangs = CacheManager.get(CacheManager.KEYS.LANGUAGES) || CacheManager.get(CacheManager.KEYS.LANGUAGES, true);
+            if (cachedLangs && cachedLangs.length > 0) {
+                renderLanguagePills(cachedLangs);
+            }
+        }
+    } catch (e) {}
 
-        // Load master channel list + categories IN PARALLEL for faster loading
-        var [masterResult, categoryResponse] = await Promise.all([
+    // Check if LCN was passed via URL (from home page search)
+    if (urlLCN && /^\d+$/.test(urlLCN)) {
+        var searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = urlLCN;
+        playChannelByLCN(parseInt(urlLCN, 10));
+        return;
+    }
+
+    try {
+        // Load master list + languages + filtered channels ALL IN PARALLEL
+        var [masterResult, languageResponse, channelsResult] = await Promise.all([
             loadMasterChannelList(),
-            BBNL_API.getCategoryList()
+            BBNL_API.getLanguageList(),
+            loadChannels(channelOptions)
         ]);
 
-        console.log("Categories Fetched:", categoryResponse);
-        if (Array.isArray(categoryResponse)) {
-            renderCategories(categoryResponse);
+        // Update pills if API returned newer data
+        if (Array.isArray(languageResponse) && languageResponse.length > 0) {
+            renderLanguagePills(languageResponse);
         }
-
     } catch (e) {
         console.error("Init Exception:", e);
         if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
@@ -267,75 +280,7 @@ async function initPage() {
         }
     }
 
-    // Check if LCN was passed via URL (from home page search)
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlLCN = urlParams.get('lcn');
-    const urlLang = urlParams.get('lang');
-
-    if (urlLCN && /^\d+$/.test(urlLCN)) {
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            searchInput.value = urlLCN;
-        }
-        // Play the channel directly by LCN
-        playChannelByLCN(parseInt(urlLCN, 10));
-        return; // Exit early since we're playing a channel
-    }
-
-    // Check if returning from language selection page OR from player
-    const selectedLangId = sessionStorage.getItem('selectedLanguageId');
-    const selectedLangName = sessionStorage.getItem('selectedLanguageName');
-
-    // Check if Fofi channel has already been played this login session
-    const fofiPlayedThisSession = sessionStorage.getItem('fofi_autoplay_done');
-
-    // Determine if user has any language filter active (either from URL or session)
-    const hasLanguageFilter = selectedLangName || urlLang;
-
-    // Update header title and language pill based on selected language
-    updateHeaderWithLanguage(selectedLangName || urlLang);
-
-    if (selectedLangName) {
-        const languagePill = document.getElementById('languagePill');
-        if (languagePill) {
-            const textSpan = languagePill.querySelector('span');
-            if (textSpan) {
-                textSpan.textContent = 'Language - ' + selectedLangName;
-            }
-            
-            // Add active class to Language pill and remove from other category pills
-            languagePill.classList.add('active');
-            var categoryPills = document.querySelectorAll('.category-pill[data-category]');
-            categoryPills.forEach(function(pill) {
-                pill.classList.remove('active');
-            });
-        }
-
-        if (selectedLangId === '' || !selectedLangId) {
-            await loadChannels();
-        } else if (selectedLangId === 'subs') {
-            await loadChannels({ subscribed: 'yes' });
-        } else {
-            await loadChannels({ langid: selectedLangId });
-        }
-
-        // DON'T remove the filter here - keep it for back navigation from player
-        // Filter will be cleared when user presses BACK from channels page
-    } else if (urlLang) {
-        // Handle language filter from URL (from home page language card click)
-        await loadChannels({ langid: urlLang });
-    } else {
-        // Default: Load all channels (first category)
-        await loadChannels();
-    }
-
     refreshFocusables();
-
-    // NO auto-play on TV Channels page
-    // Playback only starts when user presses OK on a channel card
-    console.log('[Channels] Page loaded - No auto-play, waiting for user selection');
-
-    // Set initial focus on first category pill
     setInitialFocus();
 }
 
@@ -383,27 +328,18 @@ async function loadMasterChannelList() {
 }
 
 function setInitialFocus() {
-    // Check if returning from language selection - focus language pill
-    var selectedLangId = sessionStorage.getItem('selectedLanguageId');
-    var selectedLangName = sessionStorage.getItem('selectedLanguageName');
-    
-    if (selectedLangId || selectedLangName) {
-        // Returning from language selection - focus the language pill
-        var languagePill = document.getElementById('languagePill');
-        if (languagePill) {
-            languagePill.focus();
-            currentZone = 'tabs';
-            console.log('[Channels] Focus set to Language pill (returned from language selection)');
-            return;
-        }
+    // Focus active language pill (or first pill)
+    var activePill = document.querySelector('.lang-pill.active');
+    if (activePill) {
+        activePill.focus();
+        currentZone = 'tabs';
+        return;
     }
-    
-    // Default: focus first category pill
-    var firstPill = document.querySelector('.category-pill.focusable');
+
+    var firstPill = document.querySelector('.lang-pill.focusable');
     if (firstPill) {
         firstPill.focus();
         currentZone = 'tabs';
-        console.log('[Channels] Initial focus set to first category pill');
     }
 }
 
@@ -411,75 +347,84 @@ function setInitialFocus() {
 // CATEGORY PILLS FUNCTIONALITY
 // ==========================================
 
-function renderCategories(categories) {
-    // Store categories globally for sidebar
-    allCategories = categories;
-    
-    const categoryPillsContainer = document.getElementById('categoryPills');
-    if (!categoryPillsContainer) return;
+function renderLanguagePills(languages) {
+    allLanguages = languages;
 
-    const languagePill = document.getElementById('languagePill');
-    categoryPillsContainer.innerHTML = '';
-    
-    // Check if language filter is active - don't mark first pill as active
-    const hasLanguageFilter = sessionStorage.getItem('selectedLanguageId') || sessionStorage.getItem('selectedLanguageName');
+    var container = document.getElementById('languagePillsRow');
+    if (!container) return;
 
-    // Reorder categories: Put "All Channels" first to attract users
-    var reorderedCategories = [];
-    var subscribedCategory = null;
-    var allChannelsCategory = null;
-    var otherCategories = [];
-    
-    categories.forEach(function(cat) {
-        var title = (cat.grtitle || '').toLowerCase();
-        if (title === 'subscribed channels' || title === 'subscribed' || cat.grid === 'subs') {
-            subscribedCategory = cat;
-        } else if (title === 'all channels' || title === 'all' || cat.grid === '') {
-            allChannelsCategory = cat;
-        } else {
-            otherCategories.push(cat);
-        }
+    container.innerHTML = '';
+
+    // Sort: "All Channels" first, "Subscribed" second, then alphabetical
+    var sorted = languages.slice().sort(function (a, b) {
+        var nameA = (a.langtitle || '').toLowerCase();
+        var nameB = (b.langtitle || '').toLowerCase();
+        if (nameA === 'all channels' || nameA === 'all') return -1;
+        if (nameB === 'all channels' || nameB === 'all') return 1;
+        if (nameA.indexOf('subscribed') !== -1) return -1;
+        if (nameB.indexOf('subscribed') !== -1) return 1;
+        return nameA.localeCompare(nameB);
     });
-    
-    // Build reordered array: All Channels first, then Subscribed, then others
-    if (allChannelsCategory) reorderedCategories.push(allChannelsCategory);
-    if (subscribedCategory) reorderedCategories.push(subscribedCategory);
-    reorderedCategories = reorderedCategories.concat(otherCategories);
-    
-    // If reordering didn't find expected categories, use original order
-    if (reorderedCategories.length === 0) {
-        reorderedCategories = categories;
-    }
 
-    reorderedCategories.forEach((cat, index) => {
-        const pill = document.createElement('button');
-        pill.className = 'category-pill focusable';
+    // Determine which pill should be active
+    var activeLangId = sessionStorage.getItem('selectedLanguageId') || '';
+    var activeLangName = sessionStorage.getItem('selectedLanguageName') || '';
+
+    var fragment = document.createDocumentFragment();
+
+    sorted.forEach(function (lang, index) {
+        var langName = lang.langtitle || 'Language';
+        var langId = lang.langid || '';
+        var langLogo = lang.langlogo || lang.chnllanglogo || lang.logo_url || lang.logo || '';
+
+        var pill = document.createElement('button');
+        pill.className = 'category-pill lang-pill focusable';
         pill.tabIndex = 0;
-        pill.dataset.category = (cat.grtitle || '').toLowerCase();
-        pill.dataset.grid = cat.grid || '';
-        pill.textContent = cat.grtitle || 'Unknown';
+        pill.dataset.langid = langId;
+        pill.dataset.langname = langName;
 
-        // Only mark first pill as active if no language filter
-        if (index === 0 && !hasLanguageFilter) {
+        // Text only — no logo images in pills (faster rendering on TV)
+        var span = document.createElement('span');
+        span.textContent = langName;
+        pill.appendChild(span);
+
+        // Mark active pill
+        var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+        if (activeLangId) {
+            if (activeLangId === langId) pill.classList.add('active');
+            else if (activeLangId === 'subs' && langName.toLowerCase().indexOf('subscribed') !== -1) pill.classList.add('active');
+        } else if (!activeLangName && index === 0) {
             pill.classList.add('active');
         }
 
-        // Add focus listener for zone tracking
-        pill.addEventListener('focus', function () {
-            currentZone = 'tabs';
+        // Click handler — filter channels by language
+        pill.addEventListener('click', function () {
+            // Remove active from all pills
+            var allPills = container.querySelectorAll('.lang-pill');
+            allPills.forEach(function (p) { p.classList.remove('active'); });
+            pill.classList.add('active');
+
+            // Store selection
+            sessionStorage.setItem('selectedLanguageId', langId);
+            sessionStorage.setItem('selectedLanguageName', langName);
+
+            // Load channels with language filter
+            if (!langId || langId === '' || isAllChannels) {
+                loadChannels();
+            } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+                loadChannels({ subscribed: 'yes' });
+            } else {
+                loadChannels({ langid: langId });
+            }
         });
 
-        categoryPillsContainer.appendChild(pill);
+        // Zone tracking
+        pill.addEventListener('focus', function () { currentZone = 'tabs'; });
+
+        fragment.appendChild(pill);
     });
 
-    if (languagePill) {
-        categoryPillsContainer.appendChild(languagePill);
-    }
-
-    initCategoryPills();
-    
-    // Also render sidebar categories (with reordered categories)
-    renderSidebarCategories(reorderedCategories);
+    container.appendChild(fragment);
 }
 
 // ==========================================
@@ -1295,14 +1240,16 @@ function createChannelCard(ch) {
 
         var logoKey = normalizeChannelLogoKey(chLogo);
 
-        // If globally cached: set src directly and skip loading state (instant render)
-        var alreadyCached = (typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(normalizedLogo))
-            || channelLogoCache[chLogo] || channelLogoCache[normalizedLogo];
+        var alreadyCached = channelLogoCache[chLogo] || channelLogoCache[normalizedLogo] || channelLogoCache[logoKey];
 
         img.alt = chName;
         img.className = "channel-logo-img";
 
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+        // FAST PATH: If image is in persistent blob cache, set src directly (no fetch)
+        var blobCached = typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[normalizedLogo];
+        if (blobCached) {
+            img.src = _BLOB_CACHE[normalizedLogo];
+        } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
             BBNL_API.setImageSource(img, normalizedLogo);
         } else {
             img.src = normalizedLogo;
@@ -1393,7 +1340,7 @@ function getFocusables() {
 // ==========================================
 
 var _chLastKeyTime = 0;
-var _CH_KEY_THROTTLE_MS = 120;
+var _CH_KEY_THROTTLE_MS = 40; // reduced from 120ms — real TV remotes already have 50-100ms RF lag
 
 document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
@@ -1410,38 +1357,20 @@ document.addEventListener("keydown", function (e) {
     // BACK key
     if (code === 10009) {
         e.preventDefault();
-        // If search input is focused, clear it and return to tabs
+        // If search input is focused, clear it and return to pills
         var searchInput = document.getElementById('searchInput');
         if (document.activeElement === searchInput && searchInput.value.trim() !== '') {
             searchInput.value = '';
             loadChannels();
-            moveToFirstCategoryPill();
+            var firstPill = document.querySelector('.lang-pill.focusable');
+            if (firstPill) firstPill.focus();
             return;
         }
-        // Check if we came from language filter (either from home page or language-select)
-        var selectedLang = sessionStorage.getItem('selectedLanguageId');
-        var focusedLangIndex = sessionStorage.getItem('homeFocusedLanguageIndex');
-        
-        if (selectedLang && selectedLang !== '') {
-            // Clear the language filter
-            sessionStorage.removeItem('selectedLanguageId');
-            sessionStorage.removeItem('selectedLanguageName');
-            
-            // If user came from home page language selection, go back to home with focus preserved
-            if (focusedLangIndex !== null) {
-                console.log('[Channels] Returning to home page (language card focus preserved)');
-                sessionStorage.setItem('returningFromChannels', 'true');
-                window.location.href = "home.html";
-            } else {
-                // User came from language-select page
-                console.log('[Channels] Navigating back to language-select');
-                window.location.href = "language-select.html";
-            }
-        } else {
-            // No language filter, just go back to home
-            sessionStorage.setItem('returningFromChannels', 'true');
-            window.location.href = "home.html";
-        }
+        // Clear language filter and go back to home
+        sessionStorage.removeItem('selectedLanguageId');
+        sessionStorage.removeItem('selectedLanguageName');
+        sessionStorage.setItem('returningFromChannels', 'true');
+        window.location.href = "home.html";
         return;
     }
 
@@ -1760,54 +1689,41 @@ function moveToFirstChannelCard() {
 
 // Helper: Move within tabs (category pills) - AUTO LOAD ON FOCUS
 function moveWithinTabs(direction) {
-    var pills = Array.from(document.querySelectorAll('.category-pill.focusable'));
+    var pills = Array.from(document.querySelectorAll('.lang-pill.focusable'));
     var currentIndex = pills.indexOf(document.activeElement);
 
     if (currentIndex < 0) return false;
 
     var newIndex = currentIndex + direction;
 
-    // Check if at boundary
     if (newIndex < 0 || newIndex >= pills.length) {
-        return false; // Could not move
+        return false;
     }
 
     var targetPill = pills[newIndex];
     targetPill.focus();
-    targetPill.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
-    
-    // AUTO-LOAD: Trigger category load on focus (TV Channel page only)
-    if (targetPill.id !== 'languagePill' && targetPill.dataset.category) {
-        // Remove active from ALL pills including language pill
-        pills.forEach(function(p) {
-            p.classList.remove('active');
-        });
-        
-        // Clear language filter when category is selected
-        sessionStorage.removeItem('selectedLanguageId');
-        sessionStorage.removeItem('selectedLanguageName');
-        
-        // Reset language pill text
-        var languagePill = document.getElementById('languagePill');
-        if (languagePill) {
-            var textSpan = languagePill.querySelector('span');
-            if (textSpan) {
-                textSpan.textContent = 'Language';
-            }
-        }
-        
-        // Update header title
-        updateHeaderWithLanguage(null);
-        
-        targetPill.classList.add('active');
-        
-        // Load channels for this category
-        var category = targetPill.dataset.category;
-        var gridId = targetPill.dataset.grid;
-        handleCategoryFilter(category, gridId);
+    targetPill.scrollIntoView({ inline: "center", behavior: "auto", block: "nearest" });
+
+    // AUTO-LOAD: Trigger language filter on focus navigation
+    pills.forEach(function (p) { p.classList.remove('active'); });
+    targetPill.classList.add('active');
+
+    var langId = targetPill.dataset.langid || '';
+    var langName = targetPill.dataset.langname || '';
+
+    sessionStorage.setItem('selectedLanguageId', langId);
+    sessionStorage.setItem('selectedLanguageName', langName);
+
+    var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+    if (!langId || langId === '' || isAllChannels) {
+        loadChannels();
+    } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+        loadChannels({ subscribed: 'yes' });
+    } else {
+        loadChannels({ langid: langId });
     }
-    
-    return true; // Successfully moved
+
+    return true;
 }
 
 // Helper: Move within channel cards grid

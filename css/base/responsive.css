@@ -227,9 +227,9 @@
     }
 }
 
-/* Ensure smooth scrolling on TVs */
+/* Auto scroll for TV performance */
 html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
 }
 
 /* TV-optimized touch/pointer handling */

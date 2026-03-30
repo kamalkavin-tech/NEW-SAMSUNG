@@ -304,88 +304,60 @@ body.channels-page-pills {
 
 .category-section {
     background: #0a0a0a;
-    padding: 12px 30px 15px;
+    padding: 10px 30px 10px;
     flex-shrink: 0;
 }
 
 .category-pills {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     overflow-x: auto;
-    overflow-y: visible;
+    overflow-y: hidden;
     scrollbar-width: none;
-    padding-right: 20px;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    scroll-behavior: smooth;
+    padding: 4px 20px 4px 0;
+    scroll-behavior: auto;
 }
 
 .category-pills::-webkit-scrollbar {
     display: none;
 }
 
-/* Category Pills */
+/* Language Pills - single row, horizontal scroll */
 .category-pill {
-    background: #1a1a1a;
-    color: #9ca3af;
-    border: 1px solid #404040;
-    padding: 8px 18px;
+    background: #1e1e2e;
+    color: #c0c0d0;
+    border: 2px solid #3a3a50;
+    padding: 10px 22px;
     border-radius: 24px;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 18px;
+    font-weight: 600;
     cursor: pointer;
     outline: none;
     white-space: nowrap;
-    /* No transition — instant focus feedback for Samsung TV remote navigation */
+    letter-spacing: 0.3px;
     flex-shrink: 0;
 }
 
 .category-pill:hover,
 .category-pill:focus {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.14);
     border: 2px solid #FFFFFF;
-    color: #fff;
-    box-shadow: none;
+    color: #ffffff;
     outline: none;
 }
 
 .category-pill.active {
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+    background: rgba(80, 120, 255, 0.28);
+    color: #ffffff;
     border: 2px solid #FFFFFF;
-    box-shadow: none;
+    font-weight: 700;
 }
 
-/* Language Pill - Exact same style as category buttons */
-.language-pill {
+/* Language Pill - text only, wraps into two rows */
+.lang-pill {
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: #1a1a1a;
-    color: #9ca3af;
-    border: 1px solid #404040;
-    padding: 8px 18px;
-    border-radius: 24px;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.language-pill:hover,
-.language-pill:focus {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid #FFFFFF;
-    color: #fff;
-    box-shadow: none;
-    outline: none;
-}
-
-.pill-arrow {
-    transition: transform 0.3s;
-}
-
-.language-pill.active .pill-arrow {
-    transform: rotate(180deg);
 }
 
 /* Language Dropdown */
@@ -439,7 +411,7 @@ body.channels-page-pills {
     flex: 1;
     scroll-padding-top: 20px;
     scroll-padding-bottom: 20px;
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
     width: 100% !important;
     max-width: 100% !important;
@@ -573,7 +545,7 @@ body.channels-page-pills {
     max-width: 132px;
     max-height: 96px;
     object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    /* filter removed for TV performance */
 }
 
 /* ==========================================
@@ -592,7 +564,7 @@ body.channels-page-pills {
     font-size: 28px;
     font-weight: 700;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    /* filter removed for TV performance */
 }
 
 .channel-logo-placeholder span {
