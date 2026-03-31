@@ -70,7 +70,6 @@
     display: flex;
     align-items: center;
     gap: 15px;
-    transition: all 0.2s;
 }
 
 .menu-item .icon {

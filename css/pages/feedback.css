@@ -35,7 +35,6 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .back-btn:hover,
@@ -166,7 +165,6 @@ body {
     font-size: 16px;
     font-family: inherit;
     box-sizing: border-box;
-    transition: all 0.2s ease;
 }
 
 .input-field::placeholder {
@@ -188,7 +186,6 @@ body {
     border-radius: 10px;
     width: fit-content;
     cursor: pointer;
-    transition: all 0.2s ease;
 }
 
 .star-rating:focus {
@@ -201,7 +198,6 @@ body {
 .star {
     font-size: 34px;
     color: rgba(255, 255, 255, 0.18);
-    transition: color 0.15s ease;
     cursor: pointer;
 }
 
@@ -228,7 +224,6 @@ body {
     box-sizing: border-box;
     resize: none;
     line-height: 1.6;
-    transition: all 0.2s ease;
     min-height: 120px;
 }
 
@@ -262,7 +257,6 @@ body {
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
-    transition: all 0.2s ease;
     min-height: 48px;
 }
 
@@ -285,7 +279,6 @@ body {
     font-weight: 500;
     cursor: pointer;
     font-family: inherit;
-    transition: all 0.2s ease;
     min-height: 48px;
 }
 
@@ -296,7 +289,6 @@ body {
     border: 3px solid #FFFFFF !important;
     outline: none;
     box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35) !important;
-    transform: scale(1.03);
 }
 
 /* ========================================

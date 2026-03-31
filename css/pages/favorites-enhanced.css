@@ -5,11 +5,9 @@ body {
     color: #fff;
 }
 
-/* Keep coming-soon popup visually isolated from background UI */
+/* Coming-soon popup — fully opaque, no background visible */
 #comingSoonPopup {
-    background: rgba(0, 0, 0, 1) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    background: #000000 !important;
 }
 
 /* Header */
@@ -41,7 +39,6 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .back-btn .back-icon {
@@ -81,7 +78,6 @@ body {
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
 }
 
 .filter-chip.active {
@@ -124,7 +120,6 @@ body {
     border-radius: 16px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.3s ease;
     border: 2px solid transparent;
     position: relative;
 }
@@ -179,21 +174,16 @@ body {
 }
 
 .heart-icon:hover {
-    transform: scale(1.1);
 }
 
 @keyframes heartBeat {
     0%, 100% {
-        transform: scale(1);
     }
     25% {
-        transform: scale(1.2);
     }
     50% {
-        transform: scale(1.1);
     }
     75% {
-        transform: scale(1.15);
     }
 }
 

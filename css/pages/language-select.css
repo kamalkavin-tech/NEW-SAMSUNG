@@ -46,7 +46,6 @@ body.language-select-page {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
     flex-shrink: 0;
 }
 
@@ -98,7 +97,6 @@ body.language-select-page {
     border-radius: 16px;
     padding: 30px 20px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -119,7 +117,6 @@ body.language-select-page {
     bottom: 0;
     background: rgba(255, 255, 255, 0.1);
     opacity: 0;
-    transition: opacity 0.3s;
 }
 
 .language-card:hover::before {
@@ -128,7 +125,6 @@ body.language-select-page {
 
 .language-card:hover,
 .language-card:focus {
-    transform: translateY(-8px) scale(1.05);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
     outline: none;
 }
@@ -349,7 +345,6 @@ body.language-select-page {
     font-weight: 600;
     font-size: 16px;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
 .error-popup-btn:hover,

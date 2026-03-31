@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
-    <!-- Fallback redirect if JS disabled (JS redirect above is faster and smarter) -->
-    <meta http-equiv="refresh" content="1; url=login.html">
+    <!-- No meta refresh — JS handles all routing -->
     <title>Redirecting...</title>
     <script>
         // If already logged in, skip login page entirely — go straight to home

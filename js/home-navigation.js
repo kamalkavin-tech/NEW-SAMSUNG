@@ -38,7 +38,7 @@ var navState = {
 // ==========================================
 
 function initTVNavigation() {
-    console.log('[NAV] Initializing TV Navigation...');
+    // nav init
 
     // Set initial focus on Home icon in sidebar
     var homeIcon = document.querySelector('.sidebar-icon-btn[data-route="home.html"]');
@@ -46,7 +46,6 @@ function initTVNavigation() {
         homeIcon.focus();
         navState.zone = 'sidebar';
         navState.lastSidebarIndex = 0;
-        console.log('[NAV] Initial focus: Home icon');
     }
 }
 
@@ -54,20 +53,32 @@ function initTVNavigation() {
 // HELPERS - Get elements
 // ==========================================
 
+// Cached DOM collections — avoids querySelectorAll on every keypress
+var _homeSidebarBtns = null;
+var _homeHeaderEls = null;
+var _homeCards = null;
+
 function getSidebarBtns() {
-    return Array.from(document.querySelectorAll('.sidebar-icon-btn'));
+    if (!_homeSidebarBtns) _homeSidebarBtns = Array.from(document.querySelectorAll('.sidebar-icon-btn'));
+    return _homeSidebarBtns;
 }
 
 function getHeaderElements() {
-    return Array.from(document.querySelectorAll('.search-input, .header-icon-btn'));
+    if (!_homeHeaderEls) _homeHeaderEls = Array.from(document.querySelectorAll('.search-input, .header-icon-btn'));
+    return _homeHeaderEls;
 }
 
 function getCards() {
+    if (_homeCards) return _homeCards;
     var container = document.getElementById('home-languages-container');
     if (!container) return [];
-    // Support both channel-card and language-item (home page uses language-item)
-    var cards = Array.from(container.querySelectorAll('.channel-card, .language-item'));
-    return cards;
+    _homeCards = Array.from(container.querySelectorAll('.channel-card, .language-item'));
+    return _homeCards;
+}
+
+// Call this after dynamic content loads to refresh cache
+function invalidateHomeNavCache() {
+    _homeCards = null;
 }
 
 function getSidebarIndex(el) {
@@ -112,7 +123,7 @@ function scrollToElement(el) {
 
     var container = document.querySelector('.main-content');
     if (!container) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
         return;
     }
 
@@ -142,7 +153,6 @@ function focusCard(index) {
         navState.zone = 'cards';
         navState.lastCardIndex = index;
         scrollToElement(cards[index]);
-        console.log('[NAV] Card focused:', index, '(row:', getCardRow(index), 'col:', getCardCol(index), ')');
         return true;
     }
     return false;
@@ -157,7 +167,6 @@ function focusSidebar(index) {
         btns[index].focus();
         navState.zone = 'sidebar';
         navState.lastSidebarIndex = index;
-        console.log('[NAV] Sidebar focused:', index);
         return true;
     }
     return false;
@@ -174,7 +183,6 @@ function focusHeader(index) {
         // Scroll to top to show banner
         var mainContent = document.querySelector('.main-content');
         if (mainContent) mainContent.scrollTop = 0;
-        console.log('[NAV] Header focused:', index);
         return true;
     }
     return false;
@@ -186,7 +194,6 @@ function focusHeader(index) {
 
 function handleDownNavigation() {
     var active = document.activeElement;
-    console.log('[DOWN] Zone:', navState.zone);
 
     if (navState.zone === 'sidebar') {
         // DOWN in sidebar: move to next icon, at last icon jump to cards
@@ -198,16 +205,13 @@ function handleDownNavigation() {
             // At last sidebar icon: DOWN goes to first language card
             var cards = getCards();
             if (cards.length > 0) {
-                console.log('[DOWN] Last sidebar icon → First Language Card');
                 focusCard(0);
             } else {
-                console.log('[DOWN] No cards loaded yet');
             }
         }
     }
     else if (navState.zone === 'header') {
         // DOWN from header: go to first card (row 0, col 0)
-        console.log('[DOWN] Header → Cards');
         focusCard(0);
     }
     else if (navState.zone === 'cards') {
@@ -242,7 +246,6 @@ function handleDownNavigation() {
 
 function handleUpNavigation() {
     var active = document.activeElement;
-    console.log('[UP] Zone:', navState.zone);
 
     if (navState.zone === 'sidebar') {
         // UP in sidebar: move to previous icon, stop at first
@@ -255,7 +258,6 @@ function handleUpNavigation() {
     }
     else if (navState.zone === 'header') {
         // UP from header: nowhere to go, stop
-        console.log('[UP] Already at top (header)');
     }
     else if (navState.zone === 'cards') {
         // UP in cards: move to same column in previous row
@@ -273,7 +275,6 @@ function handleUpNavigation() {
             }
         } else {
             // At row 0: UP goes to sidebar (last icon) - NOT header
-            console.log('[UP] Cards row 0 → Sidebar (last icon)');
             var btns = getSidebarBtns();
             focusSidebar(btns.length - 1);
         }
@@ -286,11 +287,9 @@ function handleUpNavigation() {
 
 function handleLeftNavigation() {
     var active = document.activeElement;
-    console.log('[LEFT] Zone:', navState.zone);
 
     if (navState.zone === 'sidebar') {
         // Already at leftmost, do nothing
-        console.log('[LEFT] Already in sidebar');
     }
     else if (navState.zone === 'header') {
         // LEFT in header: move between elements, then to sidebar
@@ -302,7 +301,6 @@ function handleLeftNavigation() {
             focusHeader(idx - 1);
         } else {
             // At Search (leftmost): go to sidebar
-            console.log('[LEFT] Header → Sidebar');
             focusSidebar(navState.lastSidebarIndex);
         }
     }
@@ -318,7 +316,6 @@ function handleLeftNavigation() {
             focusCard(idx - 1);
         } else {
             // At column 0: go to sidebar
-            console.log('[LEFT] Cards col 0 → Sidebar');
             focusSidebar(navState.lastSidebarIndex);
         }
     }
@@ -330,11 +327,9 @@ function handleLeftNavigation() {
 
 function handleRightNavigation() {
     var active = document.activeElement;
-    console.log('[RIGHT] Zone:', navState.zone);
 
     if (navState.zone === 'sidebar') {
         // RIGHT from sidebar: go to header (Search)
-        console.log('[RIGHT] Sidebar → Header');
         focusHeader(0);
     }
     else if (navState.zone === 'header') {

@@ -444,7 +444,6 @@ body.channels-page-pills {
 .channels-grid-smooth {
     opacity: 0;
     transform: translateY(4px);
-    transition: opacity 0.16s ease-out, transform 0.16s ease-out;
 }
 
 .channels-grid-smooth.is-visible {
@@ -454,7 +453,6 @@ body.channels-page-pills {
 
 #channel-grid-container.channels-loading .channels-grid {
     opacity: 0.55;
-    transition: opacity 0.16s ease-out;
 }
 
 /* ==========================================
@@ -479,18 +477,10 @@ body.channels-page-pills {
     backface-visibility: hidden;
 }
 
-.channel-card:hover {
-    transform: scale(1.02);
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    box-shadow: none;
-}
-
+.channel-card:hover,
 .channel-card:focus {
     outline: none;
-    transform: scale(1.02);
     border: 2px solid #FFFFFF;
-    box-shadow: none;
-    z-index: 5;
 }
 
 /* ==========================================

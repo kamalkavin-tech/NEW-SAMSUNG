@@ -7,14 +7,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -64,7 +62,6 @@ function getLanguageLogoUrl(lang) {
 }
 
 window.onload = function () {
-    console.log("=== BBNL Language Select Page Initialized ===");
 
     // Initialize Dark Mode from localStorage
     initDarkMode();
@@ -87,7 +84,6 @@ async function initPage() {
     try {
         // Fetch Languages
         const langResponse = await BBNL_API.getLanguageList();
-        console.log("Languages Fetched:", langResponse);
 
         if (Array.isArray(langResponse) && langResponse.length > 0) {
             // Sort languages alphabetically by title
@@ -237,7 +233,6 @@ function primeLanguageLogos(languages, maxCount) {
 // ==========================================
 
 function handleLanguageSelect(langId, langName) {
-    console.log('Language selected:', langName, 'ID:', langId);
 
     // Store selected language in sessionStorage
     sessionStorage.setItem('selectedLanguageId', langId || '');
@@ -366,7 +361,7 @@ function moveFocus(step) {
     if (next >= 0 && next < all.length) {
         const target = all[next];
         target.focus();
-        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        target.scrollIntoView({ block: "center", behavior: "auto" });
     }
 }
 
@@ -398,7 +393,6 @@ function handleEnter(el) {
  * Initialize dark mode from localStorage
  */
 function initDarkMode() {
-    console.log("[Language Select] Initializing dark mode...");
     var isDarkMode = localStorage.getItem('darkMode') !== 'false'; // Default to dark mode
 
     if (isDarkMode) {
@@ -407,7 +401,6 @@ function initDarkMode() {
         document.body.classList.add('light-mode');
     }
 
-    console.log("[Language Select] Dark mode:", isDarkMode ? "ON" : "OFF");
 }
 
 // ==========================================

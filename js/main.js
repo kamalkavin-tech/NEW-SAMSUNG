@@ -25,31 +25,26 @@ var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fi
                 if (userData) {
                     var user = JSON.parse(userData);
                     if (user && user.userid) {
-                        console.log("[Auth] User has valid session, redirecting to home...");
                         window.location.replace("home.html");
                         return;
                     }
                 }
             } catch (e) {}
             // hasLoggedInOnce=true but bbnl_user invalid — stay on login for re-auth
-            console.log("[Auth] hasLoggedInOnce=true but bbnl_user invalid - staying on login for re-auth");
         }
     }
 })();
 
 /* INIT */
 window.onload = function () {
-    console.log("=== BBNL IPTV Initialized ===");
 
     // 1. Select Focusables
     focusables = document.querySelectorAll(".focusable");
-    console.log("Found focusable elements:", focusables.length);
 
     // 2. Set Initial Focus
     if (focusables.length > 0) {
         currentFocus = 0;
         focusables[0].focus();
-        console.log("Initial focus set to:", focusables[0].id || focusables[0].className);
     }
 
     // 3. Show Device ID, Gateway IP, MAC & IPv6 (if on login page)
@@ -70,7 +65,6 @@ window.onload = function () {
 
     // 4. Add MOUSE Click Support for all focusable elements
     focusables.forEach(function (el, index) {
-        console.log("Adding listeners to:", el.id || el.className);
 
         // Track focus on hover to sync with remote state
         el.addEventListener("mouseenter", function () {
@@ -80,7 +74,6 @@ window.onload = function () {
 
         // Handle mouse clicks
         el.addEventListener("click", function (e) {
-            console.log("Click detected on:", el.id || el.className);
             if (el.classList && el.classList.contains('otp-input')) {
                 currentFocus = index;
                 activateOTPInput(el);
@@ -109,9 +102,7 @@ window.onload = function () {
                 "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
                 "Enter", "Return"];
             tizen.tvinputdevice.registerKeyBatch(keys);
-            console.log("Tizen keys registered (fallback)");
         } catch (e) {
-            console.log("Not running on Tizen or key registration failed");
         }
     }
 
@@ -143,7 +134,6 @@ function showNetworkIP() {
         if (typeof webapis !== 'undefined' && webapis.network) {
             var networkType = webapis.network.getActiveConnectionType();
             // networkType: 0 (DISCONNECTED), 1 (WIFI), 2 (CELLULAR), 3 (ETHERNET)
-            console.log("Network Type:", networkType);
 
             if (networkType === 0) {
                 ipText.innerText = "Disconnected";
@@ -153,7 +143,6 @@ function showNetworkIP() {
             var ip = webapis.network.getIp(networkType);
             if (ip) {
                 ipText.innerText = ip;
-                console.log("Device IP:", ip);
             } else {
                 ipText.innerText = "Not valid";
             }
@@ -178,7 +167,6 @@ function showMacAddress() {
             var mac = webapis.network.getMac();
             if (mac) {
                 macText.innerText = mac;
-                console.log("Device MAC:", mac);
             } else {
                 macText.innerText = "Not Available";
             }
@@ -230,14 +218,11 @@ function showPublicIP() {
                 var gatewayIp = webapis.network.getGateway(networkType);
                 if (isValidGatewayValue(gatewayIp)) {
                     publicIpText.innerText = gatewayIp;
-                    console.log("[GatewayIP] Native gateway from Tizen API:", gatewayIp);
                     return;
                 }
-                console.warn("[GatewayIP] Ignoring invalid native gateway value:", gatewayIp);
             }
         }
     } catch (e) {
-        console.warn("[GatewayIP] Native gateway fetch failed, fallback to external services:", e.message);
     }
 
     // Try multiple public IP services
@@ -258,12 +243,10 @@ function showPublicIP() {
     function tryNextService(index) {
         if (index >= ipServices.length) {
             publicIpText.innerText = "N/A";
-            console.log("[PublicIP] All services failed");
             return;
         }
 
         var service = ipServices[index];
-        console.log("[PublicIP] Trying service:", service);
 
         // FIXED: Increased timeout from 5s to 15s for Samsung TV network reliability
         fetchWithTimeout(service, 15000)
@@ -275,7 +258,6 @@ function showPublicIP() {
                 var publicIp = data.ip || data.IPv4 || data.IP || null;
                 if (publicIp) {
                     publicIpText.innerText = publicIp;
-                    console.log("[PublicIP] Success:", publicIp);
                 } else {
                     throw new Error('No IP in response');
                 }
@@ -297,7 +279,6 @@ function startNetworkChangeListener() {
                 // networkState: 1=LAN_CABLE_ATTACHED, 2=LAN_CABLE_DETACHED,
                 //               3=LAN_CABLE_STATE_CHANGED, 4=WIFI_MODULE_STATE_CHANGED,
                 //               5=GATEWAY_CONNECTED, 6=GATEWAY_DISCONNECTED
-                console.log("[Network] State changed:", networkState);
 
                 // Small delay to let the new connection fully establish
                 setTimeout(function () {
@@ -306,13 +287,10 @@ function startNetworkChangeListener() {
                     showMacAddress();
                     showIPv6();
                     showPublicIP();
-                    console.log("[Network] MAC, IPv6, and Public IP refreshed after network change");
                 }, 2000);
             });
-            console.log("[Network] Network change listener registered");
         }
     } catch (e) {
-        console.warn("[Network] Could not register network listener:", e.message);
     }
 }
 
@@ -345,7 +323,6 @@ function initErrorModal() {
             e.preventDefault();
             hideErrorModal();
             // You can add navigation to support page here
-            console.log("Please contact support at: support@bbnl.co.in");
         });
     }
 
@@ -406,8 +383,6 @@ function initializePhoneInput() {
         localStorage.removeItem("temp_phone");
 
         // Debug log
-        console.log("[PhoneInput] Initialized - Length:", phoneInput.value.length);
-        console.log("[PhoneInput] Value:", phoneInput.value);
 
         // Force re-render by triggering input event
         var event = new Event('input', { bubbles: true });
@@ -457,7 +432,6 @@ function setupNumberOnlyInputs() {
         // Initial state - disable button if not 10 digits
         updateOtpButton();
 
-        console.log("Phone input: Native Samsung numeric keypad mode enabled");
     }
 
     // OTP Inputs - native Samsung numeric keypad + auto-advance
@@ -505,7 +479,6 @@ function setupNumberOnlyInputs() {
             }
         });
 
-        console.log("OTP input " + (idx + 1) + ": Native numeric keypad + auto-advance enabled");
     });
 }
 
@@ -529,8 +502,6 @@ function activateOTPInput(input) {
 document.addEventListener("keydown", function (e) {
     var active = document.activeElement;
     var isInput = active.tagName === 'INPUT';
-
-    console.log("Key pressed - Code:", e.keyCode, "Active:", active.id);
 
     // ALLOW DEFAULT BEHAVIOR FOR INPUTS
     if (isInput) {
@@ -644,7 +615,6 @@ document.addEventListener("keydown", function (e) {
             break;
         case 13: // ENTER / OK
             e.preventDefault();
-            console.log("ENTER pressed - calling handleOK()");
             handleOK();
             break;
         case 10009: // BACK (Tizen specific)
@@ -665,7 +635,6 @@ document.addEventListener("keydown", function (e) {
                 e.preventDefault(); // Prevent app exit if keyboard was just open
             } else {
                 e.preventDefault();
-                console.log("Back Pressed - Navigating History");
                 window.history.back();
             }
             break;
@@ -686,13 +655,11 @@ function moveFocus(step) {
     if (next !== currentFocus) {
         currentFocus = next;
         focusables[currentFocus].focus();
-        console.log("Focus moved to:", focusables[currentFocus].id || focusables[currentFocus].className);
     }
 }
 
 function handleOK() {
     var active = document.activeElement;
-    console.log("handleOK called - Active element:", active.id || active.className);
 
     // ERROR MODAL: Try Again Button
     if (active.id === "errorTryAgainBtn") {
@@ -709,13 +676,11 @@ function handleOK() {
             if (phoneIdx >= 0) currentFocus = phoneIdx;
         }
 
-        console.log("[ErrorModal] Try Again - Phone input cleared and reinitialized");
         return;
     }
 
     // LANDING PAGE: Start Watching Button
     if (active.id === "proceedBtn") {
-        console.log("Navigating to login.html");
         window.location.href = "login.html";
         return;
     }
@@ -724,24 +689,19 @@ function handleOK() {
     if (active.id === "getOtpBtn") {
         // Prevent duplicate OTP requests
         if (otpRequestInProgress) {
-            console.log("[Login] ⚠️ OTP request already in progress, ignoring duplicate click");
             return;
         }
 
         // Timestamp-based cooldown (10s) - prevents double-fire from TV remote quirks
         var now = Date.now();
         if (now - lastOtpRequestTime < 10000) {
-            console.log("[Login] ⚠️ OTP request blocked - cooldown active (" + Math.round((10000 - (now - lastOtpRequestTime)) / 1000) + "s remaining)");
             return;
         }
 
         var phoneInput = document.getElementById("phoneInput");
         var val = phoneInput ? phoneInput.value : "";
-        console.log("[Login] Get OTP clicked - Phone number:", val, "| Length:", val.length);
 
         if (val.length === 10) {
-            console.log("[Login] ✅ Starting OTP request for mobile:", val);
-            console.log("[Login] ⏱️ OTP API call timestamp:", new Date().toISOString());
 
             // Set flag and timestamp to prevent duplicate requests
             otpRequestInProgress = true;
@@ -761,14 +721,11 @@ function handleOK() {
                 ? DeviceInfo.ensurePublicIP(3000)
                 : Promise.resolve();
 
-            console.log("[Login] Calling AuthAPI.requestOTP()");
             ipWait.then(function () { return AuthAPI.requestOTP(val); })
                 .then(function (response) {
-                    console.log("[Login] OTP API Response received:", response);
 
                     // Check response
                     if (response && response.status && Number(response.status.err_code) === 0) {
-                        console.log("[Login] OTP sent successfully via /login");
                         // Keep button disabled and flag set - we're navigating away
 
                         // Store full response for setSession after OTP verification
@@ -793,8 +750,11 @@ function handleOK() {
                         btn.classList.add('enabled');
 
                         console.error("[Login] OTP request failed:", response);
-                        var errTitle = (response && response.status && response.status.err_msg)
-                            ? response.status.err_msg : "Request Failed";
+                        var errTitle = "Invalid User ID";
+                        if (response && response.status && response.status.err_msg) {
+                            var apiMsg = String(response.status.err_msg).trim();
+                            if (apiMsg) errTitle = apiMsg;
+                        }
                         showLoginError(errTitle);
                     }
                 })
@@ -819,7 +779,6 @@ function handleOK() {
     if (active.id === "verifyBtn") {
         // Prevent duplicate clicks
         if (otpVerifyInProgress) {
-            console.log("[Verify] Already in progress, ignoring duplicate");
             return;
         }
 
@@ -829,7 +788,6 @@ function handleOK() {
             if (val) fullOTP += val;
         }
 
-        console.log("[Verify] Verify button clicked - OTP:", fullOTP, "| Length:", fullOTP.length);
 
         if (fullOTP.length === 4) {
             otpVerifyInProgress = true;
@@ -851,7 +809,6 @@ function handleOK() {
 
             // CLIENT-SIDE OTP VERIFICATION (no second API call)
             var storedOTP = sessionStorage.getItem('_pendingOTP') || "";
-            console.log("[Verify] Comparing OTP client-side...");
 
             if (storedOTP && fullOTP === storedOTP) {
                 // OTP matches — now save session (only after OTP verified)
@@ -867,7 +824,6 @@ function handleOK() {
                 localStorage.setItem('loginTime', new Date().toISOString());
                 localStorage.setItem('hasLoggedInOnce', 'true');
 
-                console.log("[Verify] OTP verified successfully - navigating to home");
                 window.location.replace("home.html");
             } else {
                 otpVerifyInProgress = false;
@@ -881,7 +837,6 @@ function handleOK() {
                 if (otp1) otp1.focus();
             }
         } else {
-            console.log("Incomplete OTP");
             showErrorPopup("Please enter full 4-digit OTP");
         }
         return;
@@ -909,7 +864,6 @@ window.addEventListener('load', function () {
     // The previous code checked for element with ID 'otpContainer'. 
     // Let's check if verifyBtn exists which is safer for verify page detection
     if (document.getElementById('verifyBtn')) {
-        console.log("OTP page detected - initializing");
         initOTPPage();
     }
 });
@@ -966,7 +920,6 @@ function initOTPPage() {
 
 // Clear all OTP inputs and reset focus to first input
 function clearOTPInputs() {
-    console.log("[OTP] Clearing all OTP inputs");
     for (var i = 1; i <= 4; i++) {
         var input = document.getElementById('otp' + i);
         if (input) {
@@ -980,7 +933,6 @@ function clearOTPInputs() {
         setTimeout(function () {
             deactivateOTPInputEditing();
             firstInput.focus();
-            console.log("[OTP] Focus reset to first input");
         }, 100);
     }
 }
@@ -1037,7 +989,6 @@ function handleResendOTP() {
             resendBtn.disabled = false;
 
             if (response && response.status && Number(response.status.err_code) === 0) {
-                console.log("[Verify] OTP resent successfully via /loginOtp");
 
                 // FIXED: Store the new OTP from the response (replace old OTP)
                 var newOTP = "";
@@ -1048,7 +999,6 @@ function handleResendOTP() {
                 sessionStorage.removeItem('_pendingOTP');
                 if (newOTP) {
                     sessionStorage.setItem('_pendingOTP', newOTP);
-                    console.log("[Verify] New OTP stored (old OTP cleared)");
                 }
 
                 // Clear OTP inputs for fresh entry
@@ -1104,7 +1054,6 @@ function showErrorPopup(errorMessage) {
         if (closeBtn) {
             setTimeout(function () {
                 closeBtn.focus();
-                console.log("[Popup] Focus locked on error popup OK button");
             }, 150);
         }
     }
@@ -1149,7 +1098,6 @@ function disableBackgroundFocusables() {
         verifyBtn.disabled = true;
     }
 
-    console.log("[Focus] Background focusables disabled");
 }
 
 // Re-enable all background focusables when popup closes
@@ -1171,7 +1119,6 @@ function enableBackgroundFocusables() {
         verifyBtn.removeAttribute('data-was-focusable');
     }
 
-    console.log("[Focus] Background focusables re-enabled");
 }
 
 // Initialize popup close handlers
@@ -1203,7 +1150,6 @@ function initPopupHandlers() {
         });
     }
 
-    console.log("[Popup] Handlers initialized");
 }
 
 

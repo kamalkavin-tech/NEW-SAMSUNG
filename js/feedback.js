@@ -7,14 +7,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -76,7 +74,6 @@ function showPopup(message, callback) {
 }
 
 window.onload = function () {
-    console.log("=== BBNL Feedback Page Initialized ===");
 
     // Auto-populate User ID field from session
     var userIdField = document.getElementById('userIdField');
@@ -226,7 +223,6 @@ function toggleStars(increase = true) {
  * Submit feedback to BBNL API
  */
 function submitFeedback() {
-    console.log("[Feedback] Submitting feedback...");
 
     // Get user data from session
     var userData = AuthAPI.getUserData();
@@ -267,10 +263,6 @@ function submitFeedback() {
         rating: currentRating
     };
 
-    console.log("[Feedback] User data:", userData);
-    console.log("[Feedback] Extracted userid:", userid);
-    console.log("[Feedback] Extracted mobile:", mobile);
-    console.log("[Feedback] Submitting data:", feedbackData);
 
     // Show loading state
     var submitBtn = document.querySelector('.submit-btn');
@@ -282,7 +274,6 @@ function submitFeedback() {
     BBNL_API.submitFeedback(feedbackData)
         .then(function(response) {
             // response logging removed for TV performance
-            console.log("[Feedback] ========================");
 
             // Reset button state
             submitBtn.innerText = originalText;
@@ -293,11 +284,8 @@ function submitFeedback() {
             var errCode = statusObj ? statusObj.err_code : -1;
             var errMsg = statusObj ? statusObj.err_msg : "Unknown error";
 
-            console.log("[Feedback] Parsed error code:", errCode);
-            console.log("[Feedback] Parsed error message:", errMsg);
 
             if (errCode === 0) {
-                console.log("[Feedback] ✅ Success:", errMsg);
                 showPopup("Thank you for your feedback!", function () {
                     window.location.href = 'home.html';
                 });

@@ -103,7 +103,6 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: rgba(255, 255, 255, 0.6);
     position: relative;
     transform: scale(1);
@@ -113,7 +112,6 @@ body {
     width: 28px;
     height: 28px;
     stroke-width: 1.8;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-icon-btn:hover,
@@ -121,12 +119,7 @@ body {
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
     outline: none;
-    transform: scale(1.15);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.sidebar-icon-btn:focus svg {
-    transform: scale(1.1);
+    border: 2px solid #FFFFFF;
 }
 
 .sidebar-icon-btn.active {
@@ -134,21 +127,16 @@ body {
     color: #fff;
     border: 2px solid #fff;
     border-radius: 16px;
-    box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
 }
 
-/* Remove default highlight from Home icon active state */
 .sidebar-icon-btn[data-route="home.html"].active {
     background: transparent;
     border: none;
-    box-shadow: none;
 }
 
-/* Keep hover/focus state for Home icon */
 .sidebar-icon-btn[data-route="home.html"]:hover,
 .sidebar-icon-btn[data-route="home.html"]:focus {
     background: rgba(255, 255, 255, 0.1);
-    transform: scale(1.1);
 }
 
 .sidebar-icon-btn.active svg {
@@ -198,7 +186,6 @@ body {
     border-radius: 25px;
     padding: 8px 20px;
     width: 400px;
-    transition: all 0.3s ease;
 }
 
 .search-bar:focus-within {
@@ -236,7 +223,6 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
     color: rgba(255, 255, 255, 0.7);
 }
 
@@ -346,7 +332,6 @@ body {
     border: 1.5px solid transparent;
     border-radius: 16px;
     cursor: pointer;
-    transition: all 0.3s ease;
 }
 
 .network-option:hover,

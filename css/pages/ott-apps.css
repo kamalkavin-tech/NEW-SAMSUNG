@@ -3,6 +3,11 @@
    No Sidebar - Back Button Header Layout
    ========================================== */
 
+/* Coming-soon popup — fully opaque, no background visible */
+#noAppsPopup {
+    background: #000000 !important;
+}
+
 /* Override any sidebar layout */
 body.ott-apps-page {
     display: block !important;
@@ -47,7 +52,6 @@ body.ott-apps-page {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
     justify-self: start;
     z-index: 10;
 }
@@ -86,7 +90,6 @@ body.ott-apps-page {
     border-radius: 25px;
     padding: 8px 20px;
     width: 350px;
-    transition: all 0.3s ease;
     justify-self: end;
 }
 
@@ -154,7 +157,6 @@ body.ott-apps-page {
     border-radius: 16px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     aspect-ratio: 1;
     display: flex;
@@ -164,14 +166,12 @@ body.ott-apps-page {
 }
 
 .app-card:hover {
-    transform: translateY(-4px) scale(1.02);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     border-color: rgba(255, 255, 255, 0.1);
 }
 
 .app-card:focus {
     outline: none;
-    transform: translateY(-2px) scale(1.02);
     border: 2px solid #FFFFFF;
     box-shadow: none;
     z-index: 5;
@@ -275,7 +275,6 @@ body.ott-apps-page {
     font-weight: 600;
     font-size: 18px;
     cursor: pointer;
-    transition: all 0.3s;
 }
 
 .error-popup-btn:hover,

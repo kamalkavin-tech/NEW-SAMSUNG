@@ -7,7 +7,6 @@
     cursor: pointer;
     padding: 5px 15px;
     border-radius: 5px;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .menu-btn:focus {
@@ -23,7 +22,6 @@
     cursor: pointer;
     padding: 5px 10px;
     border-radius: 5px;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .settings-btn:focus {
@@ -40,14 +38,12 @@
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-watch:hover,
 .btn-watch:focus {
     outline: none;
     background: #3ec49a;
-    transform: scale(1.05);
     box-shadow: 0 0 20px rgba(77, 212, 172, 0.6);
 }
 
@@ -60,14 +56,12 @@
     border-radius: 50%;
     font-size: 28px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .btn-add:hover,
 .btn-add:focus {
     outline: none;
     background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.1);
 }
 
 .back-btn {
@@ -98,13 +92,11 @@
     color: var(--text-main);
     border: none;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .icon-btn:hover,
 .icon-btn:focus {
     background: var(--border-card-hover);
-    transform: scale(1.1);
 }
 
 .filter-chip {
@@ -123,7 +115,6 @@
     font-size: 16px;
     font-weight: 500;
     white-space: nowrap;
-    transition: background 0.15s ease, border-color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -138,7 +129,6 @@
 }
 
 .filter-chip:focus {
-    transform: scale(1.05);
     /* Subtle grow */
     box-shadow: 0 0 0 2px white;
     /* Focus ring for accessibility */
@@ -162,7 +152,6 @@
     font-size: 22px;
     font-weight: bold;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     box-shadow: 0 5px 20px rgba(59, 108, 255, 0.3);
 }
 
@@ -172,7 +161,6 @@
 
 .get-otp-btn:focus {
     outline: none;
-    transform: scale(1.02);
     background: #3a3a3a;
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
@@ -186,7 +174,6 @@
     font-size: 28px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
 .num-btn:focus {
@@ -194,7 +181,6 @@
     background: #3a3a3a;
     border-color: #888;
     color: #fff;
-    transform: scale(1.05);
     box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
 
@@ -211,7 +197,6 @@
 }
 
 .landing-btn:focus {
-    transform: scale(1.08);
     background: #3a3a3a;
     box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
     outline: none;

@@ -21,13 +21,13 @@ var AVPlayer = (function () {
     var SERVER_IP = "124.40.244.211";
 
     var eventCallbacks = {
-        onBufferingStart: function () { console.log("Buffering Start"); },
-        onBufferingProgress: function (percent) { console.log("Buffering: " + percent + "%"); },
-        onBufferingComplete: function () { console.log("Buffering Complete"); },
-        onStreamCompleted: function () { console.log("Stream Ended"); },
+        onBufferingStart: function () {},
+        onBufferingProgress: function (percent) {},
+        onBufferingComplete: function () {},
+        onStreamCompleted: function () {},
         onCurrentPlayTime: function (time) { },
         onError: function (type, details) { console.error("AVPlay Error: " + type, details); },
-        onEvent: function (event, data) { console.log("AVPlay Event: " + event, data); },
+        onEvent: function (event, data) {},
         onSubtitle: function (subtitle) { }
     };
 
@@ -139,9 +139,6 @@ var AVPlayer = (function () {
     // Stale callbacks check this to avoid acting on old streams
     var _streamGeneration = 0;
     var _httpFallbackTimer = null;
-    // Serialization lock — prevents overlapping destroy/setUrl/play on hardware decoder
-    var _changeLocked = false;
-    var _pendingStreamUrl = null;
 
     return {
         init: function (options) {
@@ -194,175 +191,66 @@ var AVPlayer = (function () {
         },
 
         setUrl: function (url) {
-            if (!isTizenProp) {
-                console.warn("[AVPlayer] Not Tizen - setUrl mocked");
-                return;
-            }
+            if (!isTizenProp) return;
 
             try {
-                _log("[AVPlayer] Stream setup:", url);
+                if (!url || url.trim() === "") throw new Error("Stream URL is empty");
 
-                // Validate and clean URL
-                if (!url || url.trim() === "") {
-                    throw new Error("Stream URL is empty");
-                }
-
-                url = url.trim();
-
-                // CRITICAL: Fix localhost URLs BEFORE anything else
-                url = fixLocalhostUrl(url);
-
+                url = fixLocalhostUrl(url.trim());
                 currentStreamUrl = url;
 
-                // NOTE: No stop/close here — changeStream() already called destroy().
-                // Double stop/close on Samsung TV freezes the hardware decoder (black screen).
+                // Open → headers → buffer config → display — all synchronous, no setTimeout
+                avplay.open(url);
+                playerState = "IDLE";
 
-                // Minimal delay for Samsung TV hardware to release decoder after destroy()
-                var self = this;
-                var myGeneration = _streamGeneration;
-                _setUrlTimer = setTimeout(function () {
-                    _setUrlTimer = null;
-                    // Abort if a newer changeStream call was made during the delay
-                    if (myGeneration !== _streamGeneration) {
-                        _log("[AVPlayer] setUrl aborted — stale generation", myGeneration, "vs", _streamGeneration);
-                        return;
-                    }
-                    try {
-                        // STEP 2: Open stream FIRST (required before setting properties)
-                        _log("[AVPlayer] Opening stream...");
-                        avplay.open(url);
-                        playerState = "IDLE";
-                        _log("[AVPlayer] ✓ Stream opened");
+                this.setStreamingHeaders(url);
 
-                        // STEP 3: Set HTTP headers AFTER opening (Samsung TV requirement)
-                        _log("[AVPlayer] Setting streaming headers...");
-                        self.setStreamingHeaders(url);
-                        _log("[AVPlayer] ✓ Headers set");
+                try {
+                    avplay.setTimeoutForBuffering(4);
+                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
+                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
+                } catch (e) {}
 
-                        // STEP 4: Configure buffering — FAST START for live IPTV
-                        try {
-                            // Timeout reduced: fail fast so stale cache can show sooner
-                            avplay.setTimeoutForBuffering(4);
-
-                            // Initial buffer: 1 second — starts playback ASAP
-                            // (was 3s — that's 3 seconds of black screen before anything plays!)
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
-
-                            // Resume buffer: 3 seconds (was 8s — too long for channel switching)
-                            avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
-                        } catch (bufferError) {
-                            console.warn("[AVPlayer] Buffering config warning:", bufferError);
-                        }
-
-                        // STEP 5: Set display — single call, no cascading try-catches
-                        try {
-                            avplay.setDisplayRect(0, 0, 1920, 1080);
-                            try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {
-                                try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e2) {}
-                            }
-                        } catch (displayError) {}
-
-                        _log("[AVPlayer] Stream setup complete:", currentStreamUrl);
-
-                    } catch (setupError) {
-                        console.error("[AVPlayer] ========================================");
-                        console.error("[AVPlayer] ✗✗✗ SETUP FAILED ✗✗✗");
-                        console.error("[AVPlayer] Error:", setupError.message);
-                        console.error("[AVPlayer] Details:", setupError);
-                        console.error("[AVPlayer] ========================================");
-
-                        if (eventCallbacks.onError) {
-                            eventCallbacks.onError("Stream setup failed: " + setupError.message, {
-                                error: setupError,
-                                url: url
-                            });
-                        }
-                    }
-                }, 0); // yield to event loop — hardware decoder released by destroy() already
+                try {
+                    avplay.setDisplayRect(0, 0, 1920, 1080);
+                    try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {}
+                } catch (e) {}
 
             } catch (e) {
-                console.error("[AVPlayer] setUrl Exception:", e);
                 if (eventCallbacks.onError) {
-                    eventCallbacks.onError("Failed to set URL: " + e.message);
+                    eventCallbacks.onError("Stream setup failed: " + e.message);
                 }
             }
         },
 
         play: function () {
-            if (!isTizenProp) {
-                console.warn("[AVPlayer] Not Tizen - play mocked");
-                return;
-            }
+            if (!isTizenProp) return;
 
             try {
-                _log("[AVPlayer] ========================================");
-                _log("[AVPlayer] STARTING PLAYBACK");
-                _log("[AVPlayer] Current state:", playerState);
-                _log("[AVPlayer] Stream URL:", currentStreamUrl);
-                _log("[AVPlayer] ========================================");
-
                 if (playerState === "IDLE") {
-                    // SAMSUNG TV REQUIREMENT: Always use prepareAsync before play
-                    // Direct play without prepare causes InvalidAccessError on real TV
-                    _log("[AVPlayer] Preparing stream (prepareAsync required for Samsung TV)...");
-
                     var playGeneration = _streamGeneration;
                     avplay.prepareAsync(
                         function () {
-                            if (playGeneration !== _streamGeneration) {
-                                _log("[AVPlayer] prepareAsync success aborted — stale generation", playGeneration, "vs", _streamGeneration);
-                                return;
-                            }
-                            _log("[AVPlayer] ✓✓✓ PREPARE SUCCESS ✓✓✓");
+                            if (playGeneration !== _streamGeneration) return;
                             playerState = "READY";
-
                             try {
-                                _log("[AVPlayer] Starting playback...");
                                 avplay.play();
                                 playerState = "PLAYING";
-                                _log("[AVPlayer] ========================================");
-                                _log("[AVPlayer] ✓✓✓ PLAYBACK STARTED SUCCESSFULLY ✓✓✓");
-                                _log("[AVPlayer] ========================================");
                             } catch (playError) {
-                                console.error("[AVPlayer] ✗✗✗ PLAY FAILED ✗✗✗");
-                                console.error("[AVPlayer] Error:", playError);
-                                if (eventCallbacks.onError) {
-                                    eventCallbacks.onError("Play failed: " + playError.message);
-                                }
+                                if (eventCallbacks.onError) eventCallbacks.onError("Play failed: " + playError.message);
                             }
                         },
                         function (prepareError) {
-                            if (playGeneration !== _streamGeneration) {
-                                _log("[AVPlayer] prepareAsync error ignored — stale generation", playGeneration, "vs", _streamGeneration);
-                                return;
-                            }
-                            console.error("[AVPlayer] ========================================");
-                            console.error("[AVPlayer] ✗✗✗ PREPARE FAILED ✗✗✗");
-                            console.error("[AVPlayer] Error:", prepareError);
-                            console.error("[AVPlayer] Error type:", typeof prepareError);
-                            console.error("[AVPlayer] Error string:", String(prepareError));
-                            console.error("[AVPlayer] Stream URL:", currentStreamUrl);
-                            console.error("[AVPlayer] ========================================");
-
-                            if (eventCallbacks.onError) {
-                                eventCallbacks.onError("Prepare failed: " + prepareError, {
-                                    error: prepareError,
-                                    url: currentStreamUrl
-                                });
-                            }
+                            if (playGeneration !== _streamGeneration) return;
+                            if (eventCallbacks.onError) eventCallbacks.onError("Prepare failed: " + prepareError);
                         }
                     );
-
                 } else if (playerState === "PAUSED") {
-                    _log("[AVPlayer] Resuming from pause...");
                     avplay.play();
                     playerState = "PLAYING";
-                    _log("[AVPlayer] ✓ Resumed");
                 } else if (playerState === "READY") {
-                    _log("[AVPlayer] Already prepared, playing...");
                     avplay.play();
                     playerState = "PLAYING";
-                    _log("[AVPlayer] ✓ Playing");
                 } else {
                     _log("[AVPlayer] Attempting direct play...");
                     avplay.play();
@@ -452,55 +340,16 @@ var AVPlayer = (function () {
                 return;
             }
 
-            // SERIALIZATION: If hardware is busy with previous switch, queue this one
-            if (_changeLocked) {
-                _log("[AVPlayer] Hardware busy — queuing stream:", url);
-                _pendingStreamUrl = url;
-                return;
-            }
-
             // Stop any DVB playback if switching from FTA to IPTV
             if (isDVBStream) {
                 this.stopDVBStream();
             }
 
+            // Destroy old stream, open new one, start playback — all synchronous
             isDVBStream = false;
-            _changeLocked = true;
             this.destroy();
-
-            var self = this;
-            // Give hardware decoder minimal time to release after destroy
-            _setUrlTimer = setTimeout(function () {
-                _setUrlTimer = null;
-                if (myGeneration !== _streamGeneration) {
-                    _changeLocked = false;
-                    if (_pendingStreamUrl) {
-                        var next = _pendingStreamUrl;
-                        _pendingStreamUrl = null;
-                        self.changeStream(next);
-                    }
-                    return;
-                }
-                self.setUrl(url);
-                _playTimer = setTimeout(function () {
-                    _playTimer = null;
-                    _changeLocked = false;
-                    if (myGeneration !== _streamGeneration) {
-                        if (_pendingStreamUrl) {
-                            var next = _pendingStreamUrl;
-                            _pendingStreamUrl = null;
-                            self.changeStream(next);
-                        }
-                        return;
-                    }
-                    self.play();
-                    if (_pendingStreamUrl) {
-                        var next = _pendingStreamUrl;
-                        _pendingStreamUrl = null;
-                        setTimeout(function () { self.changeStream(next); }, 30);
-                    }
-                }, 15);
-            }, 15);
+            this.setUrl(url);
+            this.play();
         },
 
         /**

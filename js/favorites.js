@@ -7,14 +7,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -40,7 +38,6 @@ window.addEventListener('beforeunload', function () {
 });
 
 window.onload = function () {
-    console.log("=== BBNL Favorites Page Initialized ===");
 
     // Show Coming Soon popup immediately
     showComingSoonPopup();
@@ -130,7 +127,6 @@ var FAVORITES_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
  * Load channels from API for favorites page (with sessionStorage cache)
  */
 function loadFavoriteChannels() {
-    console.log("[Favorites] Loading channels...");
 
     var grid = document.getElementById('favoritesGrid');
 
@@ -140,7 +136,6 @@ function loadFavoriteChannels() {
         if (raw) {
             var parsed = JSON.parse(raw);
             if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < FAVORITES_CACHE_TTL_MS) {
-                console.log("[Favorites] Cache hit:", parsed.data.length, "channels");
                 allChannels = parsed.data;
                 renderFavoriteChannels(allChannels);
                 return;
@@ -154,7 +149,6 @@ function loadFavoriteChannels() {
 
     BBNL_API.getChannelList()
         .then(function (channels) {
-            console.log("[Favorites] Channels fetched:", channels ? channels.length : 0);
 
             if (channels && Array.isArray(channels) && channels.length > 0) {
                 allChannels = channels;
@@ -249,7 +243,6 @@ function renderFavoriteChannels(channels) {
 
     // Refresh focusables after rendering
     refreshFocusables();
-    console.log("[Favorites] Rendered " + channels.length + " channels");
 }
 
 /**

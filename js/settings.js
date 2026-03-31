@@ -26,14 +26,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -148,7 +146,6 @@ var settingsGatewayLastResolvedAt = 0;
 // ==========================================
 
 window.onload = function () {
-    console.log("=== BBNL Settings Page Initialized ===");
 
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
         AppPerformanceCache.primeAfterLogin(false);
@@ -183,7 +180,6 @@ window.onload = function () {
         sidebarItems[0].focus();
         settingsNav.zone = 'sidebar';
         settingsNav.sidebarIndex = 0;
-        console.log("[NAV] Initial focus: About App");
     }
 
     // Register remote keys
@@ -194,7 +190,6 @@ window.onload = function () {
             var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
             tizen.tvinputdevice.registerKeyBatch(keys);
         } catch (e) {
-            console.log("Not on Tizen");
         }
     }
 
@@ -270,7 +265,6 @@ function focusSidebarItem(index) {
             switchSection(section);
         }
 
-        console.log('[NAV] Sidebar focused:', index);
         return true;
     }
     return false;
@@ -286,8 +280,7 @@ function focusContentItem(index) {
         items[index].focus();
         settingsNav.zone = 'content';
         settingsNav.contentIndex = index;
-        items[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        console.log('[NAV] Content focused:', index);
+        items[index].scrollIntoView({ behavior: 'auto', block: 'center' });
         return true;
     }
     return false;
@@ -299,7 +292,6 @@ function focusBackButton() {
     if (backBtn) {
         backBtn.focus();
         settingsNav.zone = 'back';
-        console.log('[NAV] Back button focused');
     }
 }
 
@@ -316,7 +308,6 @@ document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     e.preventDefault();
 
-    console.log("[Settings] Key:", code, "Zone:", settingsNav.zone);
 
     // BACK key - always go home
     if (code === 10009) {
@@ -412,7 +403,6 @@ function handleLeft() {
     }
     else if (settingsNav.zone === 'content') {
         // LEFT from content: go back to sidebar
-        console.log('[LEFT] Content → Sidebar');
         focusSidebarItem(settingsNav.sidebarIndex);
     }
 }
@@ -431,15 +421,12 @@ function handleRight() {
         // RIGHT from sidebar: enter content area
         var contentItems = getContentFocusables();
         if (contentItems.length > 0) {
-            console.log('[RIGHT] Sidebar → Content');
             focusContentItem(0);
         } else {
-            console.log('[RIGHT] No focusable content in this panel');
         }
     }
     else if (settingsNav.zone === 'content') {
         // Already in content, do nothing
-        console.log('[RIGHT] Already in content');
     }
 }
 
@@ -451,7 +438,6 @@ function handleEnter() {
     var active = document.activeElement;
     if (!active) return;
 
-    console.log('[ENTER] Element:', active.className, active.id);
 
     // Back button
     if (active.classList.contains('back-btn')) {
@@ -509,7 +495,6 @@ function initializeSidebar() {
 }
 
 function switchSection(section) {
-    console.log("[Settings] Switching to section:", section);
 
     // Update sidebar active state
     var sidebarItems = document.querySelectorAll(".sidebar-item");
@@ -538,7 +523,6 @@ function switchSection(section) {
 
 async function handleLogout() {
     showConfirmPopup('Are you sure you want to logout?', async function () {
-        console.log("[Settings] User confirmed EXPLICIT logout");
 
         // 1. Save device-level data BEFORE API logout (these survive logout — device identity)
         var savedMac = localStorage.getItem('macAddress');
@@ -550,7 +534,6 @@ async function handleLogout() {
             clearTimeout(i);
             clearInterval(i);
         }
-        console.log("[Settings] All timers/intervals cleared");
 
         // 3. Call API logout (server-side session cleanup)
         if (typeof BBNL_API !== 'undefined' && BBNL_API.logout) {
@@ -564,7 +547,6 @@ async function handleLogout() {
         // 4. CLEAR ALL localStorage — this is an EXPLICIT logout
         // Remove hasLoggedInOnce and bbnl_user so login page shows on next launch
         localStorage.clear();
-        console.log("[Settings] localStorage fully cleared (explicit logout)");
 
         // 5. Restore device-level data only (not user session data)
         if (savedMac) localStorage.setItem('macAddress', savedMac);
@@ -572,23 +554,18 @@ async function handleLogout() {
 
         // 6. Clear all sessionStorage
         sessionStorage.clear();
-        console.log("[Settings] sessionStorage cleared");
 
-        console.log("[Settings] Logout complete - user session destroyed, login page will show on next launch");
 
         // 7. Exit the Tizen application completely
         // On relaunch: hasLoggedInOnce is GONE → login page shows (correct for explicit logout)
         try {
             if (typeof tizen !== 'undefined' && tizen.application) {
-                console.log("[Settings] Exiting Tizen application");
                 tizen.application.getCurrentApplication().exit();
             } else {
                 // For browser testing - redirect to login
-                console.log("[Settings] Not on Tizen - redirecting to login");
                 window.location.href = "login.html";
             }
         } catch (e) {
-            console.log("[Settings] Exit failed:", e);
             window.location.href = "login.html";
         }
     }); // end showConfirmPopup callback
@@ -599,11 +576,9 @@ async function handleLogout() {
 // ==========================================
 
 function loadAboutAppInfo() {
-    console.log("[Settings] Loading About App info...");
 
     BBNL_API.getAppVersion()
         .then(function (response) {
-            console.log("[Settings] App Version Response:", response);
 
             if (response && response.status && Number(response.status.err_code) === 0) {
                 if (response.body) {
@@ -614,7 +589,6 @@ function loadAboutAppInfo() {
                         versionEl.innerText = versionData.appversion || "Unknown";
                     }
 
-                    console.log("[Settings] App version loaded:", versionData.appversion);
                 } else {
                     setAboutAppError();
                 }
@@ -634,7 +608,6 @@ function setAboutAppError() {
 }
 
 function checkForUpdates() {
-    console.log("[Settings] Checking for updates...");
 
     var updateStatus = document.getElementById('update-status');
     if (updateStatus) {
@@ -653,7 +626,6 @@ function checkForUpdates() {
 // ==========================================
 
 function loadDeviceInfoPanel() {
-    console.log("[Settings] Loading device info panel...");
 
     var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
     var isTizen = (typeof webapis !== 'undefined');
@@ -842,7 +814,6 @@ function resolveDynamicDns(deviceInfo, networkType, hasWebapis) {
                 }
             }
         } catch (e) {
-            console.warn('[Settings] webapis DNS read failed:', e.message);
         }
 
         // Best fallback in emulator/browser runtimes
@@ -870,7 +841,6 @@ function resolveDynamicDns(deviceInfo, networkType, hasWebapis) {
                 return;
             }
         } catch (e2) {
-            console.warn('[Settings] systeminfo DNS read failed:', e2.message);
         }
 
         var fallbackDns = deviceInfo && (deviceInfo.dns || deviceInfo.dns_server || '');
@@ -893,7 +863,6 @@ function getLocalIPv4Dynamic(deviceInfo, networkType, hasWebapis) {
             if (hasWebapis && networkType > 0) {
                 var ip1 = webapis.network.getIp(networkType);
                 if (isPrivateIPv4(ip1)) {
-                    console.log('[Settings] Dynamic local IPv4 via getIp:', ip1);
                     done(ip1);
                     return;
                 }
@@ -901,14 +870,12 @@ function getLocalIPv4Dynamic(deviceInfo, networkType, hasWebapis) {
                 if (typeof webapis.network.getIpv4 === 'function') {
                     var ip2 = webapis.network.getIpv4(networkType);
                     if (isPrivateIPv4(ip2)) {
-                        console.log('[Settings] Dynamic local IPv4 via getIpv4:', ip2);
                         done(ip2);
                         return;
                     }
                 }
             }
         } catch (e) {
-            console.warn('[Settings] Dynamic webapis local IPv4 read failed:', e.message);
         }
 
         // Priority 2: Tizen systeminfo fallback
@@ -934,7 +901,6 @@ function getLocalIPv4Dynamic(deviceInfo, networkType, hasWebapis) {
                         }
                         var best = pickBestLocalIPv4(candidates);
                         if (best) {
-                            console.log('[Settings] Dynamic local IPv4 selected:', best, '| candidates:', candidates.join(', '));
                         }
                         done(best);
                     });
@@ -955,7 +921,6 @@ function getLocalIPv4Dynamic(deviceInfo, networkType, hasWebapis) {
                 return;
             }
         } catch (sysErr) {
-            console.warn('[Settings] Dynamic systeminfo local IPv4 read failed:', sysErr.message);
         }
 
         // Priority 3/4 direct fallback path if no tizen.systeminfo
@@ -977,7 +942,6 @@ function startSettingsNetworkRefresh() {
             var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
             loadNetworkInfo(deviceInfo, (typeof webapis !== 'undefined'));
         } catch (e) {
-            console.warn('[Settings] Periodic network refresh failed:', e.message);
         }
     }, 15000);
 
@@ -986,7 +950,6 @@ function startSettingsNetworkRefresh() {
         try {
             if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
                 webapis.network.addNetworkStateChangeListener(function (state) {
-                    console.log('[Settings] Network state changed:', state, '- refreshing dynamic fields');
                     setTimeout(function () {
                         var deviceInfo = typeof DeviceInfo !== 'undefined' ? DeviceInfo.getDeviceInfo() : null;
                         loadNetworkInfo(deviceInfo, (typeof webapis !== 'undefined'));
@@ -995,7 +958,6 @@ function startSettingsNetworkRefresh() {
                 settingsNetworkListenerRegistered = true;
             }
         } catch (e2) {
-            console.warn('[Settings] Network listener registration failed:', e2.message);
         }
     }
 }
@@ -1003,12 +965,10 @@ function startSettingsNetworkRefresh() {
 function loadNetworkInfo(deviceInfo, isTizen) {
     // Re-check webapis availability directly (might not be available at page load)
     var hasWebapis = (typeof webapis !== 'undefined') && webapis && webapis.network;
-    console.log("[Settings] isTizen param:", isTizen, "| Direct webapis.network check:", hasWebapis);
     
     try {
         if (hasWebapis) {
             var networkType = webapis.network.getActiveConnectionType();
-            console.log("[Settings] Network Type:", networkType);
 
             setElementText('device-connection-type', getConnectionTypeName(networkType));
             
@@ -1043,7 +1003,6 @@ function loadNetworkInfo(deviceInfo, isTizen) {
 
             try {
                 var macValue = webapis.network.getMac(1);
-                console.log("[Settings] MAC Address from webapis:", macValue);
                 var formattedMac = formatMacAddress(macValue);
                 setElementText('device-wifi-mac', formattedMac || 'N/A');
             } catch (macError) {
@@ -1053,10 +1012,7 @@ function loadNetworkInfo(deviceInfo, isTizen) {
 
         } else {
             // Browser/Emulator mode - no native webapis.network available
-            console.log("[Settings] webapis.network not available - browser/emulator mode");
-            console.log("[Settings] typeof webapis:", typeof webapis);
             if (typeof webapis !== 'undefined') {
-                console.log("[Settings] webapis available but no network:", Object.keys(webapis || {}));
             }
 
             setElementText('device-connection-type', 'Browser/Emulator');
@@ -1255,7 +1211,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
                 settingsLastKnownGateway = gwCache.ip;
                 settingsGatewayLastResolvedAt = now;
                 gatewayEl.innerText = gwCache.ip;
-                console.log('[Settings] Gateway IP from persistent cache:', gwCache.ip);
                 return;
             }
         }
@@ -1268,7 +1223,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
     }
 
     settingsGatewayFetchInFlight = true;
-    console.log("[Settings] Resolving Gateway IP...");
     gatewayEl.innerText = settingsLastKnownGateway || 'Fetching...';
 
     function isValidGatewayValue(ip) {
@@ -1305,13 +1259,10 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
         if (hasNativeWebapis && activeType > 0 && typeof webapis.network.getGateway === 'function') {
             var gatewayIp = webapis.network.getGateway(activeType);
             if (commitGateway(gatewayIp)) {
-                    console.log('[Settings] Gateway IP via webapis.getGateway:', gatewayIp);
                     return;
             }
-            console.warn('[Settings] Ignoring invalid gateway from webapis:', gatewayIp);
         }
     } catch (e) {
-        console.warn('[Settings] webapis gateway fetch failed:', e.message);
     }
 
     // Priority 2: Tizen systeminfo network snapshot
@@ -1320,7 +1271,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
             tizen.systeminfo.getPropertyValue('NETWORK', function (network) {
                 var sysGateway = network && (network.gateway || network.gatewayIp || network.defaultGateway || network.router || '');
                 if (commitGateway(sysGateway)) {
-                    console.log('[Settings] Gateway IP via tizen.systeminfo:', sysGateway);
                     return;
                 }
 
@@ -1340,7 +1290,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
             return;
         }
     } catch (e2) {
-        console.warn('[Settings] systeminfo gateway fetch failed:', e2.message);
     }
 
     // Priority 3: Cached gateway value from device info if available
@@ -1371,7 +1320,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
             if (index >= ipServices.length) {
                 settingsGatewayFetchInFlight = false;
                 gatewayEl.innerText = settingsLastKnownGateway || 'Unavailable';
-                console.log('[Settings] Gateway external fallback failed on all services');
                 return;
             }
 
@@ -1384,7 +1332,6 @@ function loadPublicIPForGateway(deviceInfo, networkType, hasWebapis) {
                 .then(function (data) {
                     var externalIp = data.ip || data.IPv4 || data.IP || null;
                     if (commitGateway(externalIp)) {
-                        console.log('[Settings] Gateway via external fallback:', externalIp);
                         return;
                     }
                     throw new Error('No valid gateway IP in response');

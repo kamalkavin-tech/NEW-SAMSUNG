@@ -45,7 +45,6 @@ body.channels-page {
     padding: 10px 20px;
     border: none;
     cursor: pointer;
-    transition: transform 0.2s;
 }
 
 .back-btn:hover,
@@ -115,7 +114,6 @@ body.channels-page {
     padding: 14px 20px;
     border-radius: 12px;
     font-size: 16px;
-    transition: background 0.2s ease, color 0.2s ease;
     border: none !important;
     text-align: left;
     cursor: pointer;
@@ -189,7 +187,6 @@ body.channels-page {
     padding: 0 !important;
     overflow: visible;
     cursor: pointer;
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease;
     border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
     position: relative;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -197,7 +194,6 @@ body.channels-page {
 
 .channel-card:hover,
 .channel-card:focus {
-    transform: translateY(-4px) scale(1.02) !important;
     border: 2px solid #FFFFFF !important;
     box-shadow: none !important;
     outline: none !important;
@@ -260,11 +256,9 @@ body.channels-page {
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
-        transform: scale(1);
     }
     50% {
         opacity: 0.4;
-        transform: scale(0.9);
     }
 }
 
@@ -357,7 +351,6 @@ body.channels-page {
     left: 0;
     width: 100%;
     height: 100%;
-    transition: opacity 0.5s ease-in-out;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -389,7 +382,6 @@ body.channels-page {
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.3);
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .ad-dot.active {
@@ -479,7 +471,6 @@ body.channels-page {
     border: 3px solid transparent;
     border-radius: 16px;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
     width: 100%;
     max-width: 220px;
 }
@@ -488,9 +479,6 @@ body.channels-page {
 .language-item:focus {
     border: 3px solid #FFFFFF;
     border-radius: 18px;
-    transform: scale(1.05);
-    background: transparent;
-    box-shadow: none;
     outline: none;
 }
 
@@ -566,7 +554,6 @@ body.channels-page {
     border-radius: 16px;
     padding: 20px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     border: 2px solid transparent;
 }
 
@@ -671,7 +658,6 @@ body.channels-page {
     background: rgba(255, 255, 255, 0.08);
     border-radius: 25px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     border: 1px solid transparent;
 }
 
@@ -720,7 +706,6 @@ body.channels-page {
     background: rgba(255, 255, 255, 0.25);
     border-radius: 20px;
     position: relative;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .toggle-slider {
@@ -731,7 +716,6 @@ body.channels-page {
     height: 22px;
     background: #fff;
     border-radius: 50%;
-    transition: transform 0.3s ease;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
@@ -756,7 +740,6 @@ body.channels-page {
     border: 1.5px solid rgba(255, 255, 255, 0.3);
     border-radius: 25px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     position: relative;
 }
 
@@ -770,7 +753,6 @@ body.channels-page {
 
 .network-btn .network-icon {
     color: #4dd4ac;
-    transition: color 0.3s;
 }
 
 .network-btn.disconnected .network-icon {
@@ -826,7 +808,6 @@ body.channels-page {
     border: 1.5px solid transparent;
     border-radius: 16px;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .network-option:hover,
@@ -902,7 +883,6 @@ body.channels-page {
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     color: #fff;
 }
 
@@ -1190,7 +1170,6 @@ body.light-mode .app-label {
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     border: none;
 }
 
@@ -1322,7 +1301,6 @@ body.light-mode .exit-btn-yes {
     font-size: 17px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     margin-top: 10px;
     min-height: 52px;
 }

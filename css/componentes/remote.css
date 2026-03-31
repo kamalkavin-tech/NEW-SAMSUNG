@@ -1,406 +1,102 @@
 /* ========================================
    REMOTE CONTROL NAVIGATION STYLES
-   Enhanced focus states for TV remote control
+   Lightweight focus states for Samsung TV
+   No transform, no box-shadow blur, no transition
    ======================================== */
 
-/* ========================================
-   GLOBAL FOCUS STYLES
-   ======================================== */
-
-/* Base transition for all focusable elements */
-.focusable {
-    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-        box-shadow 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-        border-color 0.25s ease,
-        background 0.25s ease;
-    will-change: transform, box-shadow;
-    outline: none !important;
-}
-
-.focusable:focus {
-    outline: none !important;
-    z-index: 100;
-    position: relative;
-}
-
-/* ========================================
-   BUTTON FOCUS STATES
-   ======================================== */
-
-/* Primary buttons (Get OTP, Verify, Landing) */
-.get-otp-btn:focus,
-.verify-btn:focus,
-.primary-btn:focus,
-.landing-btn:focus {
-    transform: scale(1.03);
-    box-shadow: 0 0 0 4px rgba(59, 108, 255, 0.6),
-                0 8px 30px rgba(59, 108, 255, 0.5) !important;
-    background: linear-gradient(135deg, #4a7cff 0%, #3b6cff 100%) !important;
-}
-
-.landing-btn:focus {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.8),
-                0 15px 50px rgba(43, 76, 255, 0.7) !important;
-}
-
-/* Menu and Settings buttons */
-.menu-btn:focus,
-.settings-btn:focus {
-    background: rgba(255, 255, 255, 0.3) !important;
-    transform: scale(1.1);
-    border-radius: 12px;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
-}
-
-/* Back button */
-.back-btn:focus {
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.2) !important;
-    border-radius: 8px;
-    transform: translateX(-3px);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
-}
-
-/* Theme toggle button */
-.theme-toggle-btn:focus {
-    background: rgba(255, 255, 255, 0.4) !important;
-    transform: scale(1.1);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
-}
-
-/* General button focus - visible white border for all buttons */
+/* All focusable elements — simple white border on focus */
+.focusable:focus,
 button.focusable:focus {
-    border: 2px solid rgba(255, 255, 255, 0.8) !important;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+    outline: none;
+    border: 2px solid #FFFFFF !important;
 }
-
-/* ========================================
-   CARD FOCUS STATES
-   ======================================== */
 
 /* Channel cards */
 .channel-card:focus {
-    transform: translateY(-8px) scale(1.03) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 15px 40px rgba(255, 255, 255, 0.4) !important;
-    z-index: 10;
+    outline: none;
+    border: 2px solid #FFFFFF !important;
+    z-index: 5;
 }
 
 /* App cards */
 .app-card:focus {
-    transform: translateY(-8px) scale(1.03) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 15px 40px rgba(255, 255, 255, 0.4) !important;
-    z-index: 10;
+    outline: none;
+    border: 2px solid #FFFFFF !important;
+    z-index: 5;
 }
 
-/* View All card */
-.view-all:focus,
-.app-card.view-all:focus {
-    transform: translateY(-8px) scale(1.05) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 15px 40px rgba(255, 255, 255, 0.4) !important;
+/* Language items */
+.language-item:focus {
+    outline: none;
+    border: 3px solid #FFFFFF !important;
 }
 
-/* ========================================
-   SIDEBAR / FILTER FOCUS STATES
-   ======================================== */
+/* Back button */
+.back-btn:focus {
+    outline: none;
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 2px solid #FFFFFF !important;
+}
 
-/* Filter chips in sidebar */
+/* Sidebar items */
+.sidebar-item:focus,
+.category-item:focus,
+.channel-item:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 2px solid #FFFFFF !important;
+}
+
+/* Filter chips */
 .filter-chip:focus {
-    background: rgba(255, 255, 255, 0.3) !important;
-    color: #fff !important;
-    transform: translateX(8px) scale(1.02) !important;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5),
-                0 4px 15px rgba(255, 255, 255, 0.3) !important;
+    outline: none;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid #FFFFFF !important;
 }
 
-.filter-chip.active:focus {
-    transform: translateX(8px) scale(1.02) !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5),
-                0 6px 20px rgba(255, 255, 255, 0.5) !important;
+/* Buttons */
+.get-otp-btn:focus,
+.verify-btn:focus,
+.primary-btn:focus,
+.landing-btn:focus,
+.menu-btn:focus,
+.settings-btn:focus,
+.theme-toggle-btn:focus {
+    outline: none;
+    border: 2px solid #FFFFFF !important;
 }
 
-/* ========================================
-   MENU ITEM FOCUS STATES
-   ======================================== */
-
-/* Side menu items */
-.menu-item:focus {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%) !important;
-    color: #fff !important;
-    transform: translateX(10px);
-    border-left: 4px solid #ffffff;
-    padding-left: 20px;
-}
-
-.menu-item.active:focus {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 100%) !important;
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
-}
-
-/* ========================================
-   INPUT FOCUS STATES
-   ======================================== */
-
-/* Phone input */
-.phone-input:focus {
-    border-color: #3b6cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.3),
-                0 0 20px rgba(59, 108, 255, 0.2) !important;
-    background: rgba(59, 108, 255, 0.05) !important;
-}
-
-/* OTP input boxes */
-.otp-input:focus {
-    border-color: #3b6cff !important;
-    background: rgba(59, 108, 255, 0.1) !important;
-    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.4),
-                0 0 15px rgba(59, 108, 255, 0.3) !important;
-    transform: scale(1.05);
+/* Error popup buttons */
+.error-popup-btn:focus {
+    outline: none;
+    border: 2px solid #FFFFFF !important;
+    background: rgba(255, 255, 255, 0.15) !important;
 }
 
 /* Search input */
-.search-input:focus,
-.subpage-search input:focus {
-    border: none !important;
-    border-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    outline: none !important;
+.search-input:focus {
+    outline: none;
+    border: 2px solid #FFFFFF !important;
 }
 
-/* ========================================
-   NUMBER PAD FOCUS STATES
-   ======================================== */
-
-.num-btn:focus {
-    background: linear-gradient(135deg, #3b6cff 0%, #2b5cef 100%) !important;
-    border-color: #5080ff !important;
-    transform: scale(1.08);
-    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.4),
-                0 5px 20px rgba(59, 108, 255, 0.4) !important;
-}
-
-/* ========================================
-   SETTINGS PAGE FOCUS STATES
-   ======================================== */
-
-/* Sidebar items */
-.sidebar-item:focus {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%) !important;
-    color: #fff !important;
-    transform: translateX(5px);
-    border-left: 3px solid #ffffff;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-}
-
-.sidebar-item.active:focus {
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5),
-                inset 0 0 20px rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Toggle switches */
-.toggle-switch:focus,
-.toggle-switch input:focus + .slider {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5) !important;
-    border-radius: 20px;
-}
-
-/* Dropdown selects */
-.settings-select:focus {
-    border-color: #3b6cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.3) !important;
-}
-
-/* Info cards in settings */
-.info-card:focus {
-    border-color: #ffffff !important;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4),
-                0 8px 25px rgba(255, 255, 255, 0.2) !important;
-}
-
-/* ========================================
-   ERROR MODAL FOCUS STATES
-   ======================================== */
-
-.error-try-again-btn:focus {
-    transform: scale(1.03) !important;
-    box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.5),
-                0 8px 30px rgba(255, 215, 0, 0.4) !important;
-}
-
-/* ========================================
-   LINK FOCUS STATES
-   ======================================== */
-
-a.focusable:focus,
-.resend-link:focus,
-.error-support-link:focus {
-    color: #5080ff !important;
-    text-decoration: underline;
-    text-shadow: 0 0 10px rgba(59, 108, 255, 0.5);
-}
-
-/* ========================================
-   COUNTRY CODE FOCUS
-   ======================================== */
-
-.country-code:focus {
-    background: rgba(59, 108, 255, 0.2) !important;
-    border-radius: 8px;
-    box-shadow: 0 0 0 2px rgba(59, 108, 255, 0.4) !important;
-}
-
-/* ========================================
-   SUBSCRIPTION & OTHER PAGES
-   ======================================== */
-
-/* Plan cards */
-.plan-card:focus,
-.subscription-card:focus {
-    transform: translateY(-5px) scale(1.02) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 15px 40px rgba(255, 255, 255, 0.3) !important;
-}
-
-/* Notification items */
-.notification-item:focus {
-    background: rgba(255, 255, 255, 0.15) !important;
-    border-left: 3px solid #ffffff;
-    transform: translateX(5px);
-}
-
-/* Favorite items */
-.favorite-item:focus,
-.favorite-card:focus {
-    transform: translateY(-5px) scale(1.02) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 10px 30px rgba(255, 255, 255, 0.3) !important;
-}
-
-/* ========================================
-   FEEDBACK & HELP DESK PAGES
-   ======================================== */
-
-/* Star rating buttons */
+/* Star rating */
 .star-btn:focus,
 .rating-star:focus {
-    transform: scale(1.2) !important;
-    /* filter removed for TV performance */
-}
-
-/* Textarea focus */
-textarea.focusable:focus {
-    border-color: #3b6cff !important;
-    box-shadow: 0 0 0 3px rgba(59, 108, 255, 0.3) !important;
-}
-
-/* Submit buttons - white border for visibility on blue backgrounds */
-.submit-btn:focus {
-    transform: scale(1.03) !important;
-    border: 2px solid #fff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5),
-                0 8px 25px rgba(59, 108, 255, 0.4) !important;
-}
-
-/* ========================================
-   OTT APPS PAGE
-   ======================================== */
-
-.ott-card:focus,
-.ott-app-card:focus {
-    transform: translateY(-8px) scale(1.05) !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 15px 40px rgba(255, 255, 255, 0.4) !important;
-}
-
-/* ========================================
-   PLAYER PAGE CONTROLS
-   ======================================== */
-
-.player-control:focus,
-.play-btn:focus,
-.pause-btn:focus {
-    transform: scale(1.15) !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5),
-                0 0 20px rgba(255, 255, 255, 0.3) !important;
-}
-
-.volume-control:focus,
-.progress-bar:focus {
-    box-shadow: 0 0 0 2px rgba(59, 108, 255, 0.5) !important;
-}
-
-/* ========================================
-   SCROLLING & SMOOTH FOCUS
-   ======================================== */
-
-/* Ensure focused elements scroll into view smoothly */
-.focusable:focus {
-    scroll-margin: 100px;
-}
-
-/* ========================================
-   FOCUS INDICATOR ANIMATION
-   ======================================== */
-
-@keyframes focusPulse {
-    0%, 100% {
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                    0 10px 30px rgba(255, 255, 255, 0.3);
-    }
-    50% {
-        box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.2),
-                    0 15px 40px rgba(255, 255, 255, 0.4);
-    }
-}
-
-/* Subtle pulse animation for cards on focus */
-/* focusPulse animation removed — infinite animation on every focused card kills TV CPU */
-
-/* Language item focus - white border */
-.language-item:focus {
-    transform: scale(1.05) !important;
-    border: 3px solid #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4),
-                0 10px 30px rgba(255, 255, 255, 0.3) !important;
     outline: none;
-    z-index: 10;
+    border: 2px solid #FFFFFF !important;
 }
 
-/* ========================================
-   TV-SPECIFIC OPTIMIZATIONS
-   ======================================== */
-
-/* Larger touch/focus targets for TV remote */
-button.focusable,
-a.focusable,
-[tabindex].focusable {
-    min-height: 40px;
+/* Settings sidebar */
+.settings-sidebar-item:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-left: 3px solid #FFFFFF !important;
 }
 
-/* Smooth transitions for all focus changes */
-* {
-    -webkit-tap-highlight-color: transparent;
-}
-
-.focusable {
-    -webkit-user-select: none;
-    user-select: none;
-    cursor: pointer;
-}
-
-/* Disable hover effects on TV (touch devices) */
-@media (hover: none) {
-    .focusable:hover {
-        transform: none;
-    }
+/* Player sidebar items */
+.lang-nav-arrow:focus {
+    outline: none;
+    border: 2px solid #FFFFFF !important;
+    background: rgba(255, 255, 255, 0.15);
 }

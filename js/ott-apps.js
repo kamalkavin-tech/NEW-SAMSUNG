@@ -9,14 +9,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -33,7 +31,6 @@ var currentZone = 'apps'; // 'header' or 'apps'
 var ottComingSoonPopupOpen = false;
 
 window.onload = function () {
-    console.log("=== BBNL OTT Apps Page Initialized ===");
 
     // Initialize Dark Mode from localStorage
     initDarkMode();
@@ -43,7 +40,6 @@ window.onload = function () {
 
     // Get all focusable elements and add click handlers
     focusables = document.querySelectorAll('.focusable');
-    console.log("Found focusable elements:", focusables.length);
 
     focusables.forEach(function (el, index) {
         el.addEventListener('mouseenter', function () {
@@ -76,7 +72,6 @@ window.onload = function () {
             var keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Return"];
             tizen.tvinputdevice.registerKeyBatch(keys);
         } catch (e) {
-            console.log("Not running on Tizen or key registration failed");
         }
     }
 };
@@ -88,7 +83,6 @@ function addZoneTrackingListeners() {
     headerElements.forEach(function(el) {
         el.addEventListener('focus', function() {
             currentZone = 'header';
-            console.log('[OTT Navigation] Zone: Header');
         });
     });
 
@@ -96,14 +90,12 @@ function addZoneTrackingListeners() {
     document.addEventListener('focus', function(e) {
         if (e.target.classList.contains('app-card')) {
             currentZone = 'apps';
-            console.log('[OTT Navigation] Zone: Apps');
         }
     }, true);
 }
 
 // Keyboard navigation
 document.addEventListener('keydown', function (e) {
-    console.log("Key pressed - Code:", e.keyCode, "Key:", e.key, "Zone:", currentZone);
 
     // While coming-soon popup is open, lock navigation to popup action only.
     if (ottComingSoonPopupOpen) {
@@ -168,7 +160,6 @@ document.addEventListener('keydown', function (e) {
 
 // Handle DOWN navigation
 function handleDownNavigation() {
-    console.log('[DOWN] Current zone:', currentZone);
 
     if (currentZone === 'header') {
         // DOWN from header: Move to first app card
@@ -181,7 +172,6 @@ function handleDownNavigation() {
 
 // Handle UP navigation
 function handleUpNavigation() {
-    console.log('[UP] Current zone:', currentZone);
 
     if (currentZone === 'header') {
         // UP in header: Move between back button and search
@@ -203,7 +193,6 @@ function handleUpNavigation() {
 
 // Handle LEFT navigation
 function handleLeftNavigation() {
-    console.log('[LEFT] Current zone:', currentZone);
 
     if (currentZone === 'header') {
         // LEFT in header: Move between search and back button
@@ -221,7 +210,6 @@ function handleLeftNavigation() {
 
 // Handle RIGHT navigation
 function handleRightNavigation() {
-    console.log('[RIGHT] Current zone:', currentZone);
 
     if (currentZone === 'header') {
         // RIGHT in header: Move between back button and search
@@ -307,7 +295,7 @@ function moveWithinAppsGrid(deltaX, deltaY) {
 function scrollIntoViewSmooth(element) {
     if (element) {
         element.scrollIntoView({
-            behavior: 'smooth',
+            behavior: 'auto',
             block: 'center',
             inline: 'nearest'
         });
@@ -326,19 +314,16 @@ function handleEnter() {
 function handleClick(element) {
     if (!element) return;
 
-    console.log("Click handler called for:", element.className);
 
     // Check for data-route attribute first (highest priority for navigation)
     var route = element.getAttribute('data-route');
     if (route) {
-        console.log("Navigating to route:", route);
         window.location.href = route;
         return;
     }
 
     // Back button or Go Back button clicked
     if (element.classList.contains('back-btn') || element.id === 'retryAppsBtn') {
-        console.log("Back/Go Back button clicked - navigating to home");
         window.location.href = 'home.html';
         return;
     }
@@ -347,25 +332,21 @@ function handleClick(element) {
     if (element.classList.contains('app-card')) {
         var appName = element.getAttribute('data-app-name');
         var pkgId = element.getAttribute('data-pkg-id');
-        console.log("[OTT Apps] Opening app:", appName, "Package:", pkgId);
 
         // Try to launch app on Tizen
         try {
             if (pkgId && typeof tizen !== 'undefined') {
                 tizen.application.launch(pkgId);
             } else {
-                console.log("Opening " + appName);
             }
         } catch (e) {
             console.error("Failed to launch app:", e);
-            console.log("Opening " + appName);
         }
         return;
     }
 
     // Search input focused
     if (element.classList.contains('search-input')) {
-        console.log("Search input focused");
         return;
     }
 }
@@ -374,20 +355,16 @@ function handleClick(element) {
  * Load OTT Apps from API
  */
 function loadOTTApps() {
-    console.log("[OTT Apps] Loading apps from API...");
 
     BBNL_API.getAllowedApps()
         .then(function (response) {
-            console.log("[OTT Apps] API Response:", response);
 
             // Check if response is successful
             if (response && response.status && Number(response.status.err_code) === 0) {
                 // Extract apps array from response
                 if (response.apps && response.apps.length > 0) {
-                    console.log("[OTT Apps] Found " + response.apps.length + " apps");
                     renderApps(response.apps);
                 } else {
-                    console.warn("[OTT Apps] No apps found in response");
                     showError("No OTT apps available at the moment.", 'no_apps');
                 }
             } else {
@@ -473,7 +450,6 @@ function renderApps(apps) {
     // Re-initialize focusables after rendering
     initializeFocusables();
 
-    console.log("[OTT Apps] Rendered " + apps.length + " apps successfully");
 }
 
 /**
@@ -562,7 +538,6 @@ function hideError() {
 function initializeFocusables() {
     // Select all focusables
     focusables = document.querySelectorAll(".focusable");
-    console.log("[OTT Apps] Found focusable elements:", focusables.length);
 
     // Set initial focus on first app card if available
     var firstAppCard = document.querySelector('.app-card.focusable');
@@ -653,7 +628,6 @@ function showComingSoonPopup() {
         appsGrid.innerHTML = "";
     }
 
-    console.log("[OTT Apps] Showing Coming Soon popup");
 }
 
 // ==========================================
@@ -664,7 +638,6 @@ function showComingSoonPopup() {
  * Initialize dark mode from localStorage
  */
 function initDarkMode() {
-    console.log("[OTT Apps] Initializing dark mode...");
     var isDarkMode = localStorage.getItem('darkMode') !== 'false'; // Default to dark mode
 
     if (isDarkMode) {
@@ -673,5 +646,4 @@ function initDarkMode() {
         document.body.classList.add('light-mode');
     }
 
-    console.log("[OTT Apps] Dark mode:", isDarkMode ? "ON" : "OFF");
 }

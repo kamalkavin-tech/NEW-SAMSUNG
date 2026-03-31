@@ -6,7 +6,6 @@
     border-radius: 25px;
     padding: 10px 20px;
     width: 400px;
-    transition: background 0.3s;
 }
 
 .search-input {
@@ -41,7 +40,6 @@ input[type="number"]::-webkit-inner-spin-button {
     border-radius: 13px;
     position: relative;
     cursor: pointer;
-    transition: background 0.3s;
     border: 2px solid transparent;
 }
 
@@ -94,7 +92,6 @@ input[type="number"]::-webkit-inner-spin-button {
     padding: 0 25px;
     height: 70px;
     margin-bottom: 40px;
-    transition: all 0.3s;
     width: 100%;
 }
 
@@ -136,5 +133,4 @@ input[type="number"]::-webkit-inner-spin-button {
     outline: none;
     border-bottom-color: #888;
     box-shadow: 0 10px 20px rgba(255, 255, 255, 0.1);
-    transform: scale(1.1);
 }

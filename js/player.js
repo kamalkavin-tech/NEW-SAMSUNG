@@ -7,14 +7,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var ud = localStorage.getItem("bbnl_user");
         if (!ud || !JSON.parse(ud).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -69,14 +67,11 @@ function fixLocalhostUrl(url) {
     // Check if URL contains localhost or 127.0.0.1
     if (url.includes('127.0.0.1') || url.includes('localhost')) {
         wasLocalhost = true;
-        console.log("⚠️ LOCALHOST URL DETECTED - Replacing with server IP");
 
         // Replace localhost with server IP
         url = url.replace(/127\.0\.0\.1/g, PLAYER_CONFIG.SERVER_IP);
         url = url.replace(/localhost/g, PLAYER_CONFIG.SERVER_IP);
 
-        console.log("Original URL:", originalUrl);
-        console.log("Fixed URL:", url);
     }
 
     // Transform old stream servers to new Samsung HTTP/1.1 compatible server
@@ -84,14 +79,11 @@ function fixLocalhostUrl(url) {
     // NOTE: Only rewrite non-fmp4 streams. fmp4.m3u8 streams do NOT exist on livestream3.
     if ((url.includes('livestream.bbnl.in') || url.includes('livestream2.bbnl.in')) && !url.includes('fmp4')) {
         wasOldServer = true;
-        console.log("⚠️ OLD STREAM SERVER DETECTED - Switching to Samsung HTTP/1.1 server");
 
         // Replace old servers with new Samsung-compatible HTTP/1.1 server
         url = url.replace(/livestream2\.bbnl\.in/g, 'livestream3.bbnl.in');
         url = url.replace(/livestream\.bbnl\.in/g, 'livestream3.bbnl.in');
 
-        console.log("Original Server URL:", originalUrl);
-        console.log("New Samsung HTTP/1.1 URL:", url);
     }
 
     return url;
@@ -107,7 +99,7 @@ var PLAYER_ERROR_UI_HIDE_DELAY = 10000; // 10 seconds
 var PLAYER_STREAM_START_TIMEOUT_MS = 10000; // 10s — IPTV streams on Samsung TV can take 5-8s to buffer
 var playerNetworkWatchInterval = null;
 var playerNetworkDisconnectSince = 0;
-var PLAYER_NETWORK_WATCH_INTERVAL_MS = 1000;
+var PLAYER_NETWORK_WATCH_INTERVAL_MS = 5000;
 var PLAYER_NETWORK_POPUP_DELAY_MS = 2500;
 var playerLastErrorCategory = '';
 var playerAutoResumeInProgress = false;
@@ -204,13 +196,14 @@ function resetPlayerErrorUiTimer() {
             }, 300);
         }
 
-        var overlay = document.querySelector('.player-overlay');
-        if (overlay) {
-            overlay.classList.remove('visible');
-            overlay.classList.add('hidden');
+        if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+        if (_overlayEl) {
+            _overlayEl.classList.remove('visible');
+            _overlayEl.classList.add('hidden');
         }
 
-        var infoBar = document.querySelector('.info-bar-premium');
+        if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
         if (infoBar) {
             infoBar.classList.add('info-bar-hidden');
             infoBar.classList.remove('sidebar-active');
@@ -226,7 +219,6 @@ function resetPlayerErrorUiTimer() {
             uiTimer = null;
         }
 
-        console.log('[Player] Error popup inactivity timeout (10s) - hiding sidebar and info bar');
     }, PLAYER_ERROR_UI_HIDE_DELAY);
 }
 
@@ -317,6 +309,10 @@ function showPlayerErrorPopup(title, message) {
             }
         }
 
+        // Hide loading overlay — don't show behind popup
+        hideBufferingIndicator();
+        hasHiddenLoadingIndicator = true;
+
         // Keep info bar visible while error popup is shown.
         showInfoBarForced();
 
@@ -347,18 +343,18 @@ function hidePlayerErrorPopup() {
             overlayTimeout = null;
         }
         
-        // Keep info bar visible without auto-hide timer until user changes channel
-        var infoBar = document.querySelector('.info-bar-premium');
-        if (infoBar) {
-            infoBar.classList.remove('info-bar-hidden');
+        // Keep info bar visible until user changes channel
+        _keepInfoBarVisible = true;
+        if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+        if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+        if (_infoBarEl) {
+            _infoBarEl.classList.remove('info-bar-hidden');
             syncInfoBarSidebarState();
         }
-        var overlay = document.querySelector('.player-overlay');
-        if (overlay) {
-            overlay.classList.remove('hidden');
-            overlay.classList.add('visible');
+        if (_overlayEl) {
+            _overlayEl.classList.remove('hidden');
+            _overlayEl.classList.add('visible');
         }
-        console.log('[InfoBar] Kept visible after error popup closed (no auto-hide, timeout cleared)');
     }
 }
 
@@ -456,16 +452,17 @@ function hideRenewalQRCode() {
 }
 
 window.onload = function () {
-    console.log("=== Player Initialized ===");
 
     // Initialize AVPlayer
     if (typeof AVPlayer !== 'undefined') {
         AVPlayer.init({
             callbacks: {
                 onBufferingStart: () => {
-                    console.log("Buffering...");
+                    // Remove page-level loading screen (from player.html)
+                    var pl = document.getElementById('page-loading');
+                    if (pl) pl.remove();
                     showBufferingIndicator();
-                    hasHiddenLoadingIndicator = false; // Reset flag on new buffering
+                    hasHiddenLoadingIndicator = false;
                 },
                 onBufferingComplete: () => {
                     hideBufferingIndicator();
@@ -514,7 +511,6 @@ window.onload = function () {
                     }
                 },
                 onStreamCompleted: () => {
-                    console.log("Playback Finished");
                 },
                 onCurrentPlayTime: (time) => {
                     // Update timeline with current playback position (in milliseconds)
@@ -522,7 +518,6 @@ window.onload = function () {
 
                     // CRITICAL: Hide loading indicator once playback starts
                     if (!hasHiddenLoadingIndicator && time > 0) {
-                        console.log("✓ Playback started (time > 0), hiding loading indicator");
                         hideBufferingIndicator();
                         hasHiddenLoadingIndicator = true;
                         // Clear stream timeout - playback started successfully
@@ -582,7 +577,6 @@ window.onload = function () {
             console.error("Failed to parse channel data", e);
         }
     } else if (channelNameParam) {
-        console.log("Looking up channel by name:", channelNameParam);
         // Will be handled in loadChannelList callback/promise
     } else {
         console.error("No channel data found");
@@ -696,21 +690,51 @@ var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
 
 async function loadChannelList(lookupName = null) {
     try {
-        // No IP wait — auth uses device MAC/serial, not public IP.
+        // Load ALL channels for sidebar language switching
+        var allResponse = await BBNL_API.getChannelList();
 
-        // We reuse the API used in channels page
-        let response = await BBNL_API.getChannelList();
-
-        if (Array.isArray(response)) {
-            // Store ALL channels for navigation and sidebar display
-            allChannels = response.slice().sort(function (a, b) {
+        if (Array.isArray(allResponse)) {
+            var sortedAll = allResponse.slice().sort(function (a, b) {
                 var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                 var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+                // FoFi (LCN 999) always first
+                if (aNo === 999) return -1;
+                if (bNo === 999) return 1;
                 return aNo - bNo;
             });
-            _allChannelsUnfiltered = allChannels; // Same list for sidebar
+            _allChannelsUnfiltered = sortedAll;
 
-            console.log("Player: Loaded " + allChannels.length + " channels for navigation and sidebar.");
+            // Apply language filter for CH+/CH- navigation — only cycle through
+            // the same channels that were visible on the channels page
+            var langId = sessionStorage.getItem('selectedLanguageId') || '';
+            var langName = sessionStorage.getItem('selectedLanguageName') || '';
+
+            if (langId === 'subs' || (langName && langName.toLowerCase().indexOf('subscribed') !== -1)) {
+                // Subscribed filter
+                allChannels = sortedAll.filter(function (ch) {
+                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                });
+            } else if (langId && langId !== '' && langId !== 'all') {
+                // Language filter
+                var filterLangId = String(langId).trim();
+                var filterLangName = String(langName || '').trim().toLowerCase();
+                allChannels = sortedAll.filter(function (ch) {
+                    var chLangId = String(ch.langid || ch.lang_id || '').trim();
+                    if (chLangId && chLangId === filterLangId) return true;
+                    if (filterLangName) {
+                        var chLang = String(ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').trim().toLowerCase();
+                        if (chLang === filterLangName || chLang === filterLangId.toLowerCase()) return true;
+                    }
+                    return false;
+                });
+            } else {
+                // No filter selected (coming from home page) — default to subscribed channels
+                allChannels = sortedAll.filter(function (ch) {
+                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                });
+            }
+            if (allChannels.length === 0) allChannels = sortedAll;
+
 
             // IF lookupName is provided, find it and play
             if (lookupName) {
@@ -720,7 +744,6 @@ async function loadChannelList(lookupName = null) {
                 });
 
                 if (found) {
-                    console.log("Found channel from name param:", found);
                     setupPlayer(found);
                     return; // setupPlayer handles index finding too
                 }
@@ -779,10 +802,8 @@ async function loadChannelList(lookupName = null) {
                                 updateExpiryDisplay(allChannels[currentIndex]);
                             }
 
-                            console.log("[Player] Channels refreshed with expiry data");
                         }
                     } catch (e) {
-                        console.warn("[Player] Expiry refresh failed:", e.message);
                     }
                 }, 3000);
             }
@@ -821,24 +842,25 @@ function ensureSidebarLogoPlaceholder(logoDiv, channel) {
     logoDiv.appendChild(placeholder);
 }
 
+var _logoBoxEl = null;
 function setInfoBarLogoPlaceholder(channel) {
-    var box = document.querySelector('.info-bar-premium .channel-logo-box');
-    if (!box) return;
+    if (!_logoBoxEl) _logoBoxEl = document.querySelector('.info-bar-premium .channel-logo-box');
+    if (!_logoBoxEl) return;
 
-    var existing = box.querySelector('.channel-logo-fallback');
+    var existing = _logoBoxEl.querySelector('.channel-logo-fallback');
     if (!existing) {
         existing = document.createElement('div');
         existing.className = 'channel-logo-fallback';
-        box.appendChild(existing);
+        _logoBoxEl.appendChild(existing);
     }
     existing.textContent = getChannelInitials(channel);
     existing.style.display = 'flex';
 }
 
 function clearInfoBarLogoPlaceholder() {
-    var box = document.querySelector('.info-bar-premium .channel-logo-box');
-    if (!box) return;
-    var existing = box.querySelector('.channel-logo-fallback');
+    if (!_logoBoxEl) _logoBoxEl = document.querySelector('.info-bar-premium .channel-logo-box');
+    if (!_logoBoxEl) return;
+    var existing = _logoBoxEl.querySelector('.channel-logo-fallback');
     if (existing) existing.style.display = 'none';
 }
 
@@ -846,11 +868,9 @@ function normalizeLogoCacheUrl(url) {
     var raw = String(url || '').trim();
     if (!raw) return '';
 
-    console.log('[normalizeLogoCacheUrl] Input URL:', raw);
 
     if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
         raw = BBNL_API.resolveAssetUrl(raw);
-        console.log('[normalizeLogoCacheUrl] After resolveAssetUrl:', raw);
     }
 
     var apiBase = (typeof BBNL_API !== 'undefined' && BBNL_API.BASE_URL)
@@ -885,14 +905,12 @@ function normalizeLogoCacheUrl(url) {
     var noHash = raw.split('#')[0];
     var parts = noHash.split('?');
     if (parts.length < 2) {
-        console.log('[normalizeLogoCacheUrl] Final URL:', noHash);
         return noHash;
     }
 
     var base = parts[0];
     var query = parts[1] || '';
     if (!query) {
-        console.log('[normalizeLogoCacheUrl] Final URL:', base);
         return base;
     }
 
@@ -902,7 +920,6 @@ function normalizeLogoCacheUrl(url) {
     });
 
     var result = kept.length > 0 ? (base + '?' + kept.join('&')) : base;
-    console.log('[normalizeLogoCacheUrl] Final URL:', result);
     return result;
 }
 
@@ -924,35 +941,19 @@ function updatePlayerChannelLogo(channel) {
         return;
     }
 
-    // Same logo already loaded — skip
-    if (uiLogo.dataset.logoUrl === logoUrl && uiLogo.getAttribute('src')) {
-        uiLogo.style.display = '';
-        clearInfoBarLogoPlaceholder();
-        return;
-    }
-
-    // Check blob cache — use SAME validated URL as sidebar does
-    var validatedUrl = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
-        ? BBNL_API.getValidatedImageUrl(logoUrl) : logoUrl;
-
-    if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedUrl]) {
-        uiLogo.src = _BLOB_CACHE[validatedUrl];
-        uiLogo.dataset.logoUrl = logoUrl;
-        uiLogo.style.display = '';
-        clearInfoBarLogoPlaceholder();
-        return;
-    }
-
-    // Hide old logo while new one loads — show channel initials placeholder
-    uiLogo.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    // Hide current logo, show placeholder while loading
     uiLogo.style.display = 'none';
     uiLogo.dataset.logoUrl = logoUrl;
     setInfoBarLogoPlaceholder(channel);
 
     uiLogo.onload = function () {
         if (requestToken !== _playerLogoRequestToken) return;
+        // Show logo, hide placeholder — remove placeholder entirely to prevent side-by-side display
         uiLogo.style.display = '';
-        clearInfoBarLogoPlaceholder();
+        if (_logoBoxEl) {
+            var fb = _logoBoxEl.querySelector('.channel-logo-fallback');
+            if (fb) fb.remove();
+        }
     };
     uiLogo.onerror = function () {
         if (requestToken !== _playerLogoRequestToken) return;
@@ -960,7 +961,7 @@ function updatePlayerChannelLogo(channel) {
         uiLogo.style.display = 'none';
         setInfoBarLogoPlaceholder(channel);
     };
-    // Use SAME call as sidebar — setImageSource will cache in _BLOB_CACHE[validatedUrl]
+    // Load logo via setImageSource
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
         BBNL_API.setImageSource(uiLogo, logoUrl);
     } else {
@@ -1005,7 +1006,6 @@ function updateExpiryDisplay(channel) {
             uiExpiry.innerText = "Expired";
             uiExpiry.classList.add('expiry-expired');
         }
-        console.log("[Player] Expiry updated: " + channel.expirydate + " (" + diffDays + " days)");
     } else {
         uiExpiry.innerText = "N/A";
         uiExpiry.classList.add('expiry-free');
@@ -1013,14 +1013,16 @@ function updateExpiryDisplay(channel) {
 }
 
 function setupPlayer(channel) {
-    // Increment stream generation — stale callbacks from previous channel will be ignored
     _playerStreamGen++;
     var myGen = _playerStreamGen;
 
-    // Show loading overlay FIRST — covers the black screen from AVPlayer.stop()
-    showBufferingIndicator();
+    // Remove page-level loading screen
+    var pl = document.getElementById('page-loading');
+    if (pl) pl.remove();
 
-    // Now stop previous stream (user sees "Loading Stream..." not black screen)
+    _keepInfoBarVisible = false;
+
+    // Stop previous stream
     try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
 
     if (window._streamTimeoutTimer) {
@@ -1028,24 +1030,20 @@ function setupPlayer(channel) {
         window._streamTimeoutTimer = null;
     }
 
+    hasHiddenLoadingIndicator = false;
     _lastAttemptedChannel = channel;
 
-    const chName = channel.channel_name || channel.chtitle || "Unknown Channel";
+    var chName = channel.channel_name || channel.chtitle || "Unknown Channel";
+    var channelNum = channel.channelno || channel.urno || channel.chno || channel.ch_no || channel.id || "000";
 
-    // Minimal UI update — just channel name and number (fast)
-    var uiName = document.getElementById("ui-channel-name");
-    if (uiName) uiName.innerText = chName;
-
-    // Channel Number
-    const channelNum = channel.channelno || channel.urno || channel.chno || channel.ch_no || channel.id || "000";
-    const uiNum = document.getElementById("ui-channel-number");
-    if (uiNum) uiNum.innerText = channelNum;
-
-    // Update channel logo IMMEDIATELY (not deferred — must change on each channel switch)
-    updatePlayerChannelLogo(channel);
+    // Cached UI elements — no getElementById on every channel switch
+    if (!_uiChName) _uiChName = document.getElementById("ui-channel-name");
+    if (!_uiChNum) _uiChNum = document.getElementById("ui-channel-number");
+    if (_uiChName) _uiChName.innerText = chName;
+    if (_uiChNum) _uiChNum.innerText = channelNum;
 
     // ==========================================
-    // VALIDATION & STREAM START — do this FIRST, before slow UI updates
+    // VALIDATION & STREAM START
     // ==========================================
 
     const streamUrl = channel.streamlink || channel.channel_url;
@@ -1053,7 +1051,6 @@ function setupPlayer(channel) {
 
     // Check stream URL exists
     if (!streamUrl) {
-        console.warn("No Stream URL found for channel:", chName);
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
         showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
         return;
@@ -1074,7 +1071,6 @@ function setupPlayer(channel) {
     // PRE-PLAY subscription check — block only when explicitly "no"
     if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
         channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
-        console.warn("[Player] Channel not subscribed, blocking playback:", chName, "subscribed:", channel.subscribed);
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
         showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
         return;
@@ -1134,7 +1130,8 @@ function setupPlayer(channel) {
     var capturedChannel = channel;
     var capturedChName = chName;
     requestAnimationFrame(function () {
-        // Show overlay + program info (deferred from above)
+        // All UI updates deferred — logo, overlay, expiry, program info
+        updatePlayerChannelLogo(capturedChannel);
         updateExpiryDisplay(capturedChannel);
         showOverlay();
         var uiTitle = document.getElementById("ui-program-title");
@@ -1199,7 +1196,7 @@ function setupPlayer(channel) {
 
         updateDateTime();
         if (!playerDateTimeInterval) {
-            playerDateTimeInterval = setInterval(updateDateTime, 1000);
+            playerDateTimeInterval = setInterval(updateDateTime, 5000);
         }
 
         // Update channel index
@@ -1238,7 +1235,6 @@ var _streamAdLastChid = ""; // Track last loaded channel ID for ads caching
 function loadStreamAds(chid) {
     // Skip if already loaded for this channel
     if (chid && chid === _streamAdLastChid && streamAdAds.length > 0) {
-        console.log("[StreamAd] Reusing cached ads for chid:", chid);
         streamAdCurrentIndex = 0;
         showStreamAd();
         return;
@@ -1247,18 +1243,15 @@ function loadStreamAds(chid) {
     // Clear any existing timers
     clearStreamAdTimers();
 
-    console.log("[StreamAd] Loading ads for chid:", chid);
     _streamAdLastChid = chid || "";
 
     AdsAPI.getStreamAds(chid)
         .then(function (ads) {
             if (ads && ads.length > 0) {
-                console.log("[StreamAd] Got", ads.length, "stream ad(s)");
                 streamAdAds = ads;
                 streamAdCurrentIndex = 0;
                 showStreamAd();
             } else {
-                console.log("[StreamAd] No stream ads available");
                 streamAdAds = [];
                 hideStreamAd();
             }
@@ -1280,7 +1273,6 @@ function showStreamAd() {
     var adUrl = ad.adpath || ad.adimage || ad.image || '';
 
     if (!adUrl) {
-        console.log("[StreamAd] No ad URL, hiding panel");
         hideStreamAd();
         return;
     }
@@ -1291,13 +1283,11 @@ function showStreamAd() {
         img.src = adUrl;
     }
     img.onerror = function () {
-        console.warn("[StreamAd] Image failed to load:", adUrl);
         hideStreamAd();
     };
 
     panel.style.display = 'flex';
     panel.style.animation = 'streamAdSlideIn 0.5s ease-out';
-    console.log("[StreamAd] Showing ad:", adUrl);
 
     // Auto-rotate if multiple ads (every 8 seconds)
     if (streamAdAds.length > 1) {
@@ -1311,7 +1301,6 @@ function showStreamAd() {
                 } else {
                     img.src = nextUrl;
                 }
-                console.log("[StreamAd] Rotated to ad:", nextUrl);
             }
         }, 8000);
     }
@@ -1369,21 +1358,20 @@ function changeChannel(step) {
 
     var nextCh = allChannels[nextIndex];
     var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
-    console.log("Zapping to channel LCN:", nextLCN, "index:", nextIndex, "name:", nextCh.chtitle || nextCh.channel_name);
     setupPlayer(nextCh);
 
-    // Keep menu state in sync with remote zapping (UP/DOWN/CH+/CH-) automatically.
+    // Keep menu state in sync with remote zapping
     syncSidebarWithCurrentPlayback(true);
     requestAnimationFrame(function () {
         syncSidebarWithCurrentPlayback(false);
     });
-
-    // Show info bar for 5 seconds when channel is changed
-    showOverlay();
+    // Info bar already shown by setupPlayer — no duplicate call needed
 }
 
 function syncSidebarWithCurrentPlayback(ensureCache) {
     if (!sidebarState) return;
+    // Skip all work if sidebar is closed — no need to sync invisible UI
+    if (!sidebarState.isOpen && !ensureCache) return;
 
     if (ensureCache && (!Array.isArray(sidebarState.allChannelsCache) || sidebarState.allChannelsCache.length === 0)) {
         var fallback = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0) ? _allChannelsUnfiltered : allChannels;
@@ -1394,9 +1382,8 @@ function syncSidebarWithCurrentPlayback(ensureCache) {
 
     if (!Array.isArray(sidebarState.languages) || sidebarState.languages.length === 0) return;
 
-    alignSidebarToCurrentPlayback();
-
     if (sidebarState.isOpen) {
+        alignSidebarToCurrentPlayback();
         if (sidebarState.channels.length > 0) {
             sidebarState.currentLevel = 'channels';
             sidebarState.channelIndex = Math.max(0, Math.min(findCurrentChannelInSidebar(), sidebarState.channels.length - 1));
@@ -1489,41 +1476,50 @@ function applyPreferredSidebarLanguage() {
         preferredLangName = String(sessionStorage.getItem('selectedLanguageName') || '').trim().toLowerCase();
     } catch (e) {}
 
-    // Ignore empty/all/subscribed pseudo-filters for sidebar initialization.
-    if (preferredLangId === '' || preferredLangId === 'all' || preferredLangId === 'subs' || preferredLangId === 'subscribed') {
-        preferredLangId = '';
+    if (!preferredLangId && !preferredLangName) {
+        // No language selected (home page launch) — default to Subscribed Channels
+        sidebarState.languageIndex = 1; // index 1 = "Subscribed Channels"
+        updateLanguageDisplay();
+        return;
     }
 
     var matchedIndex = -1;
 
-    if (preferredLangId) {
-        matchedIndex = sidebarState.languages.findIndex(function (lang) {
-            var langId = String((lang && (lang.langid || lang.code)) || '').trim();
-            return langId && langId === preferredLangId;
-        });
+    // Try ALL matching strategies in one pass
+    var pLidLower = preferredLangId.toLowerCase();
+    for (var i = 0; i < sidebarState.languages.length; i++) {
+        var lang = sidebarState.languages[i];
+        // Convert all possible ID/code/name fields to lowercase strings for comparison
+        var lid = (lang.langid !== undefined && lang.langid !== null) ? String(lang.langid).trim().toLowerCase() : '';
+        var lcode = (lang.code !== undefined && lang.code !== null) ? String(lang.code).trim().toLowerCase() : '';
+        var lname = String(lang.name || '').trim().toLowerCase();
+
+        // Match by ID
+        if (pLidLower && (lid === pLidLower || lcode === pLidLower)) { matchedIndex = i; break; }
+        // Match by name
+        if (preferredLangName && lname === preferredLangName) { matchedIndex = i; break; }
     }
 
-    if (matchedIndex < 0 && preferredLangName) {
-        matchedIndex = sidebarState.languages.findIndex(function (lang) {
-            var langName = String((lang && lang.name) || '').trim().toLowerCase();
-            return langName && langName === preferredLangName;
-        });
-    }
-
-    // Fallback: align menu language with currently playing channel language.
-    if (matchedIndex < 0 && (_lastPlayingChannel || _lastAttemptedChannel)) {
-        var currentChannel = _lastPlayingChannel || _lastAttemptedChannel;
-        var playingLangId = String((currentChannel.langid || currentChannel.lang_id || '')).trim();
-        if (playingLangId) {
-            matchedIndex = sidebarState.languages.findIndex(function (lang) {
-                var langId = String((lang && (lang.langid || lang.code)) || '').trim();
-                return langId && langId === playingLangId;
-            });
+    // Fallback: match by the playing channel's own language field
+    if (matchedIndex < 0) {
+        var ch = _lastPlayingChannel || _lastAttemptedChannel;
+        if (ch) {
+            var chLangId = (ch.langid !== undefined && ch.langid !== null) ? String(ch.langid).trim().toLowerCase() : '';
+            var chLang = String(ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').trim().toLowerCase();
+            for (var k = 0; k < sidebarState.languages.length; k++) {
+                var sl = sidebarState.languages[k];
+                var slid = (sl.langid !== undefined && sl.langid !== null) ? String(sl.langid).trim().toLowerCase() : '';
+                var slcode = (sl.code !== undefined && sl.code !== null) ? String(sl.code).trim().toLowerCase() : '';
+                var slname = String(sl.name || '').trim().toLowerCase();
+                if (chLangId && (slid === chLangId || slcode === chLangId)) { matchedIndex = k; break; }
+                if (chLang && slname === chLang) { matchedIndex = k; break; }
+            }
         }
     }
 
     if (matchedIndex >= 0) {
         sidebarState.languageIndex = matchedIndex;
+        updateLanguageDisplay();
     }
 }
 
@@ -1544,7 +1540,6 @@ async function initializeSidebar() {
     // Load available channels
     loadSidebarChannels();
 
-    console.log("[Sidebar] Initialized with", sidebarState.languages.length, "languages");
 }
 
 /**
@@ -1567,7 +1562,6 @@ async function loadLanguagesFromChannels() {
     try {
         var apiLanguages = await BBNL_API.getLanguageList();
         if (apiLanguages && apiLanguages.length > 0) {
-            console.log("[Sidebar] Got", apiLanguages.length, "languages from API");
             
             // Add languages from API (skip duplicates of built-in entries)
             apiLanguages.forEach(function(lang) {
@@ -1590,38 +1584,40 @@ async function loadLanguagesFromChannels() {
                 }
             });
             
-            console.log("[Sidebar] Loaded", sidebarState.languages.length, "languages (including All/Subscribed)");
             return;
         }
     } catch (e) {
-        console.warn("[Sidebar] Failed to get languages from API:", e);
     }
 
-    // Fallback: Extract unique languages from ALL channel data (including unsubscribed)
-    var languageSet = new Set();
+    // Fallback: Extract unique languages from ALL channel data
+    var languageMap = {}; // langid → name
     channelsForLangs.forEach(function(ch) {
-        // Try multiple possible language fields
         var lang = ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '';
+        var lid = ch.langid || ch.lang_id || '';
         if (lang && lang.trim() !== '') {
-            languageSet.add(lang.trim());
+            var key = lid ? String(lid).trim() : lang.trim().toLowerCase();
+            if (!languageMap[key]) {
+                languageMap[key] = { name: lang.trim(), langid: lid ? String(lid).trim() : '' };
+            }
         }
     });
 
-    // Add dynamic languages from channel data (skip duplicates of built-in entries)
-    languageSet.forEach(function(lang) {
-        var lower = lang.toLowerCase();
+    var langKeys = Object.keys(languageMap);
+    for (var li = 0; li < langKeys.length; li++) {
+        var lEntry = languageMap[langKeys[li]];
+        var lower = lEntry.name.toLowerCase();
         if (lower === 'all channels' || lower === 'all' ||
             lower === 'subscribed' || lower === 'subscribed channels' ||
-            lower.includes('subscribed')) {
-            return;
+            lower.indexOf('subscribed') !== -1) {
+            continue;
         }
         sidebarState.languages.push({
-            name: lang,
-            code: lang.toLowerCase()
+            name: lEntry.name,
+            code: lEntry.langid || lEntry.name.toLowerCase(),
+            langid: lEntry.langid
         });
-    });
+    }
     
-    console.log("[Sidebar] Loaded", sidebarState.languages.length, "languages from channels (fallback)");
 }
 
 /**
@@ -1664,13 +1660,44 @@ function changeLanguage(direction) {
     sidebarState.categoryIndex = 0;
     sidebarState.channelIndex = 0;
 
-    // Update display
+    // Sync sessionStorage so CH+/CH- and sidebar stay in sync
+    var selectedLang = sidebarState.languages[newIndex];
+    if (selectedLang) {
+        if (selectedLang.code === 'all') {
+            sessionStorage.removeItem('selectedLanguageId');
+            sessionStorage.removeItem('selectedLanguageName');
+        } else if (selectedLang.code === 'subscribed') {
+            sessionStorage.setItem('selectedLanguageId', 'subs');
+            sessionStorage.setItem('selectedLanguageName', 'Subscribed Channels');
+        } else {
+            sessionStorage.setItem('selectedLanguageId', String(selectedLang.langid || selectedLang.code || ''));
+            sessionStorage.setItem('selectedLanguageName', selectedLang.name || '');
+        }
+    }
+
     updateLanguageDisplay();
 
     // Rebuild categories and channels for new language
     buildCategoriesForLanguage();
 
-    console.log("[Sidebar] Language changed to:", sidebarState.languages[newIndex].name);
+    // Sync CH+/CH- navigation to match sidebar language
+    var filteredForNav = getFilteredChannelsByLanguage();
+    if (filteredForNav && filteredForNav.length > 0) {
+        allChannels = filteredForNav.slice().sort(function (a, b) {
+            var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
+            var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
+            return aNo - bNo;
+        });
+        // Re-find current channel index in new filtered list
+        if (_lastAttemptedChannel) {
+            var chId = _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || '';
+            var foundIdx = allChannels.findIndex(function (ch) {
+                return (ch.channelno || ch.urno || ch.chid || '') === chId;
+            });
+            if (foundIdx >= 0) currentIndex = foundIdx;
+            else currentIndex = 0;
+        }
+    }
 }
 
 /**
@@ -1733,7 +1760,6 @@ function buildCategoriesForLanguage() {
         sidebarState.channels = filteredChannels;
         renderChannelsList();
         
-        console.log("[Sidebar] Single/no category - showing channels directly");
     } else {
         // Multiple categories - show category list
         if (categoriesSection) categoriesSection.style.display = 'block';
@@ -1747,7 +1773,6 @@ function buildCategoriesForLanguage() {
         renderChannelsList();
     }
     
-    console.log("[Sidebar] Built", sidebarState.categories.length, "categories for", currentLang.name);
 }
 
 /**
@@ -1814,23 +1839,8 @@ function alignSidebarToCurrentPlayback() {
     var currentId = String(getCurrentPlayingChannelId() || '');
     if (!currentId) return;
 
-    var currentChannel = _lastPlayingChannel || _lastAttemptedChannel;
-    var isCurrentSubscribed = !!(currentChannel && (
-        currentChannel.subscribed === true || currentChannel.subscribed === 'yes' ||
-        currentChannel.subscribed === 1 || currentChannel.subscribed === '1' ||
-        currentChannel.is_subscribed === true || currentChannel.is_subscribed === 1 || currentChannel.is_subscribed === '1'
-    ));
-
-    // Priority rule: when the playing channel is subscribed, anchor menu on Subscribed language.
-    if (isCurrentSubscribed) {
-        var subscribedLangIndex = sidebarState.languages.findIndex(function (lang) {
-            return String((lang && lang.code) || '').toLowerCase() === 'subscribed';
-        });
-        if (subscribedLangIndex >= 0 && languageContainsCurrentPlayingChannel(subscribedLangIndex)) {
-            sidebarState.languageIndex = subscribedLangIndex;
-        }
-    }
-
+    // Respect user's language selection — don't override with "Subscribed"
+    // The user's choice is already set in sidebarState.languageIndex by applyPreferredSidebarLanguage
     if (!languageContainsCurrentPlayingChannel(sidebarState.languageIndex)) {
         var langMatch = -1;
         for (var i = 0; i < sidebarState.languages.length; i++) {
@@ -1932,7 +1942,6 @@ function renderCategoriesList() {
         container.appendChild(btn);
     });
 
-    console.log("[Sidebar] Rendered", sidebarState.categories.length, "categories");
 }
 
 /**
@@ -1974,7 +1983,6 @@ function selectCategory(index, preferCurrentChannel) {
     // Render updated channels list
     renderChannelsList();
 
-    console.log("[Sidebar] Selected category:", sidebarState.categories[index].name);
 }
 
 /**
@@ -2004,7 +2012,6 @@ function filterChannelsByCategory() {
         return chCat === selectedCat.name;
     });
 
-    console.log("[Sidebar] Filtered to", sidebarState.channels.length, "channels for", selectedCat.name);
 }
 
 /**
@@ -2027,7 +2034,6 @@ function loadSidebarChannels() {
     // Build categories for current language
     buildCategoriesForLanguage();
 
-    console.log("[Sidebar] Loaded", channelsForSidebar.length, "channels (all for display)");
 }
 
 /**
@@ -2068,13 +2074,7 @@ function renderChannelsList() {
                 this.style.display = 'none';
                 ensureSidebarLogoPlaceholder(logoDiv, ch);
             }, { once: true });
-            // FAST PATH: Use persistent blob cache (no fetch needed)
-            var validatedUrl = (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl)
-                ? BBNL_API.getValidatedImageUrl(logoUrl) : logoUrl;
-            if (typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[validatedUrl]) {
-                logoImg.src = _BLOB_CACHE[validatedUrl];
-                _logoCache[logoUrl] = true;
-            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(logoImg, logoUrl);
             } else {
                 logoImg.src = logoUrl;
@@ -2126,7 +2126,6 @@ function renderChannelsList() {
         container.appendChild(btn);
     });
 
-    console.log("[Sidebar] Rendered", sidebarState.channels.length, "channels");
 
     // Load all sidebar logos immediately
     var sidebarImages = document.querySelectorAll('.channel-item-logo img');
@@ -2168,13 +2167,15 @@ function openSidebar() {
     sidebar.classList.remove('close');
 
     // Keep info bar visible when sidebar is open; shrink/shift it beside menu.
-    var overlay = document.querySelector('.player-overlay');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
     }
 
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
     if (infoBar) {
         infoBar.classList.remove('info-bar-hidden');
         infoBar.classList.add('sidebar-active');
@@ -2212,7 +2213,6 @@ function openSidebar() {
     // Sidebar auto-hide after 5s inactivity
     resetSidebarInactivityTimer();
 
-    console.log("[Sidebar] Opened - sidebar only, no info bar");
 }
 
 /**
@@ -2231,13 +2231,15 @@ function closeSidebar() {
     clearSidebarInactivityTimer();
 
     // Restore full-width info bar and continue normal auto-hide timer after menu closes.
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
     if (infoBar) {
         infoBar.classList.remove('sidebar-active');
         infoBar.classList.remove('info-bar-hidden');
     }
 
-    var overlay = document.querySelector('.player-overlay');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
     if (overlay) {
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
@@ -2250,7 +2252,6 @@ function closeSidebar() {
         hideOverlay();
     }, OVERLAY_HIDE_DELAY);
 
-    console.log("[Sidebar] Closed");
 }
 
 /**
@@ -2267,7 +2268,6 @@ function resetSidebarInactivityTimer() {
 
     // Auto-close sidebar after 5 seconds of inactivity
     sidebarInactivityTimer = setTimeout(function () {
-        console.log("[Sidebar] Inactivity timeout (5s) - auto-closing sidebar");
         closeSidebar();
     }, SIDEBAR_HIDE_DELAY);
 }
@@ -2292,8 +2292,10 @@ var uiTimer = null;
  */
 function showPlayerUI() {
     var sidebar = document.getElementById('playerSidebar');
-    var overlay = document.querySelector('.player-overlay');
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
 
     // Show sidebar
     if (sidebar) {
@@ -2322,7 +2324,6 @@ function showPlayerUI() {
 
     // Start shared timer
     resetUITimer();
-    console.log("[PlayerUI] Sidebar + Info Bar shown together");
 }
 
 /**
@@ -2346,8 +2347,10 @@ function hidePlayerUI() {
     }
 
     var sidebar = document.getElementById('playerSidebar');
-    var overlay = document.querySelector('.player-overlay');
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
 
     // Hide sidebar
     if (sidebar) {
@@ -2381,7 +2384,6 @@ function hidePlayerUI() {
         overlayTimeout = null;
     }
 
-    console.log("[PlayerUI] Sidebar + Info Bar hidden together");
 }
 
 /**
@@ -2413,7 +2415,6 @@ function focusCategoryItem(index) {
         }
     });
 
-    console.log("[Sidebar] Category focused:", sidebarState.categories[index]);
 }
 
 /**
@@ -2445,7 +2446,6 @@ function focusChannelItem(index) {
         }
     });
 
-    console.log("[Sidebar] Channel focused:", index, "of", sidebarState.channels.length);
 }
 
 /**
@@ -2532,7 +2532,6 @@ function handleSidebarKeydown(e) {
         }
 
         var curLang = sidebarState.languages[sidebarState.languageIndex];
-        console.log('[Sidebar] LEFT/RIGHT - header tab changed to:', curLang ? curLang.name : '?');
         e.preventDefault();
         return true;
     }
@@ -2720,7 +2719,6 @@ function handleSidebarKeydown(e) {
                     var newIndex = currentChIndex - 1;
                     sidebarState.channelIndex = newIndex;
                     focusChannelItem(newIndex);
-                    console.log("[Sidebar] UP: Moving to channel", newIndex);
                 } else {
                     // At first channel
                     if (categoriesHidden) {
@@ -2747,10 +2745,8 @@ function handleSidebarKeydown(e) {
                     var newIndex = currentChIndex + 1;
                     sidebarState.channelIndex = newIndex;
                     focusChannelItem(newIndex);
-                    console.log("[Sidebar] DOWN: Moving to channel", newIndex);
                 } else {
                     // At last channel - stay there
-                    console.log("[Sidebar] DOWN: Already at last channel", currentChIndex);
                 }
                 e.preventDefault();
                 handled = true;
@@ -2791,7 +2787,6 @@ function handleSidebarKeydown(e) {
     // Force focus to channels or categories based on current level
     // ==========================================
     if (!handled && (code === 38 || code === 40 || code === 37 || code === 39 || code === 13)) {
-        console.log("[Sidebar] No element focused, forcing focus based on current level:", sidebarState.currentLevel);
         
         var categoriesSection = document.getElementById('sidebarCategoriesSection');
         var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
@@ -2828,7 +2823,6 @@ function handleSidebarKeydown(e) {
 function playChannelFromSidebar(channel) {
     if (!channel) return;
 
-    console.log("[Sidebar] Playing channel:", channel.chtitle || channel.channel_name);
 
     // Dismiss error popup if open before trying new channel
     if (playerErrorPopupOpen) {
@@ -2840,8 +2834,10 @@ function playChannelFromSidebar(channel) {
 
     // Show BOTH sidebar + info bar together for 5 seconds
     // Sidebar is already open, now show info bar alongside it
-    var overlay = document.querySelector('.player-overlay');
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
 
     if (overlay) {
         overlay.classList.remove('hidden');
@@ -2861,7 +2857,6 @@ function playChannelFromSidebar(channel) {
         hidePlayerUI();
     }, 5000);
 
-    console.log("[Sidebar] Channel selected - both sidebar + info bar shown for 5s");
 }
 
 /**
@@ -2940,8 +2935,7 @@ function handleKeydown(e) {
                 closeSidebar();
             } else {
                 hidePlayerErrorPopup();
-                // Show info bar with fresh auto-hide timer
-                showOverlay();
+                // Info bar stays visible (no auto-hide) — hidePlayerErrorPopup handles this
             }
         } else if (code === 13) {
             // ENTER - click Try Again button
@@ -2959,7 +2953,6 @@ function handleKeydown(e) {
             // LEFT - show channel number pad when sidebar is closed
             if (!sidebarState.isOpen) {
                 openDirectChannelEntryPrompt();
-                console.log('[Player] LEFT pressed - showing number pad (popup open)');
             }
         } else if (code === 39) {
             // RIGHT - show info bar while channel is playing
@@ -2989,14 +2982,12 @@ function handleKeydown(e) {
         // If sidebar is open, close it first (Android TV behavior)
         if (sidebarState.isOpen) {
             closeSidebar();
-            console.log('[Player] RETURN pressed - closing sidebar');
             return;
         }
 
         // If sidebar is closed, exit player
         closePlayer();
         // Brief wait for Samsung TV hardware to release decoder before navigating
-        console.log('[Player] Navigating back to channels page');
         setTimeout(function () {
             window.location.href = 'channels.html';
         }, 60);
@@ -3022,7 +3013,6 @@ function handleKeydown(e) {
         e.preventDefault();
         if (sidebarState.isOpen) {
             closeSidebar();
-            console.log('[Player] RIGHT pressed - closing sidebar');
         }
         return;
     }
@@ -3113,19 +3103,16 @@ function handleVolumeKeys(keyCode) {
                     tizen.tvaudiocontrol.setVolumeUp();
                     currentVolume = tizen.tvaudiocontrol.getVolume();
                     showVolumeIndicator(currentVolume);
-                    console.log("Volume Up:", currentVolume);
                     break;
                 case 448: // VolumeDown
                     tizen.tvaudiocontrol.setVolumeDown();
                     currentVolume = tizen.tvaudiocontrol.getVolume();
                     showVolumeIndicator(currentVolume);
-                    console.log("Volume Down:", currentVolume);
                     break;
                 case 449: // VolumeMute
                     isMuted = !isMuted;
                     tizen.tvaudiocontrol.setMute(isMuted);
                     showVolumeIndicator(isMuted ? 0 : currentVolume, isMuted);
-                    console.log("Mute:", isMuted);
                     break;
             }
         } else {
@@ -3236,42 +3223,33 @@ function pad(num) {
     return (num < 10 ? '0' : '') + num;
 }
 
+// Create buffering indicator ONCE, reuse by show/hide
+var _bufferingEl = null;
+
 function showBufferingIndicator() {
     hasHiddenLoadingIndicator = false;
+    if (playerErrorPopupOpen) return;
 
-    var container = document.getElementById('player-container');
-    if (!container) return;
-
-    // Remove existing indicator first (handles rapid channel switches)
-    var existing = document.getElementById('buffering-indicator');
-    if (existing) existing.remove();
-
-    // Add spinner CSS once
-    if (!document.getElementById('spinner-styles')) {
-        var style = document.createElement('style');
-        style.id = 'spinner-styles';
-        style.textContent = '.spinner{border:4px solid rgba(255,255,255,0.3);border-top:4px solid #fff;border-radius:50%;width:40px;height:40px;animation:spin 0.8s linear infinite;margin:0 auto}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
-        document.head.appendChild(style);
-    }
-
-    // FULL SCREEN dark overlay — hides the black screen from AVPlayer destroy
-    var bufferingDiv = document.createElement('div');
-    bufferingDiv.id = 'buffering-indicator';
-    bufferingDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
-    bufferingDiv.innerHTML = '<div class="spinner"></div><div style="font-size:18px;font-weight:600;margin-top:16px;">Loading Stream...</div>';
-    container.appendChild(bufferingDiv);
-
-    // Safety timeout: auto-hide after 8 seconds
-    setTimeout(function () {
-        if (!hasHiddenLoadingIndicator) {
-            hideBufferingIndicator();
+    if (!_bufferingEl) {
+        var container = document.getElementById('player-container');
+        if (!container) return;
+        if (!document.getElementById('spinner-styles')) {
+            var style = document.createElement('style');
+            style.id = 'spinner-styles';
+            style.textContent = '.spinner{border:4px solid rgba(255,255,255,0.3);border-top:4px solid #fff;border-radius:50%;width:40px;height:40px;animation:spin 0.8s linear infinite;margin:0 auto}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+            document.head.appendChild(style);
         }
-    }, 8000);
+        _bufferingEl = document.createElement('div');
+        _bufferingEl.id = 'buffering-indicator';
+        _bufferingEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);color:white;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:9997;';
+        _bufferingEl.innerHTML = '<div class="spinner"></div><div style="font-size:18px;font-weight:600;margin-top:16px;">Loading Stream...</div>';
+        container.appendChild(_bufferingEl);
+    }
+    _bufferingEl.style.display = 'flex';
 }
 
 function hideBufferingIndicator() {
-    var indicator = document.getElementById('buffering-indicator');
-    if (indicator) indicator.remove();
+    if (_bufferingEl) _bufferingEl.style.display = 'none';
 }
 
 // Make progress bar clickable for seeking (VOD only)
@@ -3289,7 +3267,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
                     try {
                         webapis.avplay.seekTo(seekTime, function () {
-                            console.log('Seeked to:', seekTime);
                         }, function (err) {
                             console.error('Seek error:', err);
                         });
@@ -3333,7 +3310,6 @@ function resetChannelInputTimer() {
  * Handle number key input (remote number keys) for direct channel navigation
  */
 function handleNumberInput(digit) {
-    console.log("[Player] Number key pressed:", digit);
     channelNumberBuffer = String(channelNumberBuffer + digit).replace(/\D/g, '').slice(0, 4);
     showChannelNumberInput(channelNumberBuffer);
     resetChannelInputTimer();
@@ -3342,9 +3318,10 @@ function handleNumberInput(digit) {
 /**
  * Returns true when the channel number input overlay is visible
  */
+var _numpadEl = null;
 function isNumpadOpen() {
-    var pad = document.getElementById('channel-number-input');
-    return !!(pad && pad.style.display !== 'none');
+    if (!_numpadEl) _numpadEl = document.getElementById('channel-number-input');
+    return !!(_numpadEl && _numpadEl.style.display !== 'none');
 }
 
 /**
@@ -3377,10 +3354,8 @@ function hideChannelNumberInput() {
  * Navigate to channel by number
  */
 function navigateToChannelNumber(number) {
-    console.log("[Player] Navigating to channel number:", number);
 
     if (allChannels.length === 0) {
-        console.warn("[Player] No channels loaded, cannot navigate");
         showChannelNotFound(number);
         return;
     }
@@ -3394,7 +3369,6 @@ function navigateToChannelNumber(number) {
     });
 
     if (channel) {
-        console.log("[Player] Found channel:", channel.chtitle || channel.channel_name);
         // Hide number pad immediately and clear buffer
         if (channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
         channelNumberBuffer = '';
@@ -3402,7 +3376,6 @@ function navigateToChannelNumber(number) {
         // Start playing
         setupPlayer(channel);
     } else {
-        console.warn("[Player] Channel not found for number:", number);
         showChannelNotFound(number);
     }
 }
@@ -3446,7 +3419,8 @@ function showChannelNotFound(number) {
 // Note: overlayTimeout and OVERLAY_HIDE_DELAY are declared at top with sidebar timers
 
 function syncInfoBarSidebarState() {
-    var infoBar = document.querySelector('.info-bar-premium');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    var infoBar = _infoBarEl;
     if (!infoBar) return;
 
     if (sidebarState && sidebarState.isOpen) {
@@ -3461,17 +3435,15 @@ function syncInfoBarSidebarState() {
  * Info bar is now outside .player-overlay so it stacks in root context at z-index:9998
  */
 function showInfoBarForced() {
-    var infoBar = document.querySelector('.info-bar-premium');
-    if (infoBar) {
-        infoBar.classList.remove('info-bar-hidden');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    if (_infoBarEl) {
+        _infoBarEl.classList.remove('info-bar-hidden');
         syncInfoBarSidebarState();
-        console.log('[InfoBar] Force shown above popup');
     }
-    // Also show the gradient overlay (z-index:1002, behind popup but gives readable bg)
-    var overlay = document.querySelector('.player-overlay');
-    if (overlay) {
-        overlay.classList.remove('hidden');
-        overlay.classList.add('visible');
+    if (_overlayEl) {
+        _overlayEl.classList.remove('hidden');
+        _overlayEl.classList.add('visible');
     }
 }
 
@@ -3479,25 +3451,31 @@ function showInfoBarForced() {
  * Show info bar overlay and set auto-hide timer
  * Resets timer on each call (for OK button or channel change)
  */
+// Cache overlay elements — avoid querySelector on every channel switch
+var _overlayEl = null;
+var _infoBarEl = null;
+var _uiChName = null;
+var _uiChNum = null;
+var _keepInfoBarVisible = false; // Set after popup dismiss — prevents auto-hide until channel change
+
 function showOverlay() {
-    // Don't show info bar before channel data is ready
     if (!_lastAttemptedChannel) return;
 
-    // Don't show info bar if sidebar is open
     if (sidebarState.isOpen) {
         syncInfoBarSidebarState();
         return;
     }
 
-    var overlay = document.querySelector('.player-overlay');
-    if (overlay) {
-        overlay.classList.remove('hidden');
-        overlay.classList.add('visible');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+
+    if (_overlayEl) {
+        _overlayEl.classList.remove('hidden');
+        _overlayEl.classList.add('visible');
     }
 
-    var infoBar = document.querySelector('.info-bar-premium');
-    if (infoBar) {
-        infoBar.classList.remove('info-bar-hidden');
+    if (_infoBarEl) {
+        _infoBarEl.classList.remove('info-bar-hidden');
         syncInfoBarSidebarState();
     }
 
@@ -3507,48 +3485,42 @@ function showOverlay() {
         overlayTimeout = null;
     }
 
-    // Only auto-hide if stream is actually playing (not buffering)
-    // While buffering, info bar stays visible so user sees channel info
-    if (hasHiddenLoadingIndicator) {
+    // Only auto-hide if stream is playing AND no error popup was just dismissed
+    if (hasHiddenLoadingIndicator && !_keepInfoBarVisible) {
         overlayTimeout = setTimeout(function () {
             hideOverlay();
         }, OVERLAY_HIDE_DELAY);
     }
-    // If still buffering, info bar stays visible — onBufferingComplete will call showOverlay again
 }
 
 /**
  * Hide info bar overlay
  */
 function hideOverlay() {
-    if (playerErrorPopupOpen) {
-        // Do not hide info bar while error popup is active.
-        return;
-    }
+    if (playerErrorPopupOpen) return;
 
-    var overlay = document.querySelector('.player-overlay');
-    if (overlay) {
-        overlay.classList.remove('visible');
-        overlay.classList.add('hidden');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+
+    if (_overlayEl) {
+        _overlayEl.classList.remove('visible');
+        _overlayEl.classList.add('hidden');
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
             overlayTimeout = null;
         }
     }
 
-    // Hide info bar directly (it is now outside player-overlay in DOM)
-    var infoBar = document.querySelector('.info-bar-premium');
-    if (infoBar) {
-        infoBar.classList.add('info-bar-hidden');
+    if (_infoBarEl) {
+        _infoBarEl.classList.add('info-bar-hidden');
         syncInfoBarSidebarState();
     }
 
-    console.log('[InfoBar] Hidden');
 }
 
 function isInfoBarVisible() {
-    var infoBar = document.querySelector('.info-bar-premium');
-    return !!(infoBar && !infoBar.classList.contains('info-bar-hidden'));
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    return !!(_infoBarEl && !_infoBarEl.classList.contains('info-bar-hidden'));
 }
 
 function openDirectChannelEntryPrompt() {
@@ -3561,7 +3533,8 @@ function openDirectChannelEntryPrompt() {
  * Callback for OK button - show info bar again if hidden, or reset timer if visible
  */
 var handleOKButton = function () {
-    var overlay = document.querySelector('.player-overlay');
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    var overlay = _overlayEl;
     if (!overlay) return;
 
     if (overlay.classList.contains('visible')) {
@@ -3572,10 +3545,8 @@ var handleOKButton = function () {
         overlayTimeout = setTimeout(function () {
             hideOverlay();
         }, OVERLAY_HIDE_DELAY);
-        console.log('[InfoBar] OK pressed - timer reset');
     } else {
         // Hidden or initial state - show the info bar
-        console.log('[InfoBar] OK pressed - showing info bar');
         showOverlay();
     }
 };
