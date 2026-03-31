@@ -941,7 +941,7 @@ function primeChannelLogoCache(channels, maxCount) {
     }
 
     // Throttled loader: max 4 concurrent image loads (prevents TV bandwidth/memory flood)
-    var MAX_CONCURRENT = 4;
+    var MAX_CONCURRENT = 20;
     var active = 0;
     var idx = 0;
 
@@ -1721,9 +1721,45 @@ function moveWithinTabs(direction) {
     sessionStorage.setItem('selectedLanguageId', langId);
     sessionStorage.setItem('selectedLanguageName', langName);
 
-    // Debounce: load channels 100ms after user stops moving
+    // Debounce: filter channels 100ms after user stops moving
     clearTimeout(_pillDebounce);
     _pillDebounce = setTimeout(function () {
+        // Try local filter first (instant) — fall back to API if no cache
+        var allCh = null;
+        if (typeof CacheManager !== 'undefined') {
+            allCh = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+        }
+
+        if (allCh && allCh.length > 0) {
+            // Filter locally — no API call
+            var filtered;
+            var isAll = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+            if (!langId || langId === '' || isAll) {
+                filtered = allCh;
+            } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+                filtered = allCh.filter(function (ch) {
+                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                });
+            } else {
+                var fid = String(langId).trim();
+                var fname = langName.toLowerCase();
+                filtered = allCh.filter(function (ch) {
+                    var cid = String(ch.langid || ch.lang_id || '').trim();
+                    if (cid === fid) return true;
+                    var cn = String(ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').trim().toLowerCase();
+                    if (cn === fname) return true;
+                    return false;
+                });
+            }
+            if (filtered && filtered.length > 0) {
+                allChannels = filtered;
+                renderAllChannels(allChannels);
+                setChannelsLoadingState(false);
+                return;
+            }
+        }
+
+        // Fallback: API call if no cache
         var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
         if (!langId || langId === '' || isAllChannels) {
             loadChannels();

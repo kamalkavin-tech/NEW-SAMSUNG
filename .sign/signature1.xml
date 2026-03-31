@@ -24,8 +24,8 @@ uDyNNnkw9A==</DigestValue>
 </Reference>
 <Reference URI="author-signature.xml">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>G6KfkbWHuCy7fI4pXg9VZDbJN2VTBi/lGgym+zAZA5SLCupeJhavboPJSL4V6hXOeW8BD+rjOcDq
-N5s9CoXB6g==</DigestValue>
+<DigestValue>GoMfnGKtZNhYgeQXioAS4Aq28FQJ/Ngvr6nDUywglHIpakN/C6MrKGideNncnz0O92esJrFmgwEd
+LyZDf95S0A==</DigestValue>
 </Reference>
 <Reference URI="channels.html">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -264,8 +264,8 @@ BeEO9D0N1w==</DigestValue>
 </Reference>
 <Reference URI="js%2Fapi.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>y3ORHLhM9Q3x2Ak3RwelagH34aMeDbqQLag49v9yepcQPUV+S8zJZ90+J4TqrkH5YUqzCsyK0H1f
-FpRRY4ydhw==</DigestValue>
+<DigestValue>P6fcdHeWyKXqhydqZbZ9IVXFP+VhLnZNoTNW2HtPpx1pp/9rXLF4R03edhS3CWhNOrqLrcqxnpMd
+MSDTTl6Z5w==</DigestValue>
 </Reference>
 <Reference URI="js%2Favplayer.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -274,8 +274,8 @@ zV03XviK5g==</DigestValue>
 </Reference>
 <Reference URI="js%2Fchannels.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>z994BOO4nnvqJ97L7E+KSOsQfGI8qI0sh/w7HMZOVUyoNLjQ6OFXHkkreUXJD5vlSScsBCbh8Gno
-OcsLvIN4fw==</DigestValue>
+<DigestValue>VwPSYBg37Ed4GtQJz9tA+aisPmqTJqN2PN9A7IXELJUcAq/+0waBs4iwlg2BrToFlXO43HBhf4Ug
++CJxVaNnQg==</DigestValue>
 </Reference>
 <Reference URI="js%2Ffavorites.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -377,11 +377,11 @@ GyvKX9Snig==</DigestValue>
 </Reference>
 </SignedInfo>
 <SignatureValue>
-YeKeLAtapFBd6HlH32weTz4raN9S0xQoVxvv/P91YFXnQfFEecLbk7uqZwqml8apkxSkitKeOojk
-GVAShgs1qiLvc3Xc9Y8/8KPJisImOz6dkHfA4kCICGgi6v0cB3u0ajKafxDqcN6hZGNOTGyyInIP
-1eS0yEYSNiu66crGtmd3D5bxjEXcfKvAz2N/9TndETvlG0Fumezqc9pjyARuWeTkMOqblhaaiM9Y
-Zg6EJUYpOd3VDW1vnfS1OA3mrODHJRRK+QVI3H0c9DBHLpsw4+tbRoRGSI3x/d+Tb764BQXKuMj6
-5BUI4bSbUXBNcKobZFx4NKsn5kgwdL86zXO6aA==
+K6OB9vpL/z8U0OHWTyRbQjb1RkzhE9u7FRA/gf9k7Ul8JAhr6Iw7yzXkMHsnhs2i0/O9rf04Zmeb
+IMO2dfaKtvk+vxuTVA9xi7YFVa+dfZ7+6LQHTLBkznlbvZ/3d5SLzuBJP3xse6dL3H6tJw0IXMqS
+gbcmeK5roU4TYCDc1LgXxc1l/RonbT3UmnWrvbWA9feGTuRPZDfAmmIFQEDcZrwd4o6gMankRdP4
++VIMRAfbisgTfMfuNb+8fjmyqHwvongy/5uMQsBoXH7yw/vvoaAZ34o85hMMLsNSRaEvUUjp0kwt
+jwKXJsljkTK93J7RCrcWStDNVlmLGNYM6o6gwA==
 </SignatureValue>
 <KeyInfo>
 <X509Data>

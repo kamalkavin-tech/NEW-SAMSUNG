@@ -616,6 +616,9 @@ const CacheManager = {
                 timestamp: now,
                 expiry: now + expiry
             };
+            // Update in-memory cache immediately
+            if (!this._mc) this._mc = {};
+            this._mc[key] = cacheObject;
             var jsonStr = JSON.stringify(cacheObject);
             try {
                 localStorage.setItem(key, jsonStr);
@@ -668,23 +671,23 @@ const CacheManager = {
      */
     get: function (key, ignoreExpiry) {
         try {
-            var cached = localStorage.getItem(key);
-            if (!cached) {
-                console.log('[CacheManager] Cache miss:', key);
-                return null;
+            // In-memory cache — avoids repeated JSON.parse of large data
+            if (!this._mc) this._mc = {};
+            if (this._mc[key]) {
+                var m = this._mc[key];
+                if (!ignoreExpiry && m.expiry && this._now() > m.expiry) return null;
+                return m.data;
             }
+
+            var cached = localStorage.getItem(key);
+            if (!cached) return null;
 
             var cacheObject = JSON.parse(cached);
+            this._mc[key] = cacheObject; // cache for next call
 
-            // Check expiry
             var now = this._now();
-            if (!ignoreExpiry && cacheObject.expiry && now > cacheObject.expiry) {
-                console.log('[CacheManager] Cache expired:', key, '| Expired:', new Date(cacheObject.expiry).toLocaleTimeString());
-                return null;
-            }
+            if (!ignoreExpiry && cacheObject.expiry && now > cacheObject.expiry) return null;
 
-            var age = Math.round((now - cacheObject.timestamp) / 60000);
-            console.log('[CacheManager] ✓ Cache hit:', key, '| Age:', age, 'minutes');
             return cacheObject.data;
         } catch (e) {
             console.error('[CacheManager] ✗ Failed to read cache:', key, e);
