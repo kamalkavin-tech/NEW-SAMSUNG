@@ -259,8 +259,8 @@ BeEO9D0N1w==</DigestValue>
 </Reference>
 <Reference URI="js%2Fapi.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>4QnWZ7yyWVqGff25fkyVaxIXWv0pHI8ruSpHx7RLZfYv70fjWdYtWGz1BvX70v4qu1a9FGYrxDMK
-7mIbl8HIgQ==</DigestValue>
+<DigestValue>y3ORHLhM9Q3x2Ak3RwelagH34aMeDbqQLag49v9yepcQPUV+S8zJZ90+J4TqrkH5YUqzCsyK0H1f
+FpRRY4ydhw==</DigestValue>
 </Reference>
 <Reference URI="js%2Favplayer.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -269,8 +269,8 @@ zV03XviK5g==</DigestValue>
 </Reference>
 <Reference URI="js%2Fchannels.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>1Jzqdrge5DLkOiV3we++QCeXwevinNwh8N3RFP9syXkaaqGZjSHcC8zi6fW4ZeTK7wUcnRlog8Yj
-3LN2CEfG9A==</DigestValue>
+<DigestValue>z994BOO4nnvqJ97L7E+KSOsQfGI8qI0sh/w7HMZOVUyoNLjQ6OFXHkkreUXJD5vlSScsBCbh8Gno
+OcsLvIN4fw==</DigestValue>
 </Reference>
 <Reference URI="js%2Ffavorites.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -309,8 +309,8 @@ FXGULn84hw==</DigestValue>
 </Reference>
 <Reference URI="js%2Fplayer.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
-<DigestValue>ITSTwSO8vqD5eD5bM0WvPo8uHHzgNLBZVlWQeraP5rdnH1EI1bzeaReXzZ9R+6pS8m5cCK4nkKST
-BoRsTMn7XQ==</DigestValue>
+<DigestValue>U0Nat92lmTJAxaPuniuRl4VBY4Q4rnmNzo8Pz3OjXtc40boBGBSF6+lGhrzqTPA7DgCXZ8OEFHQJ
+5YzggR9AqA==</DigestValue>
 </Reference>
 <Reference URI="js%2Fsettings.js">
 <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"></DigestMethod>
@@ -372,11 +372,11 @@ QY10fG1EWQ==</DigestValue>
 </Reference>
 </SignedInfo>
 <SignatureValue>
-dCu5ffBNWq4ORvjFKE7bbxyMnGBCTGrwuQR7+OChG2aE/kTYc1HsJwm+CQY35qwUKimGr7QwJmbS
-lD/lT2GJa/YfedzVYNN77VzDEc32DSCEfnXcRgSwH5BDXAdJDnNm+s4g91S5whIIFkwRG5zvqkws
-KYvy2gWuoVT3mnQ4IbI5jc7HUJV65KMk8N/4OJ+Nb/7g+N1x1ttE2VyKD/Mr3kZnOOkFWM7uLGek
-uGLwHuoVrkGvnRJKPe64N+lWe7Ywbq+5dJw6FH3/qoGWGpx6s46YSpmP2i4MFRFVBIXmxuZH2Adi
-oSk4fA5NAvt14RJgRbn6vH8fWx5P8us59aGLFg==
+GIDiQ9RfeXT9IsRAfQKUM8ChO3Y6KobM0SgyFrOr4vuTLTz0ndqyxdfKn+WWdhAG4zxajKzZaqCj
+A73LjLYsPVeQTQUzWpaVlKJwGBM070vEbm7FUmXWhZC4E0vktqS3dKrNxty2aF00zMHIwEocWi4z
+IC6qoVmipHIjdud3nBT7uMyVtxbSy+HWzxE79BBaRNijDG1PWqhO61+Yb/8HzqqJ00pBkxzFOHkt
+WFyCdrP3MruMnuZ0ZzuF/Ja3S7DqcWW4+dERxWZDMdKN/g/OR1CvKLlvK23HdXuTXaFOJLseluUp
+IB0M/XJdKGekV+PmWhYooZCj4c1ptTHzgD7nSg==
 </SignatureValue>
 <KeyInfo>
 <X509Data>

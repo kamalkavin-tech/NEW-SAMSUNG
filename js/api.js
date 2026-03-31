@@ -280,7 +280,7 @@ function setImageSource(imgEl, rawUrl, options) {
             var capturedEl = imgEl;
             var capturedPrevErr = prevOnError;
 
-            fetch(capturedUrl, { mode: 'cors', credentials: 'omit' })
+            fetch(capturedUrl, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
                 .then(function (response) {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     return response.blob();

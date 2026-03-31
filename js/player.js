@@ -941,25 +941,23 @@ function updatePlayerChannelLogo(channel) {
         return;
     }
 
-    // Hide current logo, show placeholder while loading
+    // Hide logo while loading — no placeholder text to avoid flicker
     uiLogo.style.display = 'none';
     uiLogo.dataset.logoUrl = logoUrl;
-    setInfoBarLogoPlaceholder(channel);
+    // Remove any existing placeholder
+    if (_logoBoxEl) {
+        var oldFb = _logoBoxEl.querySelector('.channel-logo-fallback');
+        if (oldFb) oldFb.remove();
+    }
 
     uiLogo.onload = function () {
         if (requestToken !== _playerLogoRequestToken) return;
-        // Show logo, hide placeholder — remove placeholder entirely to prevent side-by-side display
         uiLogo.style.display = '';
-        if (_logoBoxEl) {
-            var fb = _logoBoxEl.querySelector('.channel-logo-fallback');
-            if (fb) fb.remove();
-        }
     };
     uiLogo.onerror = function () {
         if (requestToken !== _playerLogoRequestToken) return;
         uiLogo.removeAttribute('src');
         uiLogo.style.display = 'none';
-        setInfoBarLogoPlaceholder(channel);
     };
     // Load logo via setImageSource
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {

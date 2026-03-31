@@ -233,11 +233,15 @@ async function initPage() {
         channelOptions = { langid: urlLang };
     }
 
-    // INSTANT RENDER: Show cached channels + language pills immediately (no flash)
+    // INSTANT RENDER: Show cached channels immediately (no black screen)
     try {
         var cached = getCachedChannels(channelOptions);
+        // Fallback: try CacheManager (localStorage) if sessionStorage empty
+        if (!cached && typeof CacheManager !== 'undefined') {
+            cached = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+        }
         if (cached && cached.length > 0) {
-            allChannels = cached.slice();
+            allChannels = cached;
             renderAllChannels(allChannels);
             setChannelsLoadingState(false);
         }
@@ -1688,8 +1692,11 @@ function moveToFirstChannelCard() {
 }
 
 // Helper: Move within tabs (category pills) - AUTO LOAD ON FOCUS
+var _pillsCache = null;
+var _pillDebounce = null;
 function moveWithinTabs(direction) {
-    var pills = Array.from(document.querySelectorAll('.lang-pill.focusable'));
+    if (!_pillsCache) _pillsCache = Array.from(document.querySelectorAll('.lang-pill.focusable'));
+    var pills = _pillsCache;
     var currentIndex = pills.indexOf(document.activeElement);
 
     if (currentIndex < 0) return false;
@@ -1704,8 +1711,8 @@ function moveWithinTabs(direction) {
     targetPill.focus();
     targetPill.scrollIntoView({ inline: "center", behavior: "auto", block: "nearest" });
 
-    // AUTO-LOAD: Trigger language filter on focus navigation
-    pills.forEach(function (p) { p.classList.remove('active'); });
+    // Update active state
+    for (var i = 0; i < pills.length; i++) pills[i].classList.remove('active');
     targetPill.classList.add('active');
 
     var langId = targetPill.dataset.langid || '';
@@ -1714,14 +1721,18 @@ function moveWithinTabs(direction) {
     sessionStorage.setItem('selectedLanguageId', langId);
     sessionStorage.setItem('selectedLanguageName', langName);
 
-    var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
-    if (!langId || langId === '' || isAllChannels) {
-        loadChannels();
-    } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
-        loadChannels({ subscribed: 'yes' });
-    } else {
-        loadChannels({ langid: langId });
-    }
+    // Debounce: load channels 100ms after user stops moving
+    clearTimeout(_pillDebounce);
+    _pillDebounce = setTimeout(function () {
+        var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+        if (!langId || langId === '' || isAllChannels) {
+            loadChannels();
+        } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+            loadChannels({ subscribed: 'yes' });
+        } else {
+            loadChannels({ langid: langId });
+        }
+    }, 100);
 
     return true;
 }
