@@ -105,7 +105,7 @@ body {
     cursor: pointer;
     color: rgba(255, 255, 255, 0.6);
     position: relative;
-    transform: scale(1);
+    /* transform removed for TV performance */
 }
 
 .sidebar-icon-btn svg {
@@ -191,7 +191,7 @@ body {
 .search-bar:focus-within {
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+    box-shadow: none;
 }
 
 .search-bar .search-icon {
@@ -259,6 +259,8 @@ body {
     scroll-padding-bottom: 20px;
     scroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
+    transform: translateZ(0); /* GPU compositing for scroll */
+    will-change: scroll-position;
 }
 
 /* ==========================================
@@ -300,7 +302,7 @@ body {
     background: rgba(30, 30, 40, 0.99);
     border-radius: 20px;
     padding: 24px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 1000;
     display: none;

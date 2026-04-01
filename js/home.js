@@ -378,6 +378,14 @@ window.onload = function () {
         playFoFiChannel();
     } else {
     }
+
+    // Preload channels and languages in background to speed up channels page
+    setTimeout(function() {
+        if (typeof BBNL_API !== 'undefined') {
+            if (BBNL_API.getChannelList) BBNL_API.getChannelList({}).catch(function(){});
+            if (BBNL_API.getLanguageList) BBNL_API.getLanguageList().catch(function(){});
+        }
+    }, 1500); // 1.5 seconds after home page loads
 };
 
 // Keyboard navigation

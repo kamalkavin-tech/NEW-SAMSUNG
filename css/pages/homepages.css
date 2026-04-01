@@ -49,7 +49,6 @@ body.channels-page {
 
 .back-btn:hover,
 .back-btn:focus {
-    transform: translateX(-5px);
     outline: none !important;
 }
 
@@ -121,7 +120,7 @@ body.channels-page {
 }
 
 .filter-chip.active {
-    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%) !important;
+    background: #fff !important;
     color: #000 !important;
     font-weight: 600;
     box-shadow: none;
@@ -182,14 +181,14 @@ body.channels-page {
 
 /* Channel Card - Optimized for 4-column grid */
 .channel-card {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
     border-radius: 18px !important;
     padding: 0 !important;
     overflow: visible;
     cursor: pointer;
     border: 1.5px solid rgba(255, 255, 255, 0.08) !important;
     position: relative;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: none;
 }
 
 .channel-card:hover,
@@ -197,7 +196,7 @@ body.channels-page {
     border: 2px solid #FFFFFF !important;
     box-shadow: none !important;
     outline: none !important;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
     z-index: 10;
 }
 
@@ -205,7 +204,7 @@ body.channels-page {
 .channel-icon {
     width: 100%;
     aspect-ratio: 3 / 2;
-    background: linear-gradient(135deg, rgba(20, 20, 30, 0.8) 0%, rgba(10, 10, 20, 0.9) 100%) !important;
+    background: rgba(15, 15, 25, 0.85) !important;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -231,7 +230,7 @@ body.channels-page {
     position: absolute !important;
     top: 14px !important;
     right: 14px !important;
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    background: #ef4444 !important;
     color: #fff !important;
     padding: 6px 14px !important;
     border-radius: 6px !important;
@@ -241,7 +240,7 @@ body.channels-page {
     align-items: center !important;
     gap: 6px !important;
     z-index: 10 !important;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    box-shadow: none;
     letter-spacing: 0.5px;
 }
 
@@ -323,7 +322,7 @@ body.channels-page {
     background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
     border-radius: 16px;
     margin: 20px 15px 5px 15px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: none;
     flex-shrink: 0;
 }
 
@@ -559,7 +558,6 @@ body.channels-page {
 
 .app-card:hover,
 .app-card:focus {
-    transform: translateY(-4px);
     border: 2px solid #FFFFFF;
     box-shadow: none;
     outline: none;
@@ -776,7 +774,7 @@ body.channels-page {
     background: rgba(28, 28, 38, 0.98);
     border-radius: 20px;
     padding: 24px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 1000;
     display: none;
@@ -1244,7 +1242,7 @@ body.light-mode .exit-btn-yes {
     border-radius: 28px;
     padding: 60px 80px;
     border: 2px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     max-width: 900px;
 }
 

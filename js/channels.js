@@ -17,14 +17,12 @@
 (function checkAuth() {
     var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
     if (hasLoggedInOnce !== "true") {
-        console.log("[Auth] User has never logged in, redirecting to login...");
         window.location.replace("login.html");
         return;
     }
     try {
         var userData = localStorage.getItem("bbnl_user");
         if (!userData || !JSON.parse(userData).userid) {
-            console.log("[Auth] bbnl_user invalid - redirecting to login for re-auth");
             window.location.replace("login.html");
             return;
         }
@@ -48,7 +46,37 @@ var searchTimeout = null;
 var selectedLanguageIndex = 0; // Index for language selector (0 = All Languages)
 var masterListLoaded = false; // Flag to track if master list is loaded
 var channelLogoCache = {}; // Reuse loaded logos across category switches
-var channelLogoSourceMap = {}; // Normalized logo key -> last successful src
+var channelLogoSourceMap = {}; // Normalized logo key -> last successful ORIGINAL HTTP src (NOT blob URLs)
+
+// Restore instantly from sessionStorage for fast re-entries
+try {
+    var rawLogoStr = sessionStorage.getItem('bbnl_logo_cache_map');
+    if (rawLogoStr) {
+        var parsed = JSON.parse(rawLogoStr);
+        for (var k in parsed) {
+            var val = parsed[k];
+            // CRITICAL: Skip blob URLs — they're dead after page navigation
+            if (typeof val === 'string' && val.indexOf('blob:') === 0) continue;
+            channelLogoSourceMap[k] = val;
+            channelLogoCache[k] = true;
+        }
+    }
+} catch(e) {}
+
+window.addEventListener('beforeunload', function() {
+    try {
+        var cleanMap = {};
+        for (var k in channelLogoSourceMap) {
+            var val = channelLogoSourceMap[k];
+            // CRITICAL: Never persist blob URLs — they die on page navigation
+            if (typeof val === 'string' && val.indexOf('blob:') === 0) continue;
+            cleanMap[k] = val;
+        }
+        if (Object.keys(cleanMap).length > 0) {
+            sessionStorage.setItem('bbnl_logo_cache_map', JSON.stringify(cleanMap));
+        }
+    } catch(e) {}
+});
 var channelsSearchActivated = false; // Only activate keypad after explicit user action
 var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
@@ -125,7 +153,6 @@ var lastTopControlElement = null; // Track last focused top control for UP navig
 var sidebarCategoryIndex = 0; // Track focused category in sidebar
 
 window.onload = function () {
-    console.log("=== BBNL Channels Page Initialized ===");
 
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
         AppPerformanceCache.primeAfterLogin(false);
@@ -294,7 +321,6 @@ async function initPage() {
  */
 async function loadMasterChannelList() {
     if (masterListLoaded && masterChannelList.length > 0) {
-        console.log("[Channels] Master list already loaded:", masterChannelList.length, "channels");
         return;
     }
 
@@ -306,25 +332,21 @@ async function loadMasterChannelList() {
             if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < CHANNELS_CACHE_TTL_MS) {
                 masterChannelList = parsed.data;
                 masterListLoaded = true;
-                console.log("[Channels] Master list loaded from sessionStorage cache:", masterChannelList.length, "channels");
                 return;
             }
         }
     } catch (e) {}
 
     try {
-        console.log("[Channels] Loading MASTER channel list (all channels, no filters)...");
         const response = await BBNL_API.getChannelList({}); // No filters = ALL channels
 
         if (Array.isArray(response) && response.length > 0) {
             masterChannelList = response;
             masterListLoaded = true;
-            console.log("[Channels] Master channel list loaded:", masterChannelList.length, "channels");
             try {
                 sessionStorage.setItem('master_channel_list_cache', JSON.stringify({ ts: Date.now(), data: response }));
             } catch (e) {}
         } else {
-            console.warn("[Channels] Failed to load master channel list");
         }
     } catch (e) {
         console.error("[Channels] Error loading master channel list:", e);
@@ -438,12 +460,14 @@ function renderLanguagePills(languages) {
 function renderSidebarCategories(categories) {
     const categoryList = document.getElementById('categoryList');
     if (!categoryList) return;
-    
+
+    invalidateSidebarCache(); // clear cached category elements
     categoryList.innerHTML = '';
     
     // Check if language filter is active
     const hasLanguageFilter = sessionStorage.getItem('selectedLanguageId') || sessionStorage.getItem('selectedLanguageName');
     
+    var frag = document.createDocumentFragment();
     categories.forEach((cat, index) => {
         const item = document.createElement('div');
         item.className = 'category-item focusable';
@@ -451,39 +475,40 @@ function renderSidebarCategories(categories) {
         item.dataset.category = (cat.grtitle || '').toLowerCase();
         item.dataset.grid = cat.grid || '';
         item.dataset.index = index;
-        
+
         // Create category name span
         const nameSpan = document.createElement('span');
         nameSpan.className = 'category-name';
         nameSpan.textContent = cat.grtitle || 'Unknown';
-        
+
         // Create category count span (will be updated when channels load)
         const countSpan = document.createElement('span');
         countSpan.className = 'category-count';
         countSpan.textContent = '(...)';
         countSpan.id = 'count-' + (cat.grid || index);
-        
+
         item.appendChild(nameSpan);
         item.appendChild(countSpan);
-        
+
         // Mark first as active if no language filter
         if (index === 0 && !hasLanguageFilter) {
             item.classList.add('active');
         }
-        
+
         // Focus listener
         item.addEventListener('focus', function() {
             currentZone = 'sidebar';
             sidebarCategoryIndex = index;
         });
-        
+
         // Click/Enter handler
         item.addEventListener('click', function() {
             handleSidebarCategorySelect(item);
         });
-        
-        categoryList.appendChild(item);
+
+        frag.appendChild(item);
     });
+    categoryList.appendChild(frag);
     
     // Update channel counts after channels are loaded
     setTimeout(updateCategoryCounts, 500);
@@ -520,8 +545,8 @@ function updateCategoryCounts() {
 }
 
 function handleSidebarCategorySelect(item) {
-    // Remove active from all sidebar categories
-    document.querySelectorAll('.category-item').forEach(el => {
+    // Remove active from all sidebar categories (use cached list)
+    getCachedSidebarCategories().forEach(function(el) {
         el.classList.remove('active');
     });
     
@@ -661,8 +686,8 @@ function applyLanguageFilter() {
         }
     }
     
-    // Clear category selection when language changes
-    document.querySelectorAll('.category-item').forEach(el => {
+    // Clear category selection when language changes (use cached list)
+    getCachedSidebarCategories().forEach(function(el) {
         el.classList.remove('active');
     });
 }
@@ -708,7 +733,6 @@ function initCategoryPills() {
 }
 
 function handleCategoryFilter(category, gridId) {
-    console.log('Category selected:', category, 'Grid ID:', gridId);
 
     currentCategory = category;
 
@@ -817,7 +841,6 @@ function initSearchFunctionality() {
             if (searchInput.value.length > 0) {
                 searchTimeout = setTimeout(function () {
                     var lcn = parseInt(searchInput.value, 10);
-                    console.log("[Channels] Auto-playing LCN:", lcn);
                     playChannelByLCN(lcn);
                 }, 3000);
             }
@@ -941,7 +964,7 @@ function primeChannelLogoCache(channels, maxCount) {
     }
 
     // Throttled loader: max 4 concurrent image loads (prevents TV bandwidth/memory flood)
-    var MAX_CONCURRENT = 20;
+    var MAX_CONCURRENT = 4;
     var active = 0;
     var idx = 0;
 
@@ -954,17 +977,49 @@ function primeChannelLogoCache(channels, maxCount) {
                 var img = new Image();
                 img.onload = function () {
                     channelLogoCache[urlKey] = true;
-                    channelLogoCache[this.src] = true;
-                    channelLogoSourceMap[urlKey] = this.src;
+                    channelLogoCache[srcUrl] = true;
+                    // Store original HTTP URL, NOT this.src (which may be blob: on Tizen)
+                    channelLogoSourceMap[urlKey] = srcUrl;
                     delete _channelLogoPrefetchInFlight[urlKey];
-                    if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
+                    if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(srcUrl);
                     active--;
                     loadNext();
                 };
                 img.onerror = function () {
-                    delete _channelLogoPrefetchInFlight[urlKey];
-                    active--;
-                    loadNext();
+                    // Try alternative image paths before giving up
+                    var alts = (typeof _generateAlternativeImagePaths === 'function')
+                        ? _generateAlternativeImagePaths(srcUrl)
+                        : [];
+                    if (alts.length > 0) {
+                        var altI = 0;
+                        var prefImg = this;
+                        function tryAlt() {
+                            if (altI >= alts.length) {
+                                delete _channelLogoPrefetchInFlight[urlKey];
+                                active--;
+                                loadNext();
+                                return;
+                            }
+                            var altUrl = alts[altI++];
+                            prefImg.onload = function() {
+                                channelLogoCache[urlKey] = true;
+                                channelLogoCache[altUrl] = true;
+                                // Store HTTP URL, not blob URL
+                                channelLogoSourceMap[urlKey] = altUrl;
+                                delete _channelLogoPrefetchInFlight[urlKey];
+                                if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(altUrl);
+                                active--;
+                                loadNext();
+                            };
+                            prefImg.onerror = function() { tryAlt(); };
+                            prefImg.src = altUrl;
+                        }
+                        tryAlt();
+                    } else {
+                        delete _channelLogoPrefetchInFlight[urlKey];
+                        active--;
+                        loadNext();
+                    }
                 };
                 img.src = srcUrl;
             })(item.key, item.url);
@@ -1073,7 +1128,6 @@ async function loadChannels(options = {}) {
     // Fast path: render from in-memory cache when user switches back to an already loaded category.
     var cachedChannels = getCachedChannels(apiOptions);
     if (cachedChannels && cachedChannels.length > 0) {
-        console.log("[Channels Page] Cache hit for", buildChannelsCacheKey(apiOptions), "-", cachedChannels.length, "channels");
         allChannels = cachedChannels.slice();
         renderAllChannels(allChannels);
         setChannelsLoadingState(false);
@@ -1089,10 +1143,8 @@ async function loadChannels(options = {}) {
     hideErrorPopups();
 
     try {
-        // FIXED: Clear channel cache if user just completed subscription
-        // Check if subscription was just completed (sessionStorage flag from subscription page)
+        // Clear channel cache if user just completed subscription
         if (sessionStorage.getItem('subscription_completed') === 'true') {
-            console.log("[Channels] Subscription completed - clearing channel cache for fresh load");
             if (typeof CacheManager !== 'undefined') {
                 CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
                 CacheManager.remove(CacheManager.KEYS.CATEGORIES);
@@ -1101,18 +1153,55 @@ async function loadChannels(options = {}) {
             sessionStorage.removeItem('subscription_completed');
         }
 
-        let response = await BBNL_API.getChannelList(apiOptions);
+        let response = [];
 
-        // Retry once if response is empty
-        if ((!Array.isArray(response) || response.length === 0) && !isNetworkDisconnected()) {
-            console.log("[Channels Page] Empty response, retrying after 200ms...");
-            await new Promise(function (r) { setTimeout(r, 200); });
+        // PERFORMANCE: Filter master list in-memory instead of calling API if possible
+        if (masterListLoaded && masterChannelList.length > 0 && !apiOptions.search) {
+            let filtered = masterChannelList;
+            
+            // Apply Subscribed filter
+            if (apiOptions.subscribed) {
+                filtered = filtered.filter(ch => ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1);
+            }
+            
+            // Apply Grid (Category) filter - careful with missing grids
+            if (apiOptions.grid) {
+                filtered = filtered.filter(ch => {
+                    const gridStr = String(ch.grid || '');
+                    const catStr = (ch.grtitle || '').toLowerCase();
+                    return gridStr === String(apiOptions.grid) || 
+                           catStr === String(apiOptions.grid).toLowerCase() ||
+                           catStr === String(currentCategory).toLowerCase();
+                });
+            }
+            
+            // Apply Language filter
+            if (apiOptions.langid) {
+                const targetLangName = (sessionStorage.getItem('selectedLanguageName') || '').toLowerCase();
+                filtered = filtered.filter(ch => {
+                    const chLangId = String(ch.langid || '');
+                    const chLangName = (ch.lalng || ch.language || '').toLowerCase();
+                    return chLangId === String(apiOptions.langid) || 
+                           (targetLangName && chLangName === targetLangName);
+                });
+            }
+            
+            response = filtered;
+            
+            // Artificially delay slightly for UI consistency if resolving instantly
+            await new Promise(r => setTimeout(r, 50));
+        } else {
+            // Fallback: Real network request
             response = await BBNL_API.getChannelList(apiOptions);
+
+            // Retry once if response is empty
+            if ((!Array.isArray(response) || response.length === 0) && !isNetworkDisconnected()) {
+                await new Promise(function (r) { setTimeout(r, 200); });
+                response = await BBNL_API.getChannelList(apiOptions);
+            }
         }
 
         if (Array.isArray(response)) {
-            console.log("[Channels Page] Loaded " + response.length + " channels");
-
             allChannels = response;
             setCachedChannels(apiOptions, allChannels);
 
@@ -1158,25 +1247,97 @@ function renderAllChannels(channels) {
     }
 
     // PERFORMANCE: Properly remove old grid to free event listeners + DOM nodes.
-    // innerHTML="" orphans listeners. removeChild lets GC collect them.
     while (container.firstChild) { container.removeChild(container.firstChild); }
 
     var grid = document.createElement("div");
     grid.className = "channels-grid channels-grid-smooth";
+    container.appendChild(grid); // Append grid early so first chunk is visible immediately
 
-    // Prefetch logos (limit to first 12 visible cards, not all 200+)
-    primeChannelLogoCache(channels, 12);
-
+    // PERFORMANCE: Chunk rendering to prevent main thread blocking when rendering thousands of items
     var len = channels.length;
-    for (var i = 0; i < len; i++) {
-        grid.appendChild(createChannelCard(channels[i]));
+    var CHUNK_SIZE = 40; // Render 40 cards per frame
+    var IMMEDIATE_LOAD_COUNT = 15;
+    var currentIndex = 0;
+
+    // Clear any previous ongoing chunk rendering
+    if (window._renderChunkTimeout) {
+        clearTimeout(window._renderChunkTimeout);
     }
 
-    container.appendChild(grid);
-    requestAnimationFrame(function () {
-        grid.classList.add('is-visible');
-    });
-    _cachedFocusables = null; // invalidate cache so next keypress rebuilds it
+    function renderChunk() {
+        var frag = document.createDocumentFragment();
+        var end = Math.min(currentIndex + CHUNK_SIZE, len);
+        
+        for (var i = currentIndex; i < end; i++) {
+            frag.appendChild(createChannelCard(channels[i], i < IMMEDIATE_LOAD_COUNT));
+        }
+        
+        grid.appendChild(frag);
+        currentIndex = end;
+        
+        if (currentIndex < len) {
+            window._renderChunkTimeout = setTimeout(renderChunk, 5); // Yield to main thread
+        } else {
+            _cachedFocusables = null; // Invalidate cache so next keypress rebuilds it
+            if (typeof invalidateCardsCache === 'function') invalidateCardsCache();
+            _setupLazyImageLoading(container);
+        }
+    }
+
+    renderChunk();
+}
+
+// ==========================================
+// LAZY IMAGE LOADING
+// Only first 15 cards load images immediately.
+// Remaining cards load when scrolled into view (1 row buffer).
+// ==========================================
+var _lazyObserver = null;
+
+function _setupLazyImageLoading(scrollContainer) {
+    // Clean up old observer
+    if (_lazyObserver) { _lazyObserver.disconnect(); _lazyObserver = null; }
+
+    var lazyImages = scrollContainer.querySelectorAll('img[data-lazy-src]');
+    if (lazyImages.length === 0) return;
+
+    // Use IntersectionObserver if available (most Tizen 6+ TVs have it)
+    if (typeof IntersectionObserver !== 'undefined') {
+        _lazyObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    var img = entry.target;
+                    var lazySrc = img.getAttribute('data-lazy-src');
+                    if (lazySrc) {
+                        img.removeAttribute('data-lazy-src');
+                        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                            BBNL_API.setImageSource(img, lazySrc);
+                        } else {
+                            img.src = lazySrc;
+                        }
+                    }
+                    _lazyObserver.unobserve(img);
+                }
+            });
+        }, { root: scrollContainer, rootMargin: '200px 0px' }); // 200px buffer
+
+        lazyImages.forEach(function (img) { _lazyObserver.observe(img); });
+    } else {
+        // Fallback: load all deferred images after 500ms (old Tizen)
+        setTimeout(function () {
+            lazyImages.forEach(function (img) {
+                var lazySrc = img.getAttribute('data-lazy-src');
+                if (lazySrc) {
+                    img.removeAttribute('data-lazy-src');
+                    if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                        BBNL_API.setImageSource(img, lazySrc);
+                    } else {
+                        img.src = lazySrc;
+                    }
+                }
+            });
+        }, 500);
+    }
 }
 
 // ==========================================
@@ -1184,7 +1345,7 @@ function renderAllChannels(channels) {
 // Images are loaded when channel cards are rendered (no lazy loading)
 // ==========================================
 
-function createChannelCard(ch) {
+function createChannelCard(ch, loadImmediate) {
     const chName = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
     const chLogo = getChannelCardLogo(ch);
     const streamLink = ch.streamlink || ch.channel_url || "";
@@ -1244,48 +1405,100 @@ function createChannelCard(ch) {
 
         var logoKey = normalizeChannelLogoKey(chLogo);
 
+        // Check if we have previously loaded this exact logo successfully
         var alreadyCached = channelLogoCache[chLogo] || channelLogoCache[normalizedLogo] || channelLogoCache[logoKey];
 
         img.alt = chName;
         img.className = "channel-logo-img";
 
-        // FAST PATH: If image is in persistent blob cache, set src directly (no fetch)
+        // FAST PATH: If image is in persistent blob cache (same session), set src directly
         var blobCached = typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[normalizedLogo];
+        
         if (blobCached) {
             img.src = _BLOB_CACHE[normalizedLogo];
-        } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-            BBNL_API.setImageSource(img, normalizedLogo);
+        } else if (alreadyCached) {
+            // RETURNING FROM ANOTHER PAGE: We know this URL worked before.
+            // Use setImageSource to properly fetch+blob on Tizen (never set dead blob URLs directly).
+            var cachedHttpUrl = channelLogoSourceMap[logoKey] || normalizedLogo;
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, cachedHttpUrl);
+            } else {
+                img.src = cachedHttpUrl;
+            }
+        } else if (loadImmediate) {
+            // Visible card — load now
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, normalizedLogo);
+            } else {
+                img.src = normalizedLogo;
+            }
         } else {
-            img.src = normalizedLogo;
+            // Deferred card — load when scrolled into view
+            img.setAttribute('data-lazy-src', normalizedLogo);
         }
 
         img.onload = function () {
             channelLogoCache[chLogo] = true;
-            channelLogoCache[this.src] = true;
+            channelLogoCache[normalizedLogo] = true;
             if (logoKey) {
                 channelLogoCache[logoKey] = true;
-                channelLogoSourceMap[logoKey] = this.src;
+                // CRITICAL: Store original HTTP URL, NOT this.src (which may be blob:)
+                // Blob URLs die on page navigation; HTTP URLs survive via browser cache
+                channelLogoSourceMap[logoKey] = normalizedLogo;
             }
             // Persist to global cross-page cache
             if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
-                BBNL_API.markImageCached(this.src);
+                BBNL_API.markImageCached(normalizedLogo);
             }
             var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
             if (placeholder) placeholder.style.display = 'none';
         };
         
         img.onerror = function () {
-            console.warn("[Channels] Logo failed to load: ch=" + chName + " url=" + this.src + " — showing channel name fallback");
-            // Image failed — show placeholder
-            var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
-            if (!placeholder) {
-                placeholder = document.createElement("div");
-                placeholder.className = "channel-logo-placeholder";
-                placeholder.innerHTML = '<span>' + (chName ? chName.substring(0, 2).toUpperCase() : '?') + '</span>';
-                logoDiv.appendChild(placeholder);
+            var self = this;
+            // Try alternative image paths before giving up
+            var alts = (typeof _generateAlternativeImagePaths === 'function')
+                ? _generateAlternativeImagePaths(normalizedLogo)
+                : [];
+            
+            if (alts.length > 0) {
+                var altIdx = 0;
+                function tryNextAlt() {
+                    if (altIdx >= alts.length) {
+                        // All alternatives exhausted — show placeholder
+                        var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
+                        if (!placeholder) {
+                            placeholder = document.createElement("div");
+                            placeholder.className = "channel-logo-placeholder";
+                            placeholder.innerHTML = '<span>' + (chName ? chName.substring(0, 2).toUpperCase() : '?') + '</span>';
+                            logoDiv.appendChild(placeholder);
+                        }
+                        placeholder.style.display = 'flex';
+                        self.style.display = 'none';
+                        return;
+                    }
+                    var altUrl = alts[altIdx++];
+                    self.onerror = function() { tryNextAlt(); };
+                    self.style.display = '';
+                    if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                        BBNL_API.setImageSource(self, altUrl);
+                    } else {
+                        self.src = altUrl;
+                    }
+                }
+                tryNextAlt();
+            } else {
+                // No alternatives available — show placeholder immediately
+                var placeholder = logoDiv.querySelector('.channel-logo-placeholder');
+                if (!placeholder) {
+                    placeholder = document.createElement("div");
+                    placeholder.className = "channel-logo-placeholder";
+                    placeholder.innerHTML = '<span>' + (chName ? chName.substring(0, 2).toUpperCase() : '?') + '</span>';
+                    logoDiv.appendChild(placeholder);
+                }
+                placeholder.style.display = 'flex';
+                this.style.display = 'none';
             }
-            placeholder.style.display = 'flex';
-            this.style.display = 'none';
         };
         
         logoDiv.appendChild(img);
@@ -1370,11 +1583,14 @@ document.addEventListener("keydown", function (e) {
             if (firstPill) firstPill.focus();
             return;
         }
-        // Clear language filter and go back to home
         sessionStorage.removeItem('selectedLanguageId');
         sessionStorage.removeItem('selectedLanguageName');
         sessionStorage.setItem('returningFromChannels', 'true');
-        window.location.href = "home.html";
+        if (window.history.length > 1) { 
+            window.history.back(); 
+        } else { 
+            window.location.href = "home.html"; 
+        }
         return;
     }
 
@@ -1436,7 +1652,6 @@ document.addEventListener("keydown", function (e) {
             var inputEvent = new Event('input', { bubbles: true });
             searchInput.dispatchEvent(inputEvent);
             
-            console.log('[Channels] Number key pressed, focusing search:', num);
         }
         return;
     }
@@ -1557,23 +1772,37 @@ function handleRightNavigation() {
     }
 }
 
+// Cached sidebar categories — avoids querySelectorAll on every UP/DOWN keypress
+var _cachedSidebarCategories = null;
+
+function getCachedSidebarCategories() {
+    if (!_cachedSidebarCategories) {
+        _cachedSidebarCategories = Array.from(document.querySelectorAll('.category-item.focusable'));
+    }
+    return _cachedSidebarCategories;
+}
+
+function invalidateSidebarCache() {
+    _cachedSidebarCategories = null;
+}
+
 // Sidebar navigation helpers
 function handleSidebarDownNavigation() {
     var active = document.activeElement;
-    
+
     // If on language arrows or text, move to first category
     if (active.id === 'langArrowLeft' || active.id === 'langArrowRight' || active.id === 'selectedLanguageText') {
-        var firstCategory = document.querySelector('.category-item.focusable');
-        if (firstCategory) {
-            firstCategory.focus();
+        var categories = getCachedSidebarCategories();
+        if (categories.length > 0) {
+            categories[0].focus();
             sidebarCategoryIndex = 0;
         }
         return;
     }
-    
+
     // If on category item, move to next
     if (active.classList.contains('category-item')) {
-        var categories = Array.from(document.querySelectorAll('.category-item.focusable'));
+        var categories = getCachedSidebarCategories();
         var idx = categories.indexOf(active);
         if (idx < categories.length - 1) {
             categories[idx + 1].focus();
@@ -1584,15 +1813,15 @@ function handleSidebarDownNavigation() {
 
 function handleSidebarUpNavigation() {
     var active = document.activeElement;
-    
+
     // If on language arrows or text, stay there (already at top)
     if (active.id === 'langArrowLeft' || active.id === 'langArrowRight' || active.id === 'selectedLanguageText') {
         return;
     }
-    
+
     // If on first category, move to language selector
     if (active.classList.contains('category-item')) {
-        var categories = Array.from(document.querySelectorAll('.category-item.focusable'));
+        var categories = getCachedSidebarCategories();
         var idx = categories.indexOf(active);
         if (idx === 0) {
             // Move to language text
@@ -1665,7 +1894,6 @@ function moveToBackButton() {
     if (backBtn) {
         backBtn.focus();
         currentZone = 'topControls';
-        console.log('[NAV] Moved to Back button');
     }
 }
 
@@ -1674,9 +1902,8 @@ function moveToFirstCategoryPill() {
     var firstPill = document.querySelector('.category-pill.focusable');
     if (firstPill) {
         firstPill.focus();
-        firstPill.scrollIntoView({ inline: "start", behavior: "smooth", block: "nearest" });
+        firstPill.scrollIntoView({ inline: "start", behavior: "auto", block: "nearest" });
         currentZone = 'tabs';
-        console.log('[NAV] Moved to first category pill');
     }
 }
 
@@ -1687,7 +1914,6 @@ function moveToFirstChannelCard() {
         firstCard.focus();
         scrollCardIntoView(firstCard);
         currentZone = 'cards';
-        console.log('[NAV] Moved to first channel card');
     }
 }
 
@@ -1773,22 +1999,35 @@ function moveWithinTabs(direction) {
     return true;
 }
 
+// Cached card list + grid columns — avoids querySelectorAll + getComputedStyle on every keypress
+var _cachedCards = null;
+var _cachedColumnsPerRow = 5;
+
+function invalidateCardsCache() {
+    _cachedCards = null;
+}
+
+function getCachedCards() {
+    if (!_cachedCards) {
+        _cachedCards = Array.from(document.querySelectorAll('.channel-card.focusable'));
+        // Compute grid columns once per render
+        var grid = document.querySelector('.channels-grid');
+        if (grid) {
+            var cols = window.getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+            if (cols > 0) _cachedColumnsPerRow = cols;
+        }
+    }
+    return _cachedCards;
+}
+
 // Helper: Move within channel cards grid
 function moveWithinCardsGrid(deltaX, deltaY) {
-    var cards = Array.from(document.querySelectorAll('.channel-card.focusable'));
+    var cards = getCachedCards();
     var currentIndex = cards.indexOf(document.activeElement);
 
     if (currentIndex < 0) return false;
 
-    // Determine grid columns (default 4)
-    var grid = document.querySelector('.channels-grid');
-    var columnsPerRow = 4;
-
-    if (grid) {
-        var computedStyle = window.getComputedStyle(grid);
-        var columns = computedStyle.gridTemplateColumns.split(' ').length;
-        if (columns > 0) columnsPerRow = columns;
-    }
+    var columnsPerRow = _cachedColumnsPerRow;
 
     var currentRow = Math.floor(currentIndex / columnsPerRow);
     var currentCol = currentIndex % columnsPerRow;
@@ -1821,16 +2060,20 @@ function moveWithinCardsGrid(deltaX, deltaY) {
     return false;
 }
 
+// Cached DOM refs for scrollCardIntoView — avoids getElementById + querySelector per keypress
+var _scrollContainer = null;
+var _scrollCategorySection = null;
+
 // Scroll a card into the visible area of the scroll container with padding for focus effect
 function scrollCardIntoView(card) {
-    var container = document.getElementById('channel-grid-container');
-    if (!container) return;
+    if (!_scrollContainer) _scrollContainer = document.getElementById('channel-grid-container');
+    if (!_scrollContainer) return;
 
     // BATCH ALL READS FIRST to avoid forced reflow (layout thrashing)
-    var containerRect = container.getBoundingClientRect();
+    var containerRect = _scrollContainer.getBoundingClientRect();
     var cardRect = card.getBoundingClientRect();
-    var categorySection = document.querySelector('.category-section');
-    var categoryBottom = categorySection ? categorySection.getBoundingClientRect().bottom : containerRect.top;
+    if (!_scrollCategorySection) _scrollCategorySection = document.querySelector('.category-section');
+    var categoryBottom = _scrollCategorySection ? _scrollCategorySection.getBoundingClientRect().bottom : containerRect.top;
 
     // All reads done — now compute and write once
     var focusPadding = 30;
@@ -1844,14 +2087,13 @@ function scrollCardIntoView(card) {
     }
 
     if (scrollOffset !== 0) {
-        container.scrollTop += scrollOffset;
+        _scrollContainer.scrollTop += scrollOffset;
     }
 }
 
 function handleEnter(el) {
     if (!el) el = document.activeElement;
 
-    console.log('[ENTER] Element:', el.className);
 
     if (el.classList.contains('back-btn')) {
         window.location.href = "home.html";
@@ -1878,8 +2120,6 @@ function handleEnter(el) {
         const channelName = el.dataset.name;
 
         if (!streamUrl || streamUrl.trim() === "") {
-            console.warn("No stream URL available for:", channelName);
-            console.warn("Stream not available for this channel");
             return;
         }
 
@@ -1914,11 +2154,9 @@ function handleEnter(el) {
  * @param {Number} lcn - The LCN number to play
  */
 function playChannelByLCN(lcn) {
-    console.log("[Channels] Playing channel by LCN:", lcn);
 
     // Use masterChannelList for LCN search (never filtered)
     if (masterChannelList.length === 0) {
-        console.warn("[Channels] Master channel list empty, fetching ALL channels...");
         BBNL_API.getChannelList({}).then(function (channels) {
             if (channels && Array.isArray(channels)) {
                 masterChannelList = channels;
@@ -1953,7 +2191,6 @@ function showSearchNotFound(msg) {
 function findAndPlayLCN(lcn) {
     // ALWAYS search in MASTER channel list (ALL channels, NEVER filtered)
     // This ensures LCN search works regardless of active filter
-    console.log("[Channels] Searching LCN", lcn, "in MASTER channel list (total:", masterChannelList.length, "channels)");
 
     var channel = masterChannelList.find(function (ch) {
         var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
@@ -1961,7 +2198,6 @@ function findAndPlayLCN(lcn) {
     });
 
     if (channel) {
-        console.log("[Channels] Found LCN", lcn, ":", channel.chtitle || channel.channel_name);
 
         // Clear search input
         var searchInput = document.getElementById('searchInput');
@@ -1976,7 +2212,6 @@ function findAndPlayLCN(lcn) {
         if (searchInput) {
             searchInput.value = '';
         }
-        console.warn("[Channels] LCN", lcn, "not found in master list");
         showSearchNotFound("Channel Not Found");
     }
 }
@@ -1986,7 +2221,6 @@ function findAndPlayLCN(lcn) {
 // ==========================================
 
 function initDarkMode() {
-    console.log("[Channels] Initializing dark mode...");
     var isDarkMode = localStorage.getItem('darkMode') !== 'false';
 
     if (isDarkMode) {
@@ -1995,5 +2229,4 @@ function initDarkMode() {
         document.body.classList.add('light-mode');
     }
 
-    console.log("[Channels] Dark mode:", isDarkMode ? "ON" : "OFF");
 }

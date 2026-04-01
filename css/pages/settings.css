@@ -123,7 +123,7 @@
     text-transform: uppercase;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.1);
+    box-shadow: none;
 }
 
 .sidebar-item.logout-btn::before {
@@ -146,8 +146,7 @@
     background: linear-gradient(135deg, rgba(255, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.25) 100%);
     border-color: rgba(255, 68, 68, 0.6);
     color: #ff4444;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 25px rgba(255, 68, 68, 0.25), 0 0 0 3px rgba(255, 68, 68, 0.15);
+    box-shadow: none;
 }
 
 .sidebar-item.logout-btn:hover::before,
@@ -157,7 +156,7 @@
 
 .sidebar-item.logout-btn:hover .icon,
 .sidebar-item.logout-btn:focus .icon {
-    transform: translateX(3px);
+    /* transform removed for TV performance */
 }
 
 .sidebar-item.logout-btn:active {

@@ -211,7 +211,7 @@ body {
     background: radial-gradient(circle, #ff6b00 0%, #ff9500 100%);
     border-radius: 50%;
     position: relative;
-    box-shadow: 0 0 20px rgba(255, 107, 0, 0.5);
+    box-shadow: none;
 }
 
 .sun-logo::before {

@@ -44,7 +44,7 @@
 .btn-watch:focus {
     outline: none;
     background: #3ec49a;
-    box-shadow: 0 0 20px rgba(77, 212, 172, 0.6);
+    box-shadow: none;
 }
 
 .btn-add {
@@ -78,7 +78,6 @@
 .back-btn:hover,
 .back-btn:focus {
     color: var(--text-main);
-    transform: translateX(-5px);
 }
 
 .icon-btn {
@@ -152,7 +151,7 @@
     font-size: 22px;
     font-weight: bold;
     cursor: pointer;
-    box-shadow: 0 5px 20px rgba(59, 108, 255, 0.3);
+    box-shadow: none;
 }
 
 .get-otp-btn:hover {

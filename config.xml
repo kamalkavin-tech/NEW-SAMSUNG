@@ -12,7 +12,8 @@
     <tizen:application
         id="ph3Ha7N8EQ.BBNLIPTV"
         package="ph3Ha7N8EQ"
-        required_version="6.0"/>
+        required_version="6.0"
+        prelaunch="enable"/>
     
     <content src="login.html"/>
     <name>BBNL IPTV</name>

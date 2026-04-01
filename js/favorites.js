@@ -76,7 +76,7 @@ window.onload = function () {
 
         el.addEventListener("click", function (e) {
             if (el.classList.contains('back-btn') || el.id === 'goBackBtn') {
-                window.location.href = 'home.html';
+                if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
                 return;
             }
         });
@@ -290,14 +290,14 @@ document.addEventListener("keydown", function (e) {
     if (comingSoonPopupOpen) {
         e.preventDefault();
         if (code === 13 || code === 10009) {
-            window.location.href = "home.html";
+            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         }
         return;
     }
 
     if (code === 10009) { // Back
         e.preventDefault();
-        window.location.href = "home.html";
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 
@@ -341,7 +341,7 @@ function handleEnter(el) {
     if (!el) el = document.activeElement;
 
     if (el.classList.contains('back-btn') || el.id === 'goBackBtn') {
-        window.location.href = "home.html";
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 

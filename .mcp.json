@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tizen-doctor-mcp": {
+      "command": "cmd",
+      "args": ["/c", "C:\\Users\\kamal\\Downloads\\tizen-doctor-mcp\\tizen-doctor-mcp\\tizen-doctor-mcp.exe"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}

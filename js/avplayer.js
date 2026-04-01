@@ -51,7 +51,6 @@ var AVPlayer = (function () {
                 return true;
             }
         } catch (e) {
-            console.warn("[AVPlayer] TV Window API not available:", e);
         }
         return false;
     }
@@ -175,7 +174,6 @@ var AVPlayer = (function () {
                 avplay.setStreamingProperty("CUSTOM_MESSAGE", headerString);
 
             } catch (e) {
-                console.warn("[AVPlayer] Could not set custom headers:", e);
             }
 
             try {
@@ -482,11 +480,9 @@ var AVPlayer = (function () {
                             _log("[AVPlayer] ✓ DVB window hidden");
                         },
                         function(error) {
-                            console.warn("[AVPlayer] DVB hide error:", error);
                         }
                     );
                 } catch (e) {
-                    console.warn("[AVPlayer] Error hiding DVB window:", e);
                 }
             }
         },
@@ -520,7 +516,6 @@ var AVPlayer = (function () {
                 avplay.jumpForward(milliseconds);
                 _log("[AVPlayer] Jumped forward:", milliseconds, "ms to", newTime);
             } catch (e) {
-                console.warn("[AVPlayer] Jump forward not supported:", e);
             }
         },
 
@@ -532,7 +527,6 @@ var AVPlayer = (function () {
                 avplay.jumpBackward(milliseconds);
                 _log("[AVPlayer] Jumped backward:", milliseconds, "ms to", newTime);
             } catch (e) {
-                console.warn("[AVPlayer] Jump backward not supported:", e);
             }
         },
 
@@ -754,7 +748,6 @@ var AVPlayer = (function () {
                 .then(function (data) {
                     _log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
                     _log("[AVPlayer] M3U8 content preview:");
-                    console.log(data.substring(0, 300));
                     _log("[AVPlayer] ========================================");
                     if (callback) callback(true, data);
                 })

@@ -108,16 +108,7 @@ video {
     pointer-events: none;
 }
 
-@keyframes infoBarFadeIn {
-    from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
-}
+/* infoBarFadeIn animation removed for TV performance */
 
 /* Info bar position adjustment when sidebar is open */
 .info-bar-premium.sidebar-active {
@@ -473,7 +464,7 @@ video {
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    animation: streamAdSlideIn 0.5s ease-out;
+    /* animation removed for TV performance */
 }
 
 .stream-ad-panel img {
@@ -482,29 +473,7 @@ video {
     object-fit: cover;
 }
 
-@keyframes streamAdSlideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes streamAdSlideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
+/* animations removed for TV performance */
 
 /* ==========================================
    PLAYER SIDEBAR - 2-LEVEL DYNAMIC DESIGN
@@ -518,12 +487,15 @@ video {
     height: 100%;
     background: rgba(6, 6, 14, 0.96);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
-    contain: layout style;
+    contain: layout style paint;
     z-index: 2100; /* Above error popup (2000) so sidebar overrides it */
     display: flex;
     flex-direction: column;
     overflow: hidden;
     transform: translateX(-100%);
+    will-change: transform; /* GPU-accelerated sidebar slide */
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
 .player-sidebar.open {
@@ -721,6 +693,8 @@ video {
 .channels-list {
     padding: 0;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    transform: translateZ(0); /* GPU compositing for scroll */
+    will-change: scroll-position;
 }
 
 .channels-list::-webkit-scrollbar {
@@ -834,7 +808,7 @@ video {
     align-items: center;
     justify-content: center;
     padding: 8px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: none;
 }
 
 .channel-item-logo img {
@@ -845,7 +819,7 @@ video {
     max-width: 84px;
     max-height: 84px;
     object-fit: contain;
-    filter: brightness(1) contrast(1.05);
+    /* filter removed for TV performance */
 }
 
 .channel-item-logo .logo-placeholder {
@@ -886,7 +860,7 @@ video {
 .channel-item:focus .channel-item-logo,
 .channel-item.active .channel-item-logo {
     background: #ffffff;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    box-shadow: none;
 }
 
 /* Legacy compatibility - keep old classes for backward compatibility */

@@ -57,7 +57,7 @@ window.onload = function () {
     if (retryBtn) {
         retryBtn.focus();
         retryBtn.addEventListener('click', function() {
-            window.location.href = 'home.html';
+            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         });
     }
 
@@ -101,7 +101,7 @@ document.addEventListener('keydown', function (e) {
     if (ottComingSoonPopupOpen) {
         e.preventDefault();
         if (e.keyCode === 13 || e.keyCode === 10009) {
-            window.location.href = 'home.html';
+            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         }
         return;
     }
@@ -153,7 +153,7 @@ document.addEventListener('keydown', function (e) {
             break;
         case 10009: // BACK
             e.preventDefault();
-            window.location.href = 'home.html';
+            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
             break;
     }
 });
@@ -324,7 +324,7 @@ function handleClick(element) {
 
     // Back button or Go Back button clicked
     if (element.classList.contains('back-btn') || element.id === 'retryAppsBtn') {
-        window.location.href = 'home.html';
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 

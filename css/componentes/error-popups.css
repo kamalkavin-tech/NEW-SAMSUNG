@@ -14,7 +14,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.88);
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -30,7 +32,7 @@
     max-width: 500px;
     width: 72%;
     min-height: 430px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* Image Container - White rounded card */
@@ -132,8 +134,9 @@
 .error-popup-btn:focus {
     border: 3px solid #ffffff;
     outline: none;
-    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.65);
+    box-shadow: none;
 }
 
 .error-popup-btn:active {
+    transform: scale(0.96);
 }

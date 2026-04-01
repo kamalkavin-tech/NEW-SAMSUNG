@@ -868,6 +868,11 @@ function normalizeLogoCacheUrl(url) {
     var raw = String(url || '').trim();
     if (!raw) return '';
 
+    // Delegate precisely to the unified core API cache validator
+    // This ensures URLs are strictly identical to the main channels page
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
+        return BBNL_API.getValidatedImageUrl(raw);
+    }
 
     if (typeof BBNL_API !== 'undefined' && BBNL_API.resolveAssetUrl) {
         raw = BBNL_API.resolveAssetUrl(raw);
@@ -901,69 +906,39 @@ function normalizeLogoCacheUrl(url) {
         } catch (e2) {}
     }
 
-    // Remove URL fragment and known cache-busting query params for stable cache keying.
-    var noHash = raw.split('#')[0];
-    var parts = noHash.split('?');
-    if (parts.length < 2) {
-        return noHash;
-    }
-
-    var base = parts[0];
-    var query = parts[1] || '';
-    if (!query) {
-        return base;
-    }
-
-    var kept = query.split('&').filter(function (pair) {
-        var key = (pair.split('=')[0] || '').toLowerCase();
-        return key && key !== 't' && key !== 'ts' && key !== 'timestamp' && key !== '_' && key !== 'cache' && key !== 'cb';
-    });
-
-    var result = kept.length > 0 ? (base + '?' + kept.join('&')) : base;
-    return result;
+    return raw;
 }
 
 function updatePlayerChannelLogo(channel) {
-    var uiLogo = document.getElementById("ui-channel-logo");
-    if (!uiLogo) return;
+    // Get the logo container box
+    if (!_logoBoxEl) _logoBoxEl = document.querySelector('.info-bar-premium .channel-logo-box');
+    if (!_logoBoxEl) return;
 
-    // Use SAME URL path as sidebar: normalizeLogoCacheUrl → getValidatedImageUrl
     var logoUrl = normalizeLogoCacheUrl(getChannelLogoUrl(channel));
-    var requestToken = ++_playerLogoRequestToken;
 
-    uiLogo.onload = null;
-    uiLogo.onerror = null;
+    // Remove old img and placeholder completely — prevents stale logo from previous channel
+    var oldImg = _logoBoxEl.querySelector('#ui-channel-logo');
+    if (oldImg) oldImg.remove();
+    var oldFb = _logoBoxEl.querySelector('.channel-logo-fallback');
+    if (oldFb) oldFb.remove();
 
-    if (!logoUrl) {
-        uiLogo.style.display = 'none';
-        uiLogo.removeAttribute('src');
-        setInfoBarLogoPlaceholder(channel);
-        return;
-    }
+    if (!logoUrl) return;
 
-    // Hide logo while loading — no placeholder text to avoid flicker
-    uiLogo.style.display = 'none';
-    uiLogo.dataset.logoUrl = logoUrl;
-    // Remove any existing placeholder
-    if (_logoBoxEl) {
-        var oldFb = _logoBoxEl.querySelector('.channel-logo-fallback');
-        if (oldFb) oldFb.remove();
-    }
+    // Create NEW img element each time — same approach as sidebar (which works correctly)
+    var newImg = document.createElement('img');
+    newImg.id = 'ui-channel-logo';
+    newImg.alt = channel.chtitle || channel.channel_name || '';
+    newImg.crossOrigin = 'anonymous';
+    newImg.addEventListener('error', function () {
+        this.style.display = 'none';
+    }, { once: true });
+    _logoBoxEl.appendChild(newImg);
 
-    uiLogo.onload = function () {
-        if (requestToken !== _playerLogoRequestToken) return;
-        uiLogo.style.display = '';
-    };
-    uiLogo.onerror = function () {
-        if (requestToken !== _playerLogoRequestToken) return;
-        uiLogo.removeAttribute('src');
-        uiLogo.style.display = 'none';
-    };
-    // Load logo via setImageSource
+    // Load via setImageSource — same as sidebar
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-        BBNL_API.setImageSource(uiLogo, logoUrl);
+        BBNL_API.setImageSource(newImg, logoUrl);
     } else {
-        uiLogo.src = logoUrl;
+        newImg.src = logoUrl;
     }
 }
 
@@ -1041,88 +1016,7 @@ function setupPlayer(channel) {
     if (_uiChNum) _uiChNum.innerText = channelNum;
 
     // ==========================================
-    // VALIDATION & STREAM START
-    // ==========================================
-
-    const streamUrl = channel.streamlink || channel.channel_url;
-    const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
-
-    // Check stream URL exists
-    if (!streamUrl) {
-        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
-        showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
-        return;
-    }
-
-    // Fix and validate stream URL
-    var fixedStreamUrl = streamUrl;
-    if (!isDVBChannel) {
-        fixedStreamUrl = fixLocalhostUrl(streamUrl);
-
-        if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
-            try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
-            showPlayerErrorPopup('Invalid Stream', 'Invalid stream URL format. Please try another channel.');
-            return;
-        }
-    }
-
-    // PRE-PLAY subscription check — block only when explicitly "no"
-    if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
-        channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
-        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
-        showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
-        return;
-    }
-
-    _lastPlayingChannel = channel;
-
-    // ==========================================
-    // START PLAYBACK IMMEDIATELY — UI updates happen after
-    // ==========================================
-
-    if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
-        // Buffering indicator already shown at top of setupPlayer
-
-        if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
-        window._streamTimeoutTimer = setTimeout(function () {
-            if (myGen !== _playerStreamGen) return;
-            if (!hasHiddenLoadingIndicator) {
-                hideBufferingIndicator();
-                var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
-                var isSubs = ch && (ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1);
-                var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
-                if (ch && !isSubs && price > 0) {
-                    showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
-                } else if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
-                    showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
-                }
-            }
-        }, PLAYER_STREAM_START_TIMEOUT_MS);
-
-        try {
-            AVPlayer.changeStream(fixedStreamUrl);
-        } catch (error) {
-            console.error("Error calling AVPlayer.changeStream:", error);
-            if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
-            hideBufferingIndicator();
-            showPlayerErrorPopup('Playback Error', 'Error starting playback. Please try another channel.');
-        }
-    } else {
-        if (isDVBChannel) {
-            showPlayerErrorPopup('FTA Not Available', 'FTA channels require Samsung TV with antenna connection.');
-            return;
-        }
-        const v = document.getElementById("video-player");
-        if (v) {
-            v.src = fixedStreamUrl;
-            v.play().catch(function (error) {
-                console.error("HTML5 video play error:", error);
-            });
-        }
-    }
-
-    // ==========================================
-    // DEFERRED UI UPDATES — run after stream starts (non-blocking)
+    // DEFERRED UI UPDATES — run early to ensure UI updates even if stream is blocked
     // Uses requestAnimationFrame so these don't delay playback
     // ==========================================
     var capturedChannel = channel;
@@ -1213,6 +1107,89 @@ function setupPlayer(channel) {
             }
         }
     });
+
+    // ==========================================
+    // VALIDATION & STREAM START
+    // ==========================================
+
+    const streamUrl = channel.streamlink || channel.channel_url;
+    const isDVBChannel = streamUrl && streamUrl.toLowerCase().startsWith('dvb://');
+
+    // Check stream URL exists
+    if (!streamUrl) {
+        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
+        showPlayerErrorPopup('No Stream Available', 'Stream URL not available for ' + chName + '. Please try another channel.');
+        return;
+    }
+
+    // Fix and validate stream URL
+    var fixedStreamUrl = streamUrl;
+    if (!isDVBChannel) {
+        fixedStreamUrl = fixLocalhostUrl(streamUrl);
+
+        if (!fixedStreamUrl.startsWith('http://') && !fixedStreamUrl.startsWith('https://')) {
+            try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
+            showPlayerErrorPopup('Invalid Stream', 'Invalid stream URL format. Please try another channel.');
+            return;
+        }
+    }
+
+    // PRE-PLAY subscription check — block only when explicitly "no"
+    if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
+        channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
+        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) {}
+        showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
+        return;
+    }
+
+    _lastPlayingChannel = channel;
+
+    // ==========================================
+    // START PLAYBACK IMMEDIATELY — UI updates happen after
+    // ==========================================
+
+    if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
+        // Buffering indicator already shown at top of setupPlayer
+
+        if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
+        window._streamTimeoutTimer = setTimeout(function () {
+            if (myGen !== _playerStreamGen) return;
+            if (!hasHiddenLoadingIndicator) {
+                hideBufferingIndicator();
+                var ch = (currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null;
+                var isSubs = ch && (ch.subscribed === "yes" || ch.subscribed === "1" || ch.subscribed === true || ch.subscribed === 1);
+                var price = ch ? parseFloat(ch.chprice || ch.price || 0) : 0;
+                if (ch && !isSubs && price > 0) {
+                    showPlayerErrorPopup('Subscription Not Available', 'Please subscribe to watch this channel.');
+                } else if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
+                    showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
+                }
+            }
+        }, PLAYER_STREAM_START_TIMEOUT_MS);
+
+        try {
+            AVPlayer.changeStream(fixedStreamUrl);
+        } catch (error) {
+            console.error("Error calling AVPlayer.changeStream:", error);
+            if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
+            hideBufferingIndicator();
+            showPlayerErrorPopup('Playback Error', 'Error starting playback. Please try another channel.');
+        }
+    } else {
+        if (isDVBChannel) {
+            showPlayerErrorPopup('FTA Not Available', 'FTA channels require Samsung TV with antenna connection.');
+            return;
+        }
+        const v = document.getElementById("video-player");
+        if (v) {
+            v.src = fixedStreamUrl;
+            v.play().catch(function (error) {
+                console.error("HTML5 video play error:", error);
+            });
+        }
+    }
+
+    // UI Updates have been moved to the top of setupPlayer() so they fire before early returns
 
 }
 
@@ -1912,6 +1889,7 @@ function renderCategoriesList() {
 
     container.innerHTML = '';
 
+    var frag = document.createDocumentFragment();
     sidebarState.categories.forEach(function(cat, index) {
         var btn = document.createElement('button');
         btn.className = 'category-item focusable';
@@ -1937,8 +1915,9 @@ function renderCategoriesList() {
             selectCategory(index);
         });
 
-        container.appendChild(btn);
+        frag.appendChild(btn);
     });
+    container.appendChild(frag);
 
 }
 
@@ -1952,9 +1931,8 @@ function selectCategory(index, preferCurrentChannel) {
 
     sidebarState.categoryIndex = index;
 
-    // Update active category highlight
-    var categories = document.querySelectorAll('.category-item');
-    categories.forEach(function(cat, i) {
+    // Update active category highlight (use cached list)
+    _getSidebarCategories().forEach(function(cat, i) {
         if (i === index) {
             cat.classList.add('active');
         } else {
@@ -2054,6 +2032,7 @@ function renderChannelsList() {
         return;
     }
 
+    var frag = document.createDocumentFragment();
     sidebarState.channels.forEach(function (ch, index) {
         var btn = document.createElement('button');
         btn.className = 'channel-item focusable';
@@ -2121,21 +2100,9 @@ function renderChannelsList() {
             playChannelFromSidebar(ch);
         });
 
-        container.appendChild(btn);
+        frag.appendChild(btn);
     });
-
-
-    // Load all sidebar logos immediately
-    var sidebarImages = document.querySelectorAll('.channel-item-logo img');
-    sidebarImages.forEach(function (img) {
-        if (img.dataset && img.dataset.src) {
-            img.src = img.dataset.src;
-            img.removeAttribute('data-src');
-            img.addEventListener('load', function () {
-                _logoCache[img.src] = true;
-            }, { once: true });
-        }
-    });
+    container.appendChild(frag); // Single DOM write — no per-item reflow
 }
 
 /**
@@ -2393,7 +2360,7 @@ function focusCategoryItem(index) {
 
     sidebarState.categoryIndex = index;
 
-    var items = document.querySelectorAll('.category-item');
+    var items = _getSidebarCategories();
     items.forEach(function (item, i) {
         if (i === index) {
             item.classList.add('active');
@@ -2424,7 +2391,7 @@ function focusChannelItem(index) {
 
     sidebarState.channelIndex = index;
 
-    var items = document.querySelectorAll('.channel-item');
+    var items = _getSidebarChannels();
     items.forEach(function (item, i) {
         if (i === index) {
             item.classList.add('active');
@@ -2726,9 +2693,9 @@ function handleSidebarKeydown(e) {
                     } else {
                         // Categories visible - go to last category
                         sidebarState.currentLevel = 'categories';
-                        var categories = document.querySelectorAll('.category-item');
-                        if (categories.length > 0) {
-                            var lastCat = categories[sidebarState.categoryIndex];
+                        var catItems = _getSidebarCategories();
+                        if (catItems.length > 0) {
+                            var lastCat = catItems[sidebarState.categoryIndex];
                             if (lastCat) lastCat.focus();
                         }
                     }
@@ -2768,9 +2735,9 @@ function handleSidebarKeydown(e) {
                 } else {
                     // Categories visible - go back to categories
                     sidebarState.currentLevel = 'categories';
-                    var categories = document.querySelectorAll('.category-item');
-                    if (categories[sidebarState.categoryIndex]) {
-                        categories[sidebarState.categoryIndex].focus();
+                    var catArr = _getSidebarCategories();
+                    if (catArr[sidebarState.categoryIndex]) {
+                        catArr[sidebarState.categoryIndex].focus();
                     }
                 }
                 e.preventDefault();
@@ -2791,18 +2758,18 @@ function handleSidebarKeydown(e) {
         
         if (sidebarState.currentLevel === 'channels' || categoriesHidden) {
             // Focus current channel
-            var channels = document.querySelectorAll('.channel-item');
-            if (channels.length > 0) {
-                var idx = Math.max(0, Math.min(sidebarState.channelIndex, channels.length - 1));
+            var chArr = _getSidebarChannels();
+            if (chArr.length > 0) {
+                var idx = Math.max(0, Math.min(sidebarState.channelIndex, chArr.length - 1));
                 sidebarState.channelIndex = idx;
                 focusChannelItem(idx);
                 handled = true;
             }
         } else {
             // Focus current category
-            var categories = document.querySelectorAll('.category-item');
-            if (categories.length > 0) {
-                var idx = Math.max(0, Math.min(sidebarState.categoryIndex, categories.length - 1));
+            var catArr2 = _getSidebarCategories();
+            if (catArr2.length > 0) {
+                var idx = Math.max(0, Math.min(sidebarState.categoryIndex, catArr2.length - 1));
                 sidebarState.categoryIndex = idx;
                 focusCategoryItem(idx);
                 handled = true;
@@ -2987,7 +2954,7 @@ function handleKeydown(e) {
         closePlayer();
         // Brief wait for Samsung TV hardware to release decoder before navigating
         setTimeout(function () {
-            window.location.href = 'channels.html';
+            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'channels.html'; }
         }, 60);
         return;
     }

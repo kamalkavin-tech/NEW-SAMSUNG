@@ -100,7 +100,7 @@ window.onload = function () {
 
         el.addEventListener("click", function () {
             if (el.classList.contains('back-btn') || el.classList.contains('back-link')) {
-                window.location.href = 'home.html';
+                if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
                 return;
             }
             if (el.classList.contains('submit-btn')) {
@@ -129,7 +129,7 @@ document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     if (code === 10009) { // Back
         e.preventDefault();
-        window.location.href = 'home.html';
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 
@@ -287,7 +287,7 @@ function submitFeedback() {
 
             if (errCode === 0) {
                 showPopup("Thank you for your feedback!", function () {
-                    window.location.href = 'home.html';
+                    if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
                 });
             } else {
                 console.error("[Feedback] ❌ Error code:", errCode);

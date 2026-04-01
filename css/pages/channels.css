@@ -371,7 +371,7 @@ body.channels-page-pills {
     min-width: 200px;
     max-height: 300px;
     overflow-y: auto;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 1000;
 }
@@ -416,6 +416,8 @@ body.channels-page-pills {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box;
+    transform: translateZ(0); /* GPU compositing for scroll container */
+    will-change: scroll-position;
 }
 
 /* Section Headers */
@@ -438,17 +440,18 @@ body.channels-page-pills {
     margin: 0;
     padding: 0;
     width: 100% !important;
-    contain: layout style; /* Limit repaint scope to grid only */
+    contain: layout style paint; /* Limit repaint scope to grid only */
+    transform: translateZ(0); /* Force GPU compositing layer */
+    will-change: transform;
 }
 
+/* Grid appears instantly — no opacity/transform animation on TV */
 .channels-grid-smooth {
-    opacity: 0;
-    transform: translateY(4px);
+    opacity: 1;
 }
 
 .channels-grid-smooth.is-visible {
     opacity: 1;
-    transform: translateY(0);
 }
 
 #channel-grid-container.channels-loading .channels-grid {
@@ -460,9 +463,9 @@ body.channels-page-pills {
    ========================================== */
 
 .channel-card {
-    background: linear-gradient(145deg, #1a1a2e 0%, #16162a 50%, #0f0f1a 100%);
+    background: #16162a;
     border-radius: 12px;
-    overflow: visible;
+    overflow: hidden;
     cursor: pointer;
     position: relative;
     display: flex;
@@ -472,9 +475,10 @@ body.channels-page-pills {
     padding: 10px;
     height: 155px;
     border: 2px solid rgba(255, 255, 255, 0.08);
-    contain: layout style;
+    contain: layout style paint; /* Full containment — isolates repaint */
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+    transform: translateZ(0); /* GPU layer per card */
 }
 
 .channel-card:hover,
@@ -508,7 +512,7 @@ body.channels-page-pills {
     position: absolute;
     top: 6px;
     right: 6px;
-    background: linear-gradient(135deg, #10b981, #059669);
+    background: #10b981;
     color: #ffffff;
     padding: 4px 10px;
     border-radius: 6px;
@@ -545,7 +549,7 @@ body.channels-page-pills {
 .channel-logo-placeholder {
     width: 80px;
     height: 80px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #667eea;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -553,7 +557,6 @@ body.channels-page-pills {
     color: #ffffff;
     font-size: 28px;
     font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
     /* filter removed for TV performance */
 }
 
@@ -565,7 +568,7 @@ body.channels-page-pills {
 .no-logo-text {
     width: 60px;
     height: 60px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #667eea;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -573,7 +576,6 @@ body.channels-page-pills {
     font-size: 26px;
     font-weight: 700;
     color: #ffffff;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* ==========================================
@@ -628,7 +630,7 @@ body.channels-page-pills {
     font-weight: 700;
     text-transform: uppercase;
     z-index: 2;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
 }
 
 .live-dot {
@@ -654,7 +656,7 @@ body.channels-page-pills {
     font-weight: 600;
     text-transform: capitalize;
     z-index: 2;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    box-shadow: none;
     max-width: calc(100% - 80px);
     white-space: nowrap;
     overflow: hidden;

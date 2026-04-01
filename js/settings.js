@@ -311,7 +311,7 @@ document.addEventListener("keydown", function (e) {
 
     // BACK key - always go home
     if (code === 10009) {
-        window.location.href = 'home.html';
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 
@@ -441,7 +441,7 @@ function handleEnter() {
 
     // Back button
     if (active.classList.contains('back-btn')) {
-        window.location.href = 'home.html';
+        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
         return;
     }
 
