@@ -2,19 +2,47 @@
    BBNL Feedback CONTROLLER
    ================================ */
 
+// ✅ NEW: Recover failed images from persistent cache on app load
+(function initImageRecovery() {
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+    }
+})();
+
 // Check authentication - redirect to login if never logged in
 // NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
-    }
     try {
-        var ud = localStorage.getItem("bbnl_user");
-        if (!ud || !JSON.parse(ud).userid) {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) {
             window.location.replace("login.html");
             return;
+        }
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
         }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
@@ -25,6 +53,11 @@
 
 var focusables = [];
 var currentFocus = 0;
+
+function navigateToHomeFromFeedback() {
+    window.__BBNL_NAVIGATING = true;
+    window.location.replace('home.html');
+}
 
 function isElementVisible(el) {
     if (!el) return false;
@@ -100,7 +133,8 @@ window.onload = function () {
 
         el.addEventListener("click", function () {
             if (el.classList.contains('back-btn') || el.classList.contains('back-link')) {
-                if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+                window.__BBNL_NAVIGATING = true;
+                window.location.replace('home.html');
                 return;
             }
             if (el.classList.contains('submit-btn')) {
@@ -129,7 +163,7 @@ document.addEventListener("keydown", function (e) {
     var code = e.keyCode;
     if (code === 10009) { // Back
         e.preventDefault();
-        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+        navigateToHomeFromFeedback();
         return;
     }
 
@@ -287,7 +321,7 @@ function submitFeedback() {
 
             if (errCode === 0) {
                 showPopup("Thank you for your feedback!", function () {
-                    if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+                    navigateToHomeFromFeedback();
                 });
             } else {
                 console.error("[Feedback] ❌ Error code:", errCode);

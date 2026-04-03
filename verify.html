@@ -15,12 +15,45 @@
                 // If _pendingOTP exists, user came from login flow — stay on verify page
                 if (sessionStorage.getItem("_pendingOTP")) return;
 
-                // No pending mobile — returning user, redirect to home if session is valid
-                if (localStorage.getItem("hasLoggedInOnce") === "true") {
-                    var ud = localStorage.getItem("bbnl_user");
-                    if (ud && JSON.parse(ud).userid) {
-                        window.location.replace("home.html");
+                function readResolvedUser() {
+                    var primaryRaw = localStorage.getItem("bbnl_user");
+                    var backupRaw = localStorage.getItem("bbnl_user_backup");
+                    var primaryUser = null;
+                    var backupUser = null;
+
+                    if (primaryRaw) {
+                        try {
+                            var parsedPrimary = JSON.parse(primaryRaw);
+                            if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+                        } catch (e1) {}
                     }
+
+                    if (backupRaw) {
+                        try {
+                            var parsedBackup = JSON.parse(backupRaw);
+                            if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                        } catch (e2) {}
+                    }
+
+                    var resolvedUser = primaryUser || backupUser;
+                    if (!resolvedUser) return null;
+
+                    var resolvedJson = JSON.stringify(resolvedUser);
+                    if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+                    if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+                    if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+                        localStorage.setItem("hasLoggedInOnce", "true");
+                    }
+                    return resolvedUser;
+                }
+
+                var resolvedUser = readResolvedUser();
+                if (resolvedUser) {
+                    sessionStorage.removeItem('fofi_autoplay_done');
+                    sessionStorage.removeItem('home_init_done');
+                    localStorage.removeItem('bbnl_relaunch_pending');
+                    window.location.replace("home.html");
+                    return;
                 }
             } catch (e) {}
         })();

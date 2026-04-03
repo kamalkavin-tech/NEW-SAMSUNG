@@ -13,11 +13,15 @@
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body class="ott-apps-page" style="background-color: #0d121c !important;">
+<body style="background-color: #000000 !important; overflow: hidden;">
+    <style>
+        body { background: #000 !important; }
+        .ott-content.blurred, .ott-header.blurred { opacity: 0 !important; transition: opacity 0.3s ease; }
+    </style>
 
     <!-- Fixed Header (Same style as Channels page) -->
     <div class="ott-header">
-        <button class="back-btn focusable" tabindex="0" onclick="if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }">
+        <button class="back-btn focusable" tabindex="0" onclick="window.__BBNL_NAVIGATING = true; window.location.replace('home.html');">
             <span class="back-icon">←</span>
         </button>
         <h1 class="page-title">OTT Apps</h1>

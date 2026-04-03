@@ -13,7 +13,7 @@
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
-<body class="player-page" style="background:#000;">
+<body class="player-page" style="background:transparent !important;">
     <!-- Inline loading screen — visible instantly while JS loads, removed by player.js -->
     <div id="page-loading" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;z-index:99999;font-size:20px;">Loading Channel...</div>
     <div id="player-container">
@@ -76,7 +76,7 @@
 
         </div>
 
-        <div class="player-overlay visible">
+        <div class="player-overlay visible" id="player-overlay" tabindex="-1">
             <!-- Gradient background only - info bar moved outside for correct z-index stacking -->
         </div>
     </div>
@@ -139,7 +139,9 @@
                 <span class="error-popup-info-label" style="margin-left: 12px;">User ID:</span>
                 <span class="error-popup-info-value" id="popupUserId">--</span>
             </div>
-            <button class="error-popup-btn focusable" id="playerRetryBtn" tabindex="0">Try Again</button>
+            <div class="error-popup-buttons">
+                <button class="error-popup-btn focusable" id="playerRetryBtn" tabindex="0">Pay Now</button>
+            </div>
         </div>
     </div>
 
@@ -148,7 +150,7 @@
         <div class="numpad-container">
             <div class="numpad-title">CHANNEL NUMBER</div>
             <input type="tel" id="channel-number-field" class="numpad-input"
-                inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                inputmode="numeric" pattern="[0-9]*"
                 placeholder="----" autocomplete="off" tabindex="0">
         </div>
     </div>

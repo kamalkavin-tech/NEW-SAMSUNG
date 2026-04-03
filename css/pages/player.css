@@ -486,7 +486,7 @@ video {
     width: 420px;
     height: 100%;
     background: rgba(6, 6, 14, 0.96);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: none;
     contain: layout style paint;
     z-index: 2100; /* Above error popup (2000) so sidebar overrides it */
     display: flex;

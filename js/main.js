@@ -16,22 +16,39 @@ var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fi
 
     // If user has logged in before AND has valid session data, skip login pages and go to home
     if (isAuthPage) {
-        var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-        if (hasLoggedInOnce === "true") {
-            // Also validate bbnl_user has actual user data before redirecting
-            // If bbnl_user is missing/invalid, stay on login so user can re-authenticate
-            try {
-                var userData = localStorage.getItem("bbnl_user");
-                if (userData) {
-                    var user = JSON.parse(userData);
-                    if (user && user.userid) {
-                        window.location.replace("home.html");
-                        return;
-                    }
+        try {
+            var primaryRaw = localStorage.getItem("bbnl_user");
+            var backupRaw = localStorage.getItem("bbnl_user_backup");
+            var primaryUser = null;
+            var backupUser = null;
+
+            if (primaryRaw) {
+                try {
+                    var parsedPrimary = JSON.parse(primaryRaw);
+                    if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+                } catch (e1) {}
+            }
+
+            if (backupRaw) {
+                try {
+                    var parsedBackup = JSON.parse(backupRaw);
+                    if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                } catch (e2) {}
+            }
+
+            var resolvedUser = primaryUser || backupUser;
+            if (resolvedUser) {
+                var resolvedJson = JSON.stringify(resolvedUser);
+                if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+                if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+                if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+                    localStorage.setItem("hasLoggedInOnce", "true");
                 }
-            } catch (e) {}
-            // hasLoggedInOnce=true but bbnl_user invalid — stay on login for re-auth
-        }
+                window.__BBNL_NAVIGATING = true;
+                window.location.replace("home.html");
+                return;
+            }
+        } catch (e) {}
     }
 })();
 
@@ -580,6 +597,19 @@ document.addEventListener("keydown", function (e) {
                 return;
             }
 
+            // Arrow keys: navigate to other focusable elements
+            if (e.keyCode === 38 || e.keyCode === 40 || e.keyCode === 37 || e.keyCode === 39) {
+                e.preventDefault();
+                if (e.keyCode === 40 || e.keyCode === 39) {
+                    // DOWN or RIGHT - move to next focusable element
+                    moveFocus(1);
+                } else {
+                    // UP or LEFT - move to previous focusable element
+                    moveFocus(-1);
+                }
+                return;
+            }
+
             // Allow native input handling for digits/backspace/delete.
             if ((e.keyCode >= 48 && e.keyCode <= 57) ||
                 (e.keyCode >= 96 && e.keyCode <= 105) ||
@@ -681,6 +711,7 @@ function handleOK() {
 
     // LANDING PAGE: Start Watching Button
     if (active.id === "proceedBtn") {
+        window.__BBNL_NAVIGATING = true;
         window.location.href = "login.html";
         return;
     }
@@ -741,6 +772,7 @@ function handleOK() {
                         sessionStorage.setItem('_pendingMobile', val);
 
                         // Navigate to verify page (mobile passed via sessionStorage, not URL)
+                        window.__BBNL_NAVIGATING = true;
                         window.location.href = "verify.html";
                     } else {
                         // Reset flag and button on error
@@ -798,6 +830,7 @@ function handleOK() {
             // If mobile is missing, redirect back to login
             if (!mobile) {
                 console.error("[Verify] Missing mobile - redirecting to login");
+                window.__BBNL_NAVIGATING = true;
                 window.location.replace("login.html");
                 return;
             }
@@ -816,14 +849,15 @@ function handleOK() {
                 if (pendingSession) {
                     try { AuthAPI.setSession(JSON.parse(pendingSession)); } catch (e) {}
                 }
-                sessionStorage.removeItem('_pendingOTP');
-                sessionStorage.removeItem('_pendingMobile');
-                sessionStorage.removeItem('_pendingSession');
+                localStorage.setItem('_pendingOTP', ''); // Clear pending OTP safely
+                localStorage.setItem('hasLoggedInOnce', 'true');
                 localStorage.setItem('isLoggedIn', 'true');
                 localStorage.setItem('mobile', mobile);
                 localStorage.setItem('loginTime', new Date().toISOString());
-                localStorage.setItem('hasLoggedInOnce', 'true');
-
+                
+                // Ensure backup is also set immediately via setSession logic
+                // No manual backup needed here as AuthAPI.setSession already manages it properly
+                window.__BBNL_NAVIGATING = true;
                 window.location.replace("home.html");
             } else {
                 otpVerifyInProgress = false;

@@ -12,19 +12,48 @@
    8. DOWN from Back/Search: Move to tabs
    ================================ */
 
+// ✅ NEW: Recover failed images from persistent cache on app load
+// This ensures images that disappeared after app restart are retried
+(function initImageRecovery() {
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+    }
+})();
+
 // Check authentication - redirect to login if never logged in
 // NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
-    }
     try {
-        var userData = localStorage.getItem("bbnl_user");
-        if (!userData || !JSON.parse(userData).userid) {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) {
             window.location.replace("login.html");
             return;
+        }
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
         }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
@@ -63,7 +92,8 @@ try {
     }
 } catch(e) {}
 
-window.addEventListener('beforeunload', function() {
+// NOTE: Using 'pagehide' instead of 'beforeunload' to allow BFCache.
+window.addEventListener('pagehide', function() {
     try {
         var cleanMap = {};
         for (var k in channelLogoSourceMap) {
@@ -81,6 +111,23 @@ var channelsSearchActivated = false; // Only activate keypad after explicit user
 var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
 var CHANNELS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes — reduces API calls on page navigation
+var channelsPageExiting = false;
+
+function exitChannelsToHome() {
+    channelsPageExiting = true;
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+        searchTimeout = null;
+    }
+    try { hideErrorPopups(); } catch (e) {}
+    setChannelsLoadingState(false);
+
+    window.__BBNL_NAVIGATING = true;
+    sessionStorage.removeItem('selectedLanguageId');
+    sessionStorage.removeItem('selectedLanguageName');
+    sessionStorage.setItem('returningFromChannels', 'true');
+    window.location.replace("home.html");
+}
 
 function normalizeChannelLogoKey(url) {
     if (!url) return '';
@@ -134,16 +181,29 @@ function resolveChannelAssetUrl(rawUrl) {
     return value;
 }
 
-window.addEventListener('beforeunload', function () {
+// NOTE: Using 'pagehide' instead of 'beforeunload' to allow BFCache.
+window.addEventListener('pagehide', function () {
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
         AppPerformanceCache.savePageState('channels', {
             focusIndex: currentFocus,
-            // Do not persist transient LCN search input between navigations.
             searchText: '',
             currentCategory: currentCategory,
             currentLanguage: currentLanguage,
             scrollTop: window.scrollY || 0
         });
+    }
+});
+
+// BFCache restoration: skip heavy re-initialization when page is restored from cache.
+var _channelsPageInitialized = false;
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted && _channelsPageInitialized) {
+        // Page restored from BFCache — DOM, JS state, images all intact!
+        // Just re-register remote keys.
+        if (typeof RemoteKeys !== 'undefined') {
+            RemoteKeys.registerAllKeys();
+        }
+        return; // Skip window.onload entirely
     }
 });
 
@@ -250,6 +310,18 @@ async function initPage() {
     var selectedLangId = sessionStorage.getItem('selectedLanguageId') || '';
     var selectedLangName = sessionStorage.getItem('selectedLanguageName') || '';
 
+    // Normalize "all" sentinel values to empty filter so first render never queries langid=all.
+    var normalizedLangId = String(selectedLangId || '').trim().toLowerCase();
+    if (normalizedLangId === 'all' || normalizedLangId === 'all channels') {
+        selectedLangId = '';
+        try {
+            sessionStorage.removeItem('selectedLanguageId');
+            if (!selectedLangName || String(selectedLangName).trim().toLowerCase() === 'all channels') {
+                sessionStorage.removeItem('selectedLanguageName');
+            }
+        } catch (e) {}
+    }
+
     // Build channel load options from language filter
     var channelOptions = {};
     if (selectedLangId === 'subs' || (selectedLangName && selectedLangName.toLowerCase().indexOf('subscribed') !== -1)) {
@@ -313,6 +385,9 @@ async function initPage() {
 
     refreshFocusables();
     setInitialFocus();
+    
+    // Mark as initialized for BFCache pageshow support
+    _channelsPageInitialized = true;
 }
 
 /**
@@ -395,6 +470,7 @@ function renderLanguagePills(languages) {
     // Determine which pill should be active
     var activeLangId = sessionStorage.getItem('selectedLanguageId') || '';
     var activeLangName = sessionStorage.getItem('selectedLanguageName') || '';
+    var normalizedActiveLangId = String(activeLangId || '').trim().toLowerCase();
 
     var fragment = document.createDocumentFragment();
 
@@ -419,6 +495,7 @@ function renderLanguagePills(languages) {
         if (activeLangId) {
             if (activeLangId === langId) pill.classList.add('active');
             else if (activeLangId === 'subs' && langName.toLowerCase().indexOf('subscribed') !== -1) pill.classList.add('active');
+            else if ((normalizedActiveLangId === 'all' || normalizedActiveLangId === 'all channels') && isAllChannels) pill.classList.add('active');
         } else if (!activeLangName && index === 0) {
             pill.classList.add('active');
         }
@@ -431,8 +508,13 @@ function renderLanguagePills(languages) {
             pill.classList.add('active');
 
             // Store selection
-            sessionStorage.setItem('selectedLanguageId', langId);
-            sessionStorage.setItem('selectedLanguageName', langName);
+            if (!langId || langId === '' || isAllChannels) {
+                sessionStorage.removeItem('selectedLanguageId');
+                sessionStorage.removeItem('selectedLanguageName');
+            } else {
+                sessionStorage.setItem('selectedLanguageId', langId);
+                sessionStorage.setItem('selectedLanguageName', langName);
+            }
 
             // Load channels with language filter
             if (!langId || langId === '' || isAllChannels) {
@@ -1057,6 +1139,8 @@ function getChannelCardLogo(ch) {
 // ==========================================
 
 function showErrorPopup(type) {
+    if (channelsPageExiting) return;
+
     // Set error images from API
     if (typeof ErrorImagesAPI !== 'undefined') {
         if (type === 'channels') {
@@ -1115,6 +1199,8 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 async function loadChannels(options = {}) {
+    if (channelsPageExiting) return;
+
     const container = document.getElementById("channel-grid-container");
     if (!container) return;
 
@@ -1124,6 +1210,12 @@ async function loadChannels(options = {}) {
         search: options.search || "",
         subscribed: options.subscribed || ""
     };
+
+    // Guard: never send synthetic "all" as lang filter (backend treats it as a real langid and returns empty).
+    var normalizedApiLangId = String(apiOptions.langid || '').trim().toLowerCase();
+    if (normalizedApiLangId === 'all' || normalizedApiLangId === 'all channels') {
+        apiOptions.langid = '';
+    }
 
     // Fast path: render from in-memory cache when user switches back to an already loaded category.
     var cachedChannels = getCachedChannels(apiOptions);
@@ -1150,6 +1242,8 @@ async function loadChannels(options = {}) {
                 CacheManager.remove(CacheManager.KEYS.CATEGORIES);
             }
             clearChannelsResultCache();
+            masterChannelList = [];
+            masterListLoaded = false;
             sessionStorage.removeItem('subscription_completed');
         }
 
@@ -1235,6 +1329,8 @@ async function loadChannels(options = {}) {
 }
 
 function renderAllChannels(channels) {
+    if (channelsPageExiting) return;
+
     var container = document.getElementById("channel-grid-container");
 
     // Store currently displayed channels for LCN search
@@ -1411,14 +1507,10 @@ function createChannelCard(ch, loadImmediate) {
         img.alt = chName;
         img.className = "channel-logo-img";
 
-        // FAST PATH: If image is in persistent blob cache (same session), set src directly
-        var blobCached = typeof _BLOB_CACHE !== 'undefined' && _BLOB_CACHE[normalizedLogo];
-        
-        if (blobCached) {
-            img.src = _BLOB_CACHE[normalizedLogo];
-        } else if (alreadyCached) {
-            // RETURNING FROM ANOTHER PAGE: We know this URL worked before.
-            // Use setImageSource to properly fetch+blob on Tizen (never set dead blob URLs directly).
+        // ✅ FIX: Don't use blob URL cache - use original URLs directly
+        // Blob URLs are temporary and become invalid after re-renders
+        if (alreadyCached && loadImmediate) {
+            // Visible card returned from another page - load immediately
             var cachedHttpUrl = channelLogoSourceMap[logoKey] || normalizedLogo;
             if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
                 BBNL_API.setImageSource(img, cachedHttpUrl);
@@ -1583,14 +1675,7 @@ document.addEventListener("keydown", function (e) {
             if (firstPill) firstPill.focus();
             return;
         }
-        sessionStorage.removeItem('selectedLanguageId');
-        sessionStorage.removeItem('selectedLanguageName');
-        sessionStorage.setItem('returningFromChannels', 'true');
-        if (window.history.length > 1) { 
-            window.history.back(); 
-        } else { 
-            window.location.href = "home.html"; 
-        }
+        exitChannelsToHome();
         return;
     }
 
@@ -2096,7 +2181,7 @@ function handleEnter(el) {
 
 
     if (el.classList.contains('back-btn')) {
-        window.location.href = "home.html";
+        exitChannelsToHome();
         return;
     }
 

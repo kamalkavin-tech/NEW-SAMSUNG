@@ -166,18 +166,36 @@ function showFoFiLogo(logoUrl) {
 }
 
 // Clean up background intervals when leaving page
-window.addEventListener('beforeunload', function () {
-    if (homeAdInterval) clearInterval(homeAdInterval);
-    if (homeNetworkInterval) clearInterval(homeNetworkInterval);
-
+// NOTE: Using 'pagehide' instead of 'beforeunload' to allow BFCache.
+// 'beforeunload' actively blocks the browser's Back-Forward Cache,
+// forcing full page rebuilds on every back-navigation.
+// Clean up background intervals when leaving page
+// NOTE: Using 'pagehide' instead of 'beforeunload' to allow BFCache.
+window.addEventListener('pagehide', function () {
     // Persist basic UI state so returning to Home feels instant.
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
-        var searchEl = document.getElementById('searchInput');
         AppPerformanceCache.savePageState('home', {
             focusIndex: currentFocus,
             searchText: '',
             scrollTop: window.scrollY || 0
         });
+    }
+});
+
+// BFCache restoration: When user presses Back to return here,
+// the browser may restore this page from memory (BFCache).
+// In that case, skip all heavy initialization — page is already complete.
+var _homePageInitialized = false;
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted && _homePageInitialized) {
+        // Page restored from BFCache — everything is still intact (DOM, JS variables, etc.)
+        // No need to clear/restart intervals as browser manages them during BFCache.
+        
+        // Re-register remote keys (some TV models lose them on BFCache restore)
+        if (typeof RemoteKeys !== 'undefined') {
+            RemoteKeys.registerAllKeys();
+        }
+        return; 
     }
 });
 
@@ -204,40 +222,99 @@ var fofiShouldAutoPlay = false;
 
 // Check authentication - redirect to login if never logged in
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
+    var attempts = 0;
+    var maxAttempts = 10;
+    var pollDelayMs = 100;
+
+    function authDebug(message, details) {
+        try {
+            if (!(window.__BBNL_DEBUG || localStorage.getItem('__bbnl_auth_debug') === '1')) return;
+            if (typeof details !== 'undefined') console.log('[HomeAuth]', message, details);
+            else console.log('[HomeAuth]', message);
+        } catch (e) {}
     }
 
-    // Validate bbnl_user has actual user data — try backup if primary is missing/corrupted
-    try {
-        var userData = localStorage.getItem("bbnl_user");
-        var user = null;
-        try { user = userData ? JSON.parse(userData) : null; } catch (pe) { user = null; }
+    function readResolvedUser() {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
 
-        // Try backup if primary is missing or corrupted
-        if (!user || !user.userid) {
-            var backup = localStorage.getItem("bbnl_user_backup");
-            try { user = backup ? JSON.parse(backup) : null; } catch (pe2) { user = null; }
-            if (user && user.userid) {
-                localStorage.setItem("bbnl_user", JSON.stringify(user));
-            }
+        authDebug('Reading session keys', {
+            hasPrimary: !!primaryRaw,
+            hasBackup: !!backupRaw,
+            hasLoggedInOnce: localStorage.getItem('hasLoggedInOnce'),
+            relaunchPending: localStorage.getItem('bbnl_relaunch_pending')
+        });
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+                else authDebug('Primary parsed but missing userid', parsedPrimary);
+            } catch (e1) {}
         }
 
-        if (!user || !user.userid) {
-            window.location.replace("login.html");
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                else authDebug('Backup parsed but missing userid', parsedBackup);
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) return null;
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
+            authDebug('Repaired hasLoggedInOnce flag');
+        }
+        authDebug('Resolved valid session user', resolvedUser);
+        return resolvedUser;
+    }
+
+    function redirectLogin() {
+        window.location.replace("login.html");
+    }
+
+    try {
+        var resolvedUser = readResolvedUser();
+        if (resolvedUser) {
+            authDebug('Session valid, staying on home', resolvedUser);
+            // Clear browser history to prevent back navigation to login pages
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.href);
+            }
             return;
         }
+
+        var authPollInterval = setInterval(function () {
+            attempts++;
+            var retryUser = readResolvedUser();
+            if (retryUser) {
+                clearInterval(authPollInterval);
+                authDebug('Session appeared during polling, staying on home', retryUser);
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', window.location.href);
+                }
+                return;
+            }
+
+            if (attempts >= maxAttempts) {
+                clearInterval(authPollInterval);
+                authDebug('No session after polling, redirecting to login');
+                redirectLogin();
+            }
+        }, pollDelayMs);
     } catch (e) {
         console.error("[Auth] Error validating session - redirecting to login:", e);
-        window.location.replace("login.html");
+        authDebug('Auth check threw exception', String(e && e.message || e));
+        redirectLogin();
         return;
-    }
-
-    // Clear browser history to prevent back navigation to login pages
-    if (window.history && window.history.replaceState) {
-        window.history.replaceState(null, '', window.location.href);
     }
 })();
 
@@ -246,6 +323,16 @@ window.onload = function () {
 
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
         AppPerformanceCache.primeAfterLogin(false);
+    }
+
+    // Start background subscription refresh (5-minute interval)
+    if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.startBackgroundRefresh) {
+        ChannelsAPI.startBackgroundRefresh();
+    }
+    // Also trigger one immediate safe refresh on app launch so relaunch picks up
+    // subscription/category updates without waiting for the interval tick.
+    if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.forceSubscriptionRefresh) {
+        ChannelsAPI.forceSubscriptionRefresh().catch(function() {});
     }
 
     // Get all focusable elements
@@ -303,6 +390,14 @@ window.onload = function () {
             e.stopPropagation();
             var targetRoute = btn.getAttribute('data-route');
             if (targetRoute) {
+                // [Navigation Optimization] Do not reload page if already on it
+                if (targetRoute === currentPage || (targetRoute === 'home.html' && currentPage === '')) {
+                   console.log("[Home] Navigation skipped: already on " + targetRoute);
+                   return;
+                }
+                
+                // [Critical] Mark interior navigation to prevent exit on visibilitychange.
+                window.__BBNL_NAVIGATING = true;
                 window.location.href = targetRoute;
             }
         });
@@ -386,6 +481,8 @@ window.onload = function () {
             if (BBNL_API.getLanguageList) BBNL_API.getLanguageList().catch(function(){});
         }
     }, 1500); // 1.5 seconds after home page loads
+
+    _homePageInitialized = true;
 };
 
 // Keyboard navigation
@@ -798,6 +895,7 @@ function handleClick(element) {
 
     // Settings button - explicit handler
     if (element.classList.contains('settings-btn')) {
+        window.__BBNL_NAVIGATING = true;
         window.location.href = "settings.html";
         return;
     }
@@ -805,6 +903,7 @@ function handleClick(element) {
     // Check for data-route attribute first (highest priority)
     var route = element.getAttribute('data-route');
     if (route) {
+        window.__BBNL_NAVIGATING = true;
         window.location.href = route;
         return;
     }
@@ -812,7 +911,8 @@ function handleClick(element) {
     // Check if it's an app card
     var appType = element.getAttribute('data-app');
     if (appType) {
-        // Add your app opening logic here
+        // [Safety Check] Mark navigation in case the app opening logic triggers a URL change later
+        window.__BBNL_NAVIGATING = true;
         return;
     }
 
@@ -820,10 +920,7 @@ function handleClick(element) {
     var channelType = element.getAttribute('data-channel');
     if (channelType) {
         // Navigate to player, let player.js find the details
-        // We pass 'channel_name' as query param.
-        // Note: The data-channel attribute might be short code (e.g. 'udaya'), so we might need a better mapping
-        // OR we rely on player.js fuzzy search.
-        // Let's pass it as a special "name" look up
+        window.__BBNL_NAVIGATING = true;
         window.location.href = "player.html?name=" + encodeURIComponent(channelType);
         return;
     }
@@ -872,6 +969,7 @@ function handleClick(element) {
     if (element.classList.contains('view-all')) {
         // Check which section we are in
         var parentSection = element.closest('.content-section');
+        window.__BBNL_NAVIGATING = true;
         if (parentSection && parentSection.querySelector('h2').innerText.includes('OTT')) {
             window.location.href = "ott-apps.html";
         } else {
@@ -897,6 +995,7 @@ function handleClick(element) {
         }
         
         // Navigate to channels page with language filter
+        window.__BBNL_NAVIGATING = true;
         window.location.href = 'channels.html?lang=' + encodeURIComponent(langId);
         return;
     }
@@ -1089,6 +1188,7 @@ function loadHomeChannels() {
         if (typeof CacheManager !== 'undefined') {
             CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
         }
+        try { sessionStorage.removeItem('home_channels_cache'); } catch (e) {}
         sessionStorage.removeItem('subscription_completed');
     }
 
@@ -1239,7 +1339,8 @@ function renderChannelsInHomeGrid(channels) {
 function handleChannelCardClick(channel) {
 
     // Use BBNL_API.playChannel to navigate to player
-    BBNL_API.playChannel(channel);
+    // Pass 'subs' as category so CH+/CH- zapping only cycles subscribed channels
+    BBNL_API.playChannel(channel, 'subs');
 }
 
 /**
@@ -1856,26 +1957,19 @@ function cancelExit() {
     hideExitConfirmation();
 }
 
-// Initialize exit popup buttons
+// Initialize static UI elements at DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function () {
+    // If returning from BFCache, everything below is already set up.
+    if (typeof _homePageInitialized !== 'undefined' && _homePageInitialized) return;
+
     var exitYesBtn = document.getElementById('exitYesBtn');
     var exitNoBtn = document.getElementById('exitNoBtn');
+    if (exitYesBtn) exitYesBtn.addEventListener('click', confirmExit);
+    if (exitNoBtn) exitNoBtn.addEventListener('click', cancelExit);
 
-    if (exitYesBtn) {
-        exitYesBtn.addEventListener('click', confirmExit);
-    }
-
-    if (exitNoBtn) {
-        exitNoBtn.addEventListener('click', cancelExit);
-    }
-
-    // App lock retry button
     var appLockRetryBtn = document.getElementById('appLockRetryBtn');
-    if (appLockRetryBtn) {
-        appLockRetryBtn.addEventListener('click', retryAppLockCheck);
-    }
+    if (appLockRetryBtn) appLockRetryBtn.addEventListener('click', retryAppLockCheck);
 
-    // App update popup OK button - just dismiss the popup
     var appUpdateOkBtn = document.getElementById('appUpdateOkBtn');
     if (appUpdateOkBtn) {
         appUpdateOkBtn.addEventListener('click', function () {
@@ -1883,6 +1977,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (popup) popup.style.display = 'none';
         });
     }
+
+    // Initialize UI features immediately
+    initDarkMode();
+    initNetworkStatus();
+    
+    // Send analytics view event (only on fresh load)
+    sendTRPDataOnLoad();
 });
 
 // ==========================================
@@ -2103,10 +2204,18 @@ function hideHomeErrorPopups() {
 // On Samsung TV, window.load can be delayed by seconds waiting for images/CSS.
 // DOMContentLoaded fires as soon as HTML is parsed and scripts executed - much faster.
 document.addEventListener('DOMContentLoaded', function () {
+    if (typeof _homePageInitialized !== 'undefined' && _homePageInitialized) return;
 
     // Initialize UI features immediately
     initDarkMode();
     initNetworkStatus();
+
+    // ✅ NEW: Recover failed images from previous sessions
+    // If images disappeared after app restart, retry them now
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+        console.log('[Home] Retrying failed images from persistent cache');
+    }
 
     // Fast-path: detect return visit within same session
     // On return visits, sessionStorage cache is warm → skip IP wait and startup API calls

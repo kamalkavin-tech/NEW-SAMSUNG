@@ -4,22 +4,52 @@
    Navigation: Header ↔ Apps Grid
    ================================ */
 
+// ✅ NEW: Recover failed images from persistent cache on app load
+(function initImageRecovery() {
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+    }
+})();
+
 // Check authentication - redirect to login if never logged in
 // NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
-    }
     try {
-        var ud = localStorage.getItem("bbnl_user");
-        if (!ud || !JSON.parse(ud).userid) {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) {
+            window.__BBNL_NAVIGATING = true;
             window.location.replace("login.html");
             return;
         }
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
+        }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.__BBNL_NAVIGATING = true;
         window.location.replace("login.html");
         return;
     }
@@ -30,7 +60,24 @@ var currentFocus = 0;
 var currentZone = 'apps'; // 'header' or 'apps'
 var ottComingSoonPopupOpen = false;
 
+function navigateToHomeFromOtt() {
+    window.__BBNL_NAVIGATING = true;
+    window.location.replace('home.html');
+}
+
+var _ottAppsPageInitialized = false;
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted && _ottAppsPageInitialized) {
+        // Page restored from BFCache — restore remote keys
+        if (typeof RemoteKeys !== 'undefined') {
+            RemoteKeys.registerAllKeys();
+        }
+        return; 
+    }
+});
+
 window.onload = function () {
+    _ottAppsPageInitialized = true;
 
     // Initialize Dark Mode from localStorage
     initDarkMode();
@@ -57,7 +104,7 @@ window.onload = function () {
     if (retryBtn) {
         retryBtn.focus();
         retryBtn.addEventListener('click', function() {
-            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+            navigateToHomeFromOtt();
         });
     }
 
@@ -101,7 +148,7 @@ document.addEventListener('keydown', function (e) {
     if (ottComingSoonPopupOpen) {
         e.preventDefault();
         if (e.keyCode === 13 || e.keyCode === 10009) {
-            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+            navigateToHomeFromOtt();
         }
         return;
     }
@@ -153,7 +200,7 @@ document.addEventListener('keydown', function (e) {
             break;
         case 10009: // BACK
             e.preventDefault();
-            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+            navigateToHomeFromOtt();
             break;
     }
 });
@@ -324,7 +371,7 @@ function handleClick(element) {
 
     // Back button or Go Back button clicked
     if (element.classList.contains('back-btn') || element.id === 'retryAppsBtn') {
-        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+        navigateToHomeFromOtt();
         return;
     }
 
@@ -590,8 +637,17 @@ function isNetworkDisconnected() {
 function showComingSoonPopup() {
     var popup = document.getElementById("noAppsPopup");
     var appsGrid = document.getElementById("appsGrid");
+    var content = document.querySelector(".ott-content");
+    var header = document.querySelector(".ott-header");
 
     if (popup) {
+        // Blur background content
+        if (content) content.classList.add("blurred");
+        if (header) header.classList.add("blurred");
+        
+        popup.style.display = "flex";
+        ottComingSoonPopupOpen = true;
+
         var titleEl = popup.querySelector(".error-popup-title");
         var msgEl = popup.querySelector(".error-popup-message");
         var img = document.getElementById("errorImg_comingSoonOtt");

@@ -2,19 +2,47 @@
    BBNL IPTV - LANGUAGE SELECT PAGE CONTROLLER
    ================================ */
 
+// ✅ NEW: Recover failed images from persistent cache on app load
+(function initImageRecovery() {
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+    }
+})();
+
 // Check authentication - redirect to login if never logged in
 // NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
-    }
     try {
-        var ud = localStorage.getItem("bbnl_user");
-        if (!ud || !JSON.parse(ud).userid) {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) {
             window.location.replace("login.html");
             return;
+        }
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
         }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);

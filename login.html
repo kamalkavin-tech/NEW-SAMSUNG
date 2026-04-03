@@ -12,29 +12,105 @@
     <script>
         (function () {
             try {
-                // Always clear FoFi flag on every app launch (login.html is the entry point).
-                sessionStorage.removeItem('fofi_autoplay_done');
-                sessionStorage.removeItem('home_init_done');
+                var RELAUNCH_WAIT_MS = 1000;
+                var RELAUNCH_POLL_MS = 100;
 
-                if (localStorage.getItem("hasLoggedInOnce") === "true") {
-                    var ud = localStorage.getItem("bbnl_user");
-                    var parsed = null;
-                    try { parsed = ud ? JSON.parse(ud) : null; } catch (e) { parsed = null; }
+                function authDebug(message, details) {
+                    try {
+                        if (!(window.__BBNL_DEBUG || localStorage.getItem('__bbnl_auth_debug') === '1')) return;
+                        if (typeof details !== 'undefined') console.log('[LoginAuth]', message, details);
+                        else console.log('[LoginAuth]', message);
+                    } catch (e) {}
+                }
 
-                    // If primary session data is corrupted/missing, try backup
-                    if (!parsed || !parsed.userid) {
-                        var backup = localStorage.getItem("bbnl_user_backup");
-                        try { parsed = backup ? JSON.parse(backup) : null; } catch (e) { parsed = null; }
-                        if (parsed && parsed.userid) {
-                            // Restore from backup
-                            localStorage.setItem("bbnl_user", JSON.stringify(parsed));
-                        }
+                function readResolvedUser() {
+                    var primaryRaw = localStorage.getItem("bbnl_user");
+                    var backupRaw = localStorage.getItem("bbnl_user_backup");
+                    var primaryUser = null;
+                    var backupUser = null;
+
+                    authDebug('Reading session keys', {
+                        hasPrimary: !!primaryRaw,
+                        hasBackup: !!backupRaw,
+                        hasLoggedInOnce: localStorage.getItem('hasLoggedInOnce'),
+                        relaunchPending: localStorage.getItem('bbnl_relaunch_pending')
+                    });
+
+                    if (primaryRaw) {
+                        try {
+                            var parsedPrimary = JSON.parse(primaryRaw);
+                            if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+                            else authDebug('Primary parsed but missing userid', parsedPrimary);
+                        } catch (e1) {}
                     }
 
-                    if (parsed && parsed.userid) {
-                        window.location.replace("home.html");
+                    if (backupRaw) {
+                        try {
+                            var parsedBackup = JSON.parse(backupRaw);
+                            if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                            else authDebug('Backup parsed but missing userid', parsedBackup);
+                        } catch (e2) {}
+                    }
+
+                    var resolvedUser = primaryUser || backupUser;
+                    if (!resolvedUser) return null;
+
+                    var resolvedJson = JSON.stringify(resolvedUser);
+                    if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+                    if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+                    if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+                        localStorage.setItem("hasLoggedInOnce", "true");
+                        authDebug('Repaired hasLoggedInOnce flag');
+                    }
+                    authDebug('Resolved valid session user', resolvedUser);
+                    return resolvedUser;
+                }
+
+                function showLoginScreen() {
+                    localStorage.removeItem('bbnl_relaunch_pending');
+                    authDebug('No session after polling, showing login screen');
+                    if (document && document.documentElement) {
+                        document.documentElement.style.visibility = '';
                     }
                 }
+
+                function goHome(user) {
+                    localStorage.removeItem('bbnl_relaunch_pending');
+                    authDebug('Session valid, redirecting to home', user);
+                    if (document && document.documentElement) {
+                        document.documentElement.style.visibility = '';
+                    }
+                    window.location.replace("home.html");
+                }
+
+                var resolvedUser = readResolvedUser();
+                if (resolvedUser) {
+                    goHome(resolvedUser);
+                    return;
+                }
+
+                if (document && document.documentElement) {
+                    document.documentElement.style.visibility = 'hidden';
+                }
+
+                var waited = 0;
+                var poll = function () {
+                    var user = readResolvedUser();
+                    if (user) {
+                        goHome(user);
+                        return;
+                    }
+
+                    waited += RELAUNCH_POLL_MS;
+                    if (waited < RELAUNCH_WAIT_MS) {
+                        setTimeout(poll, RELAUNCH_POLL_MS);
+                        return;
+                    }
+
+                    showLoginScreen();
+                };
+
+                setTimeout(poll, RELAUNCH_POLL_MS);
             } catch (e) {}
         })();
     </script>

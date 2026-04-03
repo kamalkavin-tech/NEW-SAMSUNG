@@ -138,6 +138,7 @@ var AVPlayer = (function () {
     // Stale callbacks check this to avoid acting on old streams
     var _streamGeneration = 0;
     var _httpFallbackTimer = null;
+    var _formatFallbackTimer = null;  // ✅ NEW: Track format fallback (fmp4 → standard) timer
 
     return {
         init: function (options) {
@@ -314,6 +315,7 @@ var AVPlayer = (function () {
             if (_setUrlTimer) { clearTimeout(_setUrlTimer); _setUrlTimer = null; }
             if (_playTimer) { clearTimeout(_playTimer); _playTimer = null; }
             if (_httpFallbackTimer) { clearTimeout(_httpFallbackTimer); _httpFallbackTimer = null; }
+            if (_formatFallbackTimer) { clearTimeout(_formatFallbackTimer); _formatFallbackTimer = null; }  // ✅ NEW: Clear format fallback timer
 
             // Increment generation — all stale callbacks will check and abort
             _streamGeneration++;
@@ -643,6 +645,73 @@ var AVPlayer = (function () {
                                             // Suppress stale errors
                                             if (errorGeneration !== _streamGeneration) return;
                                             console.error("[AVPlayer] HTTP fallback also failed:", err);
+                                            
+                                            // ✅ NEW STEP 3: Try standard format (index.m3u8) on HTTPS if fmp4 failed
+                                            if (currentStreamUrl.includes('index.fmp4.m3u8')) {
+                                                var standardFormatUrl = currentStreamUrl.replace('index.fmp4.m3u8', 'index.m3u8');
+                                                if (standardFormatUrl !== currentStreamUrl) {
+                                                    _log("[AVPlayer] 🔄 Both fmp4 formats failed (HTTPS and HTTP), trying standard format...");
+                                                    _log("[AVPlayer] Standard Format URL:", standardFormatUrl);
+                                                    
+                                                    _formatFallbackTimer = setTimeout(function() {
+                                                        _formatFallbackTimer = null;
+                                                        // Abort if user already switched channels
+                                                        if (errorGeneration !== _streamGeneration) {
+                                                            _log("[AVPlayer] Format fallback aborted — stale generation", errorGeneration, "vs", _streamGeneration);
+                                                            return;
+                                                        }
+                                                        try { avplay.stop(); } catch(e) {}
+                                                        try { avplay.close(); } catch(e) {}
+                                                        
+                                                        try {
+                                                            avplay.open(standardFormatUrl);
+                                                            currentStreamUrl = standardFormatUrl;
+                                                            avplay.setDisplayRect(0, 0, 1920, 1080);
+                                                            try {
+                                                                avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN');
+                                                                _log("[AVPlayer] ✓ Format fallback: Display FULL_SCREEN");
+                                                            } catch (e) {
+                                                                try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_ZOOM_16_9'); } catch (e2) {
+                                                                    try { avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'); } catch (e3) {}
+                                                                }
+                                                            }
+                                                            avplay.prepareAsync(
+                                                                function() {
+                                                                    // Abort if user switched channels during prepare
+                                                                    if (errorGeneration !== _streamGeneration) {
+                                                                        _log("[AVPlayer] Format fallback play aborted — stale generation");
+                                                                        try { avplay.stop(); } catch(ig) {} try { avplay.close(); } catch(ig) {}
+                                                                        return;
+                                                                    }
+                                                                    _log("[AVPlayer] ✓ Standard format succeeded!");
+                                                                    avplay.play();
+                                                                    playerState = "PLAYING";
+                                                                },
+                                                                function(err2) {
+                                                                    // Suppress stale errors
+                                                                    if (errorGeneration !== _streamGeneration) return;
+                                                                    console.error("[AVPlayer] Standard format also failed:", err2);
+                                                                    // All 3 steps failed — now show error
+                                                                    eventCallbacks.onError("Cannot connect to stream server (all fallback attempts failed)", {
+                                                                        type: eventType,
+                                                                        url: currentStreamUrl,
+                                                                        failedAttempts: ["HTTPS fmp4", "HTTP fmp4", "HTTPS standard"]
+                                                                    });
+                                                                }
+                                                            );
+                                                        } catch(e) {
+                                                            console.error("[AVPlayer] Format fallback exception:", e);
+                                                            eventCallbacks.onError("Stream format error", {
+                                                                type: eventType,
+                                                                url: currentStreamUrl
+                                                            });
+                                                        }
+                                                    }, 100);
+                                                    return; // Don't show error yet, trying standard format
+                                                }
+                                            }
+                                            
+                                            // No more fallbacks, show error
                                             eventCallbacks.onError("Cannot connect to stream server (both HTTPS and HTTP failed)", {
                                                 type: eventType,
                                                 url: currentStreamUrl

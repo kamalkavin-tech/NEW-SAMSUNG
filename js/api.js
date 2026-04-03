@@ -145,14 +145,73 @@ _initAppPackage();
 var _sessionUserCache = null;
 var _sessionUserCacheTime = 0;
 
+function _isAuthDebugEnabled() {
+    try {
+        return !!(window.__BBNL_DEBUG || localStorage.getItem('__bbnl_auth_debug') === '1');
+    } catch (e) {
+        return !!(window.__BBNL_DEBUG);
+    }
+}
+
+function _authDebugLog(message, details) {
+    if (!_isAuthDebugEnabled()) return;
+    try {
+        if (typeof details !== 'undefined') {
+            console.log('[AuthDebug] ' + message, details);
+        } else {
+            console.log('[AuthDebug] ' + message);
+        }
+    } catch (e) {}
+}
+
 function _getSessionUser() {
     var now = 0;
     try { now = Date.now(); } catch (e) { now = new Date().getTime(); }
     if (_sessionUserCache && (now - _sessionUserCacheTime) < 1000) return _sessionUserCache;
     try {
         var data = localStorage.getItem("bbnl_user");
+        var backup = localStorage.getItem("bbnl_user_backup");
+        var user = null;
+
+        _authDebugLog('Read session keys', {
+            hasPrimary: !!data,
+            hasBackup: !!backup,
+            hasLoggedInOnce: localStorage.getItem('hasLoggedInOnce'),
+            relaunchPending: localStorage.getItem('bbnl_relaunch_pending')
+        });
+
         if (data) {
-            var user = JSON.parse(data);
+            try {
+                var parsedPrimary = JSON.parse(data);
+                if (parsedPrimary && parsedPrimary.userid) user = parsedPrimary;
+                else _authDebugLog('Primary user parsed but missing userid', parsedPrimary);
+            } catch (e1) {}
+        }
+
+        if (!user && backup) {
+            try {
+                var parsedBackup = JSON.parse(backup);
+                if (parsedBackup && parsedBackup.userid) user = parsedBackup;
+                else _authDebugLog('Backup user parsed but missing userid', parsedBackup);
+            } catch (e2) {}
+        }
+
+        if (user) {
+            var userJson = JSON.stringify(user);
+            try {
+                if (localStorage.getItem("bbnl_user") !== userJson) {
+                    localStorage.setItem("bbnl_user", userJson);
+                    _authDebugLog('Repaired primary user key from cached/backup data');
+                }
+                if (localStorage.getItem("bbnl_user_backup") !== userJson) {
+                    localStorage.setItem("bbnl_user_backup", userJson);
+                    _authDebugLog('Repaired backup user key from primary data');
+                }
+                if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+                    localStorage.setItem("hasLoggedInOnce", "true");
+                    _authDebugLog('Repaired hasLoggedInOnce flag');
+                }
+            } catch (syncErr) {}
 
             // Mobile may be at top level or nested in custdet[0].mobile
             var mobile = user.mobile || user.phone || "";
@@ -217,41 +276,81 @@ function getValidatedImageUrl(rawUrl) {
 // when the channel grid re-renders (e.g. language filter switch).
 // Blob URLs die on page navigation — that's OK, browser HTTP cache handles cross-page.
 // ==========================================
-var _BLOB_CACHE = {};  // URL → blob URL (in-memory only, fast)
-var _blobFetchInFlight = {}; // URL → true (prevent duplicate fetches)
+var _BLOB_CACHE = {};  // URL → blob URL
+var _blobCacheOrder = []; // Track order for cleanup
+var _MAX_BLOB_CACHE_ITEMS = 300; // ✅ INCREASED: Prevent memory leak on long scrolling (was 100, now 300 for better hit rate)
 
 // ==========================================
 // CONCURRENT FETCH LIMITER
 // Samsung TV can't handle 200+ simultaneous fetch calls.
-// Queue them and process max 6 at a time (like browser connection limit).
+// Queue them and process max 6 at a time.
 // ==========================================
 var _blobFetchQueue = [];
 var _blobFetchActive = 0;
 var _BLOB_MAX_CONCURRENT = 6;
+var _IMAGE_QUICK_RETRY_DELAY_MS = 3500; // Retry failed image after ~3-4 seconds
+var _IMAGE_QUICK_RETRY_MAX = 2; // Max quick retries before marking failed
+
+var _blobFetchInFlight = {}; // URL → true (prevent duplicate fetches)
 
 function _blobFetchNext() {
     while (_blobFetchActive < _BLOB_MAX_CONCURRENT && _blobFetchQueue.length > 0) {
         var job = _blobFetchQueue.shift();
         _blobFetchActive++;
-        _executeBlobFetch(job.url, job.el, job.onErr);
+        _executeBlobFetch(job.url, job.el, job.onErr, job.options);
     }
 }
 
-function _executeBlobFetch(capturedUrl, capturedEl, capturedPrevErr) {
+function _executeBlobFetch(capturedUrl, capturedEl, capturedPrevErr, options) {
+    if (_blobFetchQueue.length > 500) {
+        // Queue too large - safety skip
+        _blobFetchActive--;
+        return;
+    }
     fetch(capturedUrl, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
         .then(function (response) {
             if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.blob();
         })
         .then(function (blob) {
-            var blobUrl = URL.createObjectURL(blob);
-            _BLOB_CACHE[capturedUrl] = blobUrl;
-            capturedEl.src = blobUrl;
+            // ✅ FIX: Don't create blob URLs - they become invalid on re-render
+            // Instead, use the original URL directly.
+            // The fetch + 'force-cache' primes the HTTP cache;
+            // browser serves subsequent requests from cache.
+
+            // ✅ Record success in persistent cache
+            _recordImageSuccess(capturedUrl);
+
+            // Set original URL (not blob URL) so it survives re-renders
+            if (capturedEl) capturedEl.src = capturedUrl;
             delete _blobFetchInFlight[capturedUrl];
         })
         .catch(function (err) {
             delete _blobFetchInFlight[capturedUrl];
-            // Try alternative image paths before giving up
+
+            var retryAttempt = (options && typeof options.retryAttempt === 'number')
+                ? options.retryAttempt
+                : 0;
+
+            // Quick recovery for transient network issues: retry a few times before failing.
+            if (retryAttempt < _IMAGE_QUICK_RETRY_MAX) {
+                setTimeout(function () {
+                    // ✅ FIX: Check only _blobFetchInFlight (_BLOB_CACHE no longer used)
+                    if (_blobFetchInFlight[capturedUrl]) return;
+                    _blobFetchInFlight[capturedUrl] = true;
+                    _blobFetchQueue.unshift({
+                        url: capturedUrl,
+                        el: capturedEl,
+                        onErr: capturedPrevErr,
+                        options: { retryAttempt: retryAttempt + 1, priority: true }
+                    });
+                    _blobFetchNext();
+                }, _IMAGE_QUICK_RETRY_DELAY_MS);
+                return;
+            }
+
+            // Exhausted quick retries: persist failed state and use fallback once.
+            _recordImageFailure(capturedUrl);
             _tryAlternativeImageFetch(capturedUrl, capturedEl, capturedPrevErr);
         })
         .finally(function () {
@@ -259,6 +358,26 @@ function _executeBlobFetch(capturedUrl, capturedEl, capturedPrevErr) {
             _blobFetchNext();
         });
 }
+
+function _cleanupBlobResources() {
+    console.log("[API] Cleaning up " + Object.keys(_BLOB_CACHE).length + " blob URLs");
+    for (var url in _BLOB_CACHE) {
+        try { URL.revokeObjectURL(_BLOB_CACHE[url]); } catch (e) {}
+    }
+    _BLOB_CACHE = {};
+    _blobFetchQueue = [];
+    _blobFetchInFlight = {};
+}
+
+// Ensure cleanup on page navigation to prevent memory leaks on Tizen
+window.addEventListener('pagehide', _cleanupBlobResources);
+window.addEventListener('pageshow', function(e) {
+    if (e.persisted) {
+        // Reset state after BFCache restore (queue should be clean)
+        _blobFetchActive = 0;
+        _blobFetchInFlight = {};
+    }
+});
 
 /**
  * When primary image URL fails, try alternative paths generated by
@@ -269,6 +388,7 @@ function _tryAlternativeImageFetch(failedUrl, imgEl, prevOnError) {
     var alts = _generateAlternativeImagePaths(failedUrl);
     if (!alts || alts.length === 0) {
         // No alternatives — give up, show placeholder
+        _recordImageFailure(failedUrl);  // Mark as failed since no alternatives
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
@@ -280,6 +400,7 @@ function _tryAlternativeImageFetch(failedUrl, imgEl, prevOnError) {
     function tryNext() {
         if (idx >= alts.length) {
             // All alternatives exhausted — show placeholder
+            _recordImageFailure(failedUrl);  // All attempts failed
             if (typeof prevOnError === 'function') {
                 try { prevOnError.call(imgEl); } catch (e) {}
             }
@@ -287,23 +408,16 @@ function _tryAlternativeImageFetch(failedUrl, imgEl, prevOnError) {
         }
 
         var altUrl = alts[idx++];
-        // Skip if already known to be cached
-        if (_BLOB_CACHE[altUrl]) {
-            _BLOB_CACHE[failedUrl] = _BLOB_CACHE[altUrl]; // alias for future lookups
-            imgEl.src = _BLOB_CACHE[altUrl];
-            return;
-        }
-
+        // ✅ FIX: Fetch to verify URL works, but use original URL (not blob URL) for src
         fetch(altUrl, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
             .then(function (response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 return response.blob();
             })
             .then(function (blob) {
-                var blobUrl = URL.createObjectURL(blob);
-                _BLOB_CACHE[altUrl] = blobUrl;
-                _BLOB_CACHE[failedUrl] = blobUrl; // alias original URL too
-                imgEl.src = blobUrl;
+                // ✅ FIX: Use original alternative URL, not blob URL
+                _recordImageSuccess(failedUrl);  // Alternative URL worked
+                imgEl.src = altUrl;  // Use altUrl directly (not blob URL)
             })
             .catch(function () {
                 // This alternative failed too — try next one
@@ -320,20 +434,46 @@ function setImageSource(imgEl, rawUrl, options) {
 
     if (!imgEl) return finalUrl;
 
+    // Check if this URL is known to have failed before.
+    var isKnownFailed = _imageFailedUrls[finalUrl];
+    var retryAllowed = _isRetryCooldownPassed(finalUrl);
+
     var prevOnError = imgEl.onerror;
 
-    imgEl.onerror = function () {
+    imgEl.onerror = function (evt) {
+        // Browser/non-file path quick retry guard: retry up to 2 times before persisting failure.
+        if (window.location.protocol !== 'file:' && finalUrl) {
+            var currentAttempt = Number(imgEl.getAttribute('data-img-retry-attempt') || '0');
+            if (currentAttempt < _IMAGE_QUICK_RETRY_MAX && _isRetryCooldownPassed(finalUrl)) {
+                imgEl.setAttribute('data-img-retry-attempt', String(currentAttempt + 1));
+                setTimeout(function () {
+                    var sep = finalUrl.indexOf('?') !== -1 ? '&' : '?';
+                    imgEl.src = finalUrl + sep + '_rt=' + Date.now();
+                }, _IMAGE_QUICK_RETRY_DELAY_MS);
+                return;
+            }
+        }
+
+        // Record failure in persistent cache after retries are exhausted.
+        _recordImageFailure(finalUrl);
+        
         if (typeof prevOnError === 'function') {
-            try { prevOnError.call(imgEl); } catch (e) {}
+            try { prevOnError.call(imgEl, evt); } catch (e) {}
         }
     };
 
     if (finalUrl) {
         imgEl.style.display = '';
 
-        // FAST PATH: Already fetched this session — use cached blob URL instantly
-        if (_BLOB_CACHE[finalUrl]) {
-            imgEl.src = _BLOB_CACHE[finalUrl];
+        // ✅ FIX: Don't use blob URL cache - use original URLs directly
+        // Blob URLs are temporary and become invalid after re-renders.
+        // Browser HTTP cache (force-cache) handles caching automatically.
+
+        // Cooldown active: avoid repeated network retries and show fallback immediately.
+        if (isKnownFailed && !retryAllowed) {
+            if (typeof prevOnError === 'function') {
+                try { prevOnError.call(imgEl); } catch (e) {}
+            }
             return finalUrl;
         }
 
@@ -343,10 +483,14 @@ function setImageSource(imgEl, rawUrl, options) {
             if (_blobFetchInFlight[finalUrl]) {
                 var waitUrl = finalUrl;
                 var waitEl = imgEl;
+                var retryCount = 0;
+                var maxRetries = 20; // 2 seconds max polling
                 setTimeout(function check() {
-                    if (_BLOB_CACHE[waitUrl]) {
-                        waitEl.src = _BLOB_CACHE[waitUrl];
-                    } else if (_blobFetchInFlight[waitUrl]) {
+                    if (!_blobFetchInFlight[waitUrl] || retryCount >= maxRetries) {
+                        // Fetch complete, set original URL directly
+                        if (waitEl) waitEl.src = waitUrl;
+                    } else {
+                        retryCount++;
                         setTimeout(check, 100);
                     }
                 }, 100);
@@ -354,9 +498,20 @@ function setImageSource(imgEl, rawUrl, options) {
             }
 
             _blobFetchInFlight[finalUrl] = true;
-
-            // Queue fetch — max 6 concurrent (Samsung TV can't handle 200+ at once)
-            _blobFetchQueue.push({ url: finalUrl, el: imgEl, onErr: prevOnError });
+            
+            // Queue fetch — max 6 concurrent
+            var job = {
+                url: finalUrl,
+                el: imgEl,
+                onErr: prevOnError,
+                options: { retryAttempt: 0 }
+            };
+            if (options && options.priority) {
+                // Priority images (e.g. main channel logo) jump to FRONT of queue
+                _blobFetchQueue.unshift(job);
+            } else {
+                _blobFetchQueue.push(job);
+            }
             _blobFetchNext();
         } else {
             imgEl.setAttribute('src', finalUrl);
@@ -1020,6 +1175,58 @@ _hydrateApiMemoryCache();
 // ==========================================
 var _IMAGE_CACHE_MAP = {};
 var _IMAGE_CACHE_KEY = 'bbnl_image_cache_urls_v1';
+var _IMAGE_METADATA_KEY = 'bbnl_image_cache_metadata_v2';  // Persistent localStorage cache for image metadata
+var _IMAGE_RETRY_KEY = 'bbnl_image_failed_urls_v1';  // Persistent list of URLs that need retry
+var _IMAGE_FAIL_COOLDOWN_MS = 1 * 60 * 60 * 1000; // 1 hour cooldown before retrying failed URLs
+
+// Image metadata: { url: { status: 'cached'|'failed'|'pending', lastFetch: timestamp, failCount: 0, sources: [] } }
+var _imageMetadata = {};
+var _imageFailedUrls = {};  // URLs that failed to load — will retry on demand
+
+function _isRetryCooldownPassed(url, nowTs) {
+    if (!url) return false;
+    if (!_imageFailedUrls[url]) return true;
+    var meta = _imageMetadata[url] || {};
+    var lastFailedAt = Number(meta.lastFailedAt || 0);
+    var now = nowTs || Date.now();
+    if (!lastFailedAt) return true;
+    return (now - lastFailedAt) >= _IMAGE_FAIL_COOLDOWN_MS;
+}
+
+function _loadPersistentImageMetadata() {
+    try {
+        var stored = localStorage.getItem(_IMAGE_METADATA_KEY);
+        if (stored) {
+            var parsed = JSON.parse(stored);
+            if (parsed && typeof parsed === 'object') {
+                _imageMetadata = parsed;
+            }
+        }
+    } catch (e) { console.error('[ImageCache] Failed to load persistent metadata:', e); }
+
+    try {
+        var failedStored = localStorage.getItem(_IMAGE_RETRY_KEY);
+        if (failedStored) {
+            var failedParsed = JSON.parse(failedStored);
+            if (Array.isArray(failedParsed)) {
+                failedParsed.forEach(function(url) {
+                    _imageFailedUrls[url] = true;
+                });
+            }
+        }
+    } catch (e) { console.error('[ImageCache] Failed to load failed URLs list:', e); }
+}
+
+function _savePersistentImageMetadata() {
+    try {
+        localStorage.setItem(_IMAGE_METADATA_KEY, JSON.stringify(_imageMetadata));
+    } catch (e) { console.error('[ImageCache] Failed to save metadata:', e); }
+
+    try {
+        var failedList = Object.keys(_imageFailedUrls);
+        localStorage.setItem(_IMAGE_RETRY_KEY, JSON.stringify(failedList));
+    } catch (e) { console.error('[ImageCache] Failed to save failed URLs:', e); }
+}
 
 function _hydrateImageCache() {
     try {
@@ -1043,11 +1250,41 @@ function _isImageUrl(url) {
     return /\.(png|jpg|jpeg|gif|webp|svg)(\?|#|$)/i.test(url) || /^https?:\/\//i.test(url) || /^images\//i.test(url);
 }
 
-function _preloadImage(url) {
+function _recordImageFailure(url) {
+    if (!url) return;
+    _imageFailedUrls[url] = true;
+    var metadata = _imageMetadata[url] || {};
+    metadata.failCount = (metadata.failCount || 0) + 1;
+    metadata.status = 'failed';
+    metadata.lastFailedAt = Date.now();
+    _imageMetadata[url] = metadata;
+    _savePersistentImageMetadata();
+}
+
+function _recordImageSuccess(url) {
+    if (!url) return;
+    delete _imageFailedUrls[url];
+    var metadata = _imageMetadata[url] || {};
+    metadata.status = 'cached';
+    metadata.lastFetch = Date.now();
+    metadata.failCount = 0;
+    _imageMetadata[url] = metadata;
+    _savePersistentImageMetadata();
+}
+
+function _preloadImage(url, options) {
     var validatedUrl = getValidatedImageUrl(url);
     if (!validatedUrl) return;
     if (!_isImageUrl(validatedUrl)) return;
     if (_IMAGE_CACHE_MAP[validatedUrl]) return;
+
+    // Skip if already has too many failures in this session
+    var metadata = _imageMetadata[validatedUrl] || {};
+    var maxRetries = (options && options.ignoreFailCount) ? 999 : 2;
+    if (metadata.failCount >= maxRetries) return;
+
+    // Failed image cooldown guard: do not keep retrying broken URLs on each navigation.
+    if (!_isRetryCooldownPassed(validatedUrl)) return;
 
     _IMAGE_CACHE_MAP[validatedUrl] = 1;
     _persistImageCache();
@@ -1055,22 +1292,75 @@ function _preloadImage(url) {
     try {
         var img = new Image();
         img.decoding = 'async';
+        (function(imgUrl) {
+            img.onload = function() {
+                _recordImageSuccess(imgUrl);
+            };
+            img.onerror = function() {
+                _recordImageFailure(imgUrl);
+            };
+        })(validatedUrl);
         img.src = validatedUrl;
     } catch (e) {}
 }
 
-function _preloadImageBatch(list) {
+function _preloadImageBatch(list, options) {
     if (!Array.isArray(list) || list.length === 0) return;
     for (var i = 0; i < list.length; i++) {
-        _preloadImage(list[i]);
+        _preloadImage(list[i], options);
     }
 }
 
+// Load persistent metadata + failed URLs list before starting
+_loadPersistentImageMetadata();
+
+// Hydrate session cache from localStorage metadata on app load
 _hydrateImageCache();
 
-try {
-    _preloadImageBatch(Object.keys(_IMAGE_CACHE_MAP));
-} catch (e) {}
+// IMPORTANT: Do not eagerly preload all historical image URLs here.
+// In MPA navigation this causes unnecessary network traffic on every page load.
+// Images are loaded lazily via setImageSource/_preloadImageBatch only when needed by UI.
+
+// BACKGROUND IMAGE INTEGRITY CHECK: Periodically validate cached images are still accessible
+// This catches cases where CDN URLs expire or change after app restarts
+function _validateImageCacheIntegrity() {
+    if (!_imageMetadata || Object.keys(_imageMetadata).length === 0) return;
+
+    // Sample up to 10 random images from cache to validate
+    var urlsToCheck = Object.keys(_imageMetadata)
+        .filter(function(url) {
+            var m = _imageMetadata[url];
+            // Only check images that were successfully cached and are over 1 hour old
+            return m.status === 'cached' && (Date.now() - (m.lastFetch || 0)) > 60 * 60 * 1000;
+        })
+        .sort(function() { return Math.random() - 0.5; })  // shuffle
+        .slice(0, 10);
+
+    if (urlsToCheck.length === 0) return;
+
+    // Validate each URL with a HEAD request (fast, no body download)
+    urlsToCheck.forEach(function(url) {
+        try {
+            fetch(url, { method: 'HEAD', mode: 'cors', credentials: 'omit', cache: 'no-store', timeout: 5000 })
+                .then(function(r) {
+                    if (!r.ok && r.status !== 405) {  // 405 = HEAD not allowed, still means URL is valid
+                        _recordImageFailure(url);
+                        console.warn('[ImageCache] Image URL validation failed:', url, 'Status:', r.status);
+                    }
+                })
+                .catch(function(err) {
+                    _recordImageFailure(url);
+                    console.warn('[ImageCache] Image URL validation error:', url, err.message);
+                });
+        } catch (e) {}
+    });
+}
+
+// Run integrity check 5 seconds after app loads
+setTimeout(_validateImageCacheIntegrity, 5000);
+
+// Re-run every 30 minutes to catch stale CDN URLs
+setInterval(_validateImageCacheIntegrity, 30 * 60 * 1000);
 
 // API Endpoints
 const API_ENDPOINTS = {
@@ -1138,13 +1428,14 @@ async function apiCall(endpoint, payload, customHeaders) {
 
     // Removed: logging payload builds expensive strings even when console is noop
 
-    // Abort controller with 10-second timeout — prevents hanging requests
-    // that accumulate across repeated Home→Relaunch cycles on Samsung TV
+    // Abort controller timeout — keep most APIs snappy, but allow more time
+    // for login/loginOtp flows to avoid false timeout on slower TV networks.
     var controller = null;
     var timeoutId = null;
+    var requestTimeoutMs = /\/login(?:Otp)?$/i.test(String(url)) ? 10000 : 4000;
     try {
         controller = new AbortController();
-        timeoutId = setTimeout(function () { controller.abort(); }, 4000);
+        timeoutId = setTimeout(function () { controller.abort(); }, requestTimeoutMs);
     } catch (e) {
         // AbortController not supported on older Tizen — proceed without timeout
         controller = null;
@@ -1182,7 +1473,23 @@ async function apiCall(endpoint, payload, customHeaders) {
         return data;
     } catch (error) {
         if (timeoutId) clearTimeout(timeoutId);
-        var isTimeout = error && error.name === 'AbortError';
+        var isAbort = error && error.name === 'AbortError';
+        
+        // ✅ FIX: Silently ignore AbortError (user canceled request)
+        // Do not log and do not mark API/network failure state.
+        if (isAbort) {
+            return {
+                error: true,
+                aborted: true,
+                message: 'Request aborted',
+                status: {
+                    err_code: -2,
+                    err_msg: 'Request aborted'
+                }
+            };
+        }
+        
+        var isTimeout = error && error.message && /timeout/i.test(error.message);
         console.error(`[API] ${isTimeout ? 'TIMEOUT' : 'Error'}: ${url}`, error);
 
         // Persist lightweight failure context for page-level popup decisions.
@@ -1997,7 +2304,10 @@ const AuthAPI = {
         const response = await apiCall(API_ENDPOINTS.LOGIN, payload);
 
         if (response && response.status && Number(response.status.err_code) === 0) {
+            _authDebugLog('verifyOTP success - writing session', response);
             this.setSession(response);
+        } else {
+            _authDebugLog('verifyOTP returned non-success', response);
         }
         return response;
     },
@@ -2029,16 +2339,19 @@ const AuthAPI = {
             }
 
             var userJson = JSON.stringify(userData);
+            _authDebugLog('Persisting session user', userData);
             try {
                 localStorage.setItem("bbnl_user", userJson);
                 // Keep a backup copy to survive storage corruption on HOME relaunch
                 localStorage.setItem("bbnl_user_backup", userJson);
+                localStorage.setItem("hasLoggedInOnce", "true");
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
                 CacheManager.clearAll();
                 try {
                     localStorage.setItem("bbnl_user", userJson);
                     localStorage.setItem("bbnl_user_backup", userJson);
+                    localStorage.setItem("hasLoggedInOnce", "true");
                 } catch (retryErr) {
                     // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
@@ -2047,28 +2360,65 @@ const AuthAPI = {
                     if (savedFlag) localStorage.setItem("hasLoggedInOnce", savedFlag);
                     if (savedBackup) localStorage.setItem("bbnl_user_backup", savedBackup);
                     localStorage.setItem("bbnl_user", userJson);
+                    localStorage.setItem("hasLoggedInOnce", "true");
                 }
             }
         } else {
             console.error("[AuthAPI] Invalid response structure for setSession:", response);
+            _authDebugLog('setSession skipped because response had no userid payload', response);
         }
     },
 
     getUserData: function () {
         const data = localStorage.getItem("bbnl_user");
+        const backup = localStorage.getItem("bbnl_user_backup");
+        let user = null;
+
+        _authDebugLog('getUserData called', {
+            hasPrimary: !!data,
+            hasBackup: !!backup,
+            hasLoggedInOnce: localStorage.getItem('hasLoggedInOnce')
+        });
+
         if (data) {
             try {
-                return JSON.parse(data);
+                const parsed = JSON.parse(data);
+                if (parsed && parsed.userid) user = parsed;
+                else _authDebugLog('Primary user invalid/missing userid', parsed);
             } catch (e) {
                 console.error("[AuthAPI] Error parsing user data:", e);
-                return null;
+                _authDebugLog('Primary user JSON parse failed', String(e && e.message || e));
             }
         }
+
+        if (!user && backup) {
+            try {
+                const recovered = JSON.parse(backup);
+                if (recovered && recovered.userid) user = recovered;
+                else _authDebugLog('Backup user invalid/missing userid', recovered);
+            } catch (e2) {
+                console.error("[AuthAPI] Error parsing backup user data:", e2);
+                _authDebugLog('Backup user JSON parse failed', String(e2 && e2.message || e2));
+            }
+        }
+
+        if (user) {
+            try {
+                const userJson = JSON.stringify(user);
+                if (localStorage.getItem("bbnl_user") !== userJson) localStorage.setItem("bbnl_user", userJson);
+                if (localStorage.getItem("bbnl_user_backup") !== userJson) localStorage.setItem("bbnl_user_backup", userJson);
+                if (localStorage.getItem("hasLoggedInOnce") !== "true") localStorage.setItem("hasLoggedInOnce", "true");
+            } catch (syncErr) {}
+            return user;
+        }
+
+        _authDebugLog('getUserData returned null after checking primary and backup');
         return null;
     },
 
     isAuthenticated: function () {
-        return !!localStorage.getItem("bbnl_user");
+        var user = this.getUserData();
+        return !!(user && user.userid);
     },
 
     logout: async function () {
@@ -2110,6 +2460,8 @@ const AuthAPI = {
         // Clear all cached data (channels, categories, languages, expiry)
         CacheManager.clear();
 
+        // Stop background subscription refresh on logout
+        ChannelsAPI.stopBackgroundRefresh();
     },
 
     requireAuth: function () {
@@ -2119,12 +2471,176 @@ const AuthAPI = {
     }
 };
 
+function repairPersistentAuthSession() {
+    try {
+        var primaryRaw = localStorage.getItem('bbnl_user');
+        var backupRaw = localStorage.getItem('bbnl_user_backup');
+        var hasLoggedInOnce = localStorage.getItem('hasLoggedInOnce');
+
+        var primaryUser = null;
+        var backupUser = null;
+
+        _authDebugLog('repairPersistentAuthSession snapshot', {
+            hasPrimary: !!primaryRaw,
+            hasBackup: !!backupRaw,
+            hasLoggedInOnce: hasLoggedInOnce
+        });
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) return;
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (!primaryUser || primaryRaw !== resolvedJson) {
+            localStorage.setItem('bbnl_user', resolvedJson);
+            _authDebugLog('repairPersistentAuthSession wrote primary from resolved user');
+        }
+        if (!backupUser || backupRaw !== resolvedJson) {
+            localStorage.setItem('bbnl_user_backup', resolvedJson);
+            _authDebugLog('repairPersistentAuthSession wrote backup from resolved user');
+        }
+        if (hasLoggedInOnce !== 'true') {
+            localStorage.setItem('hasLoggedInOnce', 'true');
+            _authDebugLog('repairPersistentAuthSession repaired hasLoggedInOnce');
+        }
+    } catch (e) {}
+}
+
+repairPersistentAuthSession();
+
 // ==========================================
 // CHANNELS API (FIXED)
 // ==========================================
 const ChannelsAPI = {
     _fetchInProgress: null,
     _expiryMergeInProgress: false,
+    _backgroundRefreshTimer: null,
+    _backgroundRefreshInProgress: false,
+    _BACKGROUND_REFRESH_INTERVAL: 5 * 60 * 1000, // 5 minutes for subscription updates
+
+    /**
+     * Start background refresh scheduler (called once at app startup)
+     * Silently refreshes subscription data every 5 minutes without interrupting user
+     */
+    startBackgroundRefresh: function() {
+        if (this._backgroundRefreshTimer) return; // Already started
+        
+        var self = this;
+        // Initial refresh after 5 minutes
+        this._backgroundRefreshTimer = setInterval(function() {
+            self._performBackgroundRefresh();
+        }, this._BACKGROUND_REFRESH_INTERVAL);
+    },
+
+    /**
+     * Stop background refresh (called on logout or app exit)
+     */
+    stopBackgroundRefresh: function() {
+        if (this._backgroundRefreshTimer) {
+            clearInterval(this._backgroundRefreshTimer);
+            this._backgroundRefreshTimer = null;
+        }
+    },
+
+    /**
+     * Perform background refresh of subscription data
+     * Uses silent mode - no UI interruption
+     */
+    _performBackgroundRefresh: async function() {
+        // Prevent concurrent refresh requests
+        if (this._backgroundRefreshInProgress) return;
+        
+        // Skip if user is not authenticated
+        if (!AuthAPI.isAuthenticated()) {
+            this.stopBackgroundRefresh();
+            return;
+        }
+
+        this._backgroundRefreshInProgress = true;
+        
+        try {
+            const user = AuthAPI.getUserData();
+            const device = DeviceInfo.getDeviceInfo();
+
+            if (!user || !user.userid) {
+                this._backgroundRefreshInProgress = false;
+                return;
+            }
+
+            const payload = {
+                userid: user.userid,
+                mobile: user.mobile || "",
+                ip_address: device.ip_address,
+                mac_address: device.mac_address
+            };
+
+            // Silent background fetch - no console logs, no UI updates
+            const response = await apiCall(
+                API_ENDPOINTS.CHANNEL_LIST,
+                payload,
+                {
+                    "devmac": device.mac_address,
+                    "devslno": device.devslno
+                }
+            );
+
+            // Parse and validate response
+            if (response && !response.error) {
+                var errCode = response && response.status ? Number(response.status.err_code) : -1;
+                if (errCode === 0) {
+                    let channels = [];
+                    
+                    // Extract channels from response (same logic as _fetchAndCacheChannels)
+                    if (response && response.body && Array.isArray(response.body)) {
+                        if (response.body.length > 0 && response.body[0].channels && Array.isArray(response.body[0].channels)) {
+                            channels = response.body[0].channels;
+                        } else if (response.body.length > 0 && (response.body[0].chid || response.body[0].chtitle || response.body[0].streamlink)) {
+                            channels = response.body;
+                        }
+                    }
+
+                    // Update cache with fresh subscription data
+                    if (channels.length > 0) {
+                        invalidateImageUrlCaches();
+                        CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
+                        // Silent mode - no console output on TV for performance
+                    }
+                }
+            }
+        } catch (e) {
+            // Silent fail - background refresh is non-critical
+        }
+
+        this._backgroundRefreshInProgress = false;
+    },
+
+    /**
+     * Force immediate refresh of subscription data
+     * Called when returning from Payment page or manually
+     */
+    forceSubscriptionRefresh: async function() {
+        // Use existing fetch if in progress
+        if (this._backgroundRefreshInProgress) {
+            return;
+        }
+
+        // Perform immediate background refresh without deleting existing cache first.
+        // This keeps stale data as fallback if network fails during refresh.
+        return this._performBackgroundRefresh();
+    },
 
     getCategories: async function () {
         // Check cache first (also accept expired cache — call-once strategy)
@@ -2273,25 +2789,26 @@ const ChannelsAPI = {
      * Internal: Fetch channels from API and cache them
      */
     _fetchAndCacheChannels: async function (userid, mobile, device) {
-        const payload = {
+        try {
+            const payload = {
             userid: userid,
             mobile: mobile,
             ip_address: device.ip_address,
             mac_address: device.mac_address
-        };
+            };
 
-        // payload logging removed for TV performance
+            // payload logging removed for TV performance
 
-        const response = await apiCall(
+            const response = await apiCall(
             API_ENDPOINTS.CHANNEL_LIST,
             payload,
             {
                 "devmac": device.mac_address,
                 "devslno": device.devslno
             }
-        );
+            );
 
-        // response logging removed for TV performance
+            // response logging removed for TV performance
 
         // Handle error responses
         if (response && response.error) {
@@ -2396,6 +2913,16 @@ const ChannelsAPI = {
         }
 
         return channels;
+        } catch (error) {
+            // ✅ FIX: Handle AbortError silently - return stale cache instead of empty
+            if (error && error.name === 'AbortError') {
+                var staleCache = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
+                if (staleCache && staleCache.length > 0) {
+                    return staleCache;  // Preserve existing UI data
+                }
+            }
+            throw error;  // Re-throw non-abort errors
+        }
     },
 
     /**
@@ -2637,11 +3164,30 @@ const ChannelsAPI = {
         return channel ? (channel.streamlink || channel.channel_url) : null;
     },
 
-    playChannel: function (channel) {
+    playChannel: function (channel, category) {
         const url = this.getStreamUrl(channel);
         if (url) {
+            // [Safety Fix] Mark interior navigation to prevent exit on visibilitychange.
+            window.__BBNL_NAVIGATING = true;
+
             // Save as last played channel for quick resume
             CacheManager.setLastChannel(channel);
+
+            // Store category for zapping (CH+/CH-) if provided
+            if (category) {
+                var normalizedCategory = String(category || '').trim().toLowerCase();
+                if (normalizedCategory === 'all' || normalizedCategory === 'all channels') {
+                    // "All" means no filter; keep session clean to avoid langid=all empty results on return.
+                    sessionStorage.removeItem('selectedLanguageId');
+                    sessionStorage.removeItem('selectedLanguageName');
+                } else {
+                    sessionStorage.setItem('selectedLanguageId', category);
+                    // Also normalize known fixed category IDs.
+                    if (normalizedCategory === 'subs') {
+                        sessionStorage.setItem('selectedLanguageName', 'Subscribed');
+                    }
+                }
+            }
 
             // Store the current page as referrer for back navigation
             sessionStorage.setItem('playerReferrer', window.location.href);
@@ -2946,6 +3492,11 @@ const AdsAPI = {
             if (cacheKey) this._streamAdsCache[cacheKey] = [];
             return [];
         } catch (error) {
+            // ✅ FIX: Handle AbortError silently (request was canceled)
+            if (error && error.name === 'AbortError') {
+                // Silent ignore — don't log, don't clear UI
+                return [];
+            }
             console.error("[AdsAPI] Stream Ads error:", error.message);
             return [];
         }
@@ -3394,6 +3945,86 @@ const BBNL_API = {
     preloadImage: _preloadImage,
     preloadImageBatch: _preloadImageBatch,
 
+    // ✅ NEW: Image persistence and recovery helpers
+    /**
+     * Get list of URLs that failed to load (will be retried on demand)
+     * Useful for debugging image loading issues
+     */
+    getFailedImageUrls: function () {
+        return Object.keys(_imageFailedUrls);
+    },
+
+    /**
+     * Get image metadata (status, failure count, last fetch time)
+     * Useful for debugging why images don't display
+     */
+    getImageMetadata: function (url) {
+        if (!url) return null;
+        var v = getValidatedImageUrl(url);
+        return _imageMetadata[v] || null;
+    },
+
+    /**
+     * Clear persistent image cache (useful for cleanup after major API changes)
+     * Does NOT clear localStorage; only clears in-memory maps
+     */
+    clearImageCache: function () {
+        _IMAGE_CACHE_MAP = {};
+        _BLOB_CACHE = {};
+        _imageFailedUrls = {};
+        // Keep _imageMetadata for retry history (don't clear localStorage)
+        console.log('[ImageCache] Cleared in-memory image caches');
+    },
+
+    /**
+     * Force re-fetch of failed images by clearing their failure state
+     * Next page load will retry failed images automatically
+     */
+    retryFailedImages: function () {
+        var now = Date.now();
+        var failed = Object.keys(_imageFailedUrls);
+        if (failed.length === 0) {
+            console.log('[ImageCache] No failed images to retry');
+            return;
+        }
+        var eligible = 0;
+        failed.forEach(function(url) {
+            if (_isRetryCooldownPassed(url, now)) {
+                eligible++;
+                delete _imageFailedUrls[url];
+                var meta = _imageMetadata[url];
+                if (meta) {
+                    meta.failCount = 0;
+                    meta.status = 'pending';
+                }
+            }
+        });
+        if (eligible > 0) {
+            console.log('[ImageCache] Retrying ' + eligible + ' failed images after cooldown');
+        }
+        _savePersistentImageMetadata();
+    },
+
+    /**
+     * Validate image cache integrity across all cached images
+     * Runs async and reports validation results
+     * Useful to call after app resumes from background
+     */
+    validateImageCacheIntegrity: _validateImageCacheIntegrity,
+
+    /**
+     * Get image cache statistics for debugging
+     */
+    getImageCacheStats: function () {
+        return {
+            cachedImageCount: Object.keys(_IMAGE_CACHE_MAP).length,
+            blobCacheCount: Object.keys(_BLOB_CACHE).length,
+            failedImageCount: Object.keys(_imageFailedUrls).length,
+            metadataCount: Object.keys(_imageMetadata).length,
+            failedImages: Object.keys(_imageFailedUrls).slice(0, 10)  // First 10 for debugging
+        };
+    },
+
     // Device Methods
     initializeDeviceInfo: DeviceInfo.initializeDeviceInfo.bind(DeviceInfo),
     getDeviceInfo: DeviceInfo.getDeviceInfo.bind(DeviceInfo),
@@ -3616,15 +4247,35 @@ if (typeof window !== 'undefined') {
 var _isPageUnloading = false;
 var _wasBackgrounded = false;
 
-window.addEventListener('beforeunload', function () {
+window.addEventListener('pagehide', function () {
     _isPageUnloading = true;
 });
 
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted) {
+        // Page restored from BFCache — everything is still intact!
+        _isPageUnloading = false;
+        _wasBackgrounded = false;
+    }
+});
+
 document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden' && !_isPageUnloading) {
-        // Skip exit if user is in the middle of the login/verify auth flow.
-        // On some Tizen TV models visibilitychange fires before beforeunload during
-        // page navigation, which would exit the app and wipe sessionStorage mid-flow.
+    if (document.visibilityState === 'hidden') {
+        // [Critical Stability Fix]
+        // On Tizen TVs, moving between pages (Home -> Channels) can briefly trigger
+        // visibilityState: 'hidden' BEFORE the new page starts loading. 
+        // We MUST skip the exit logic if we are performing an internal navigation.
+        if (window.__BBNL_NAVIGATING) {
+            console.log("[API] Visibility hidden during navigation - skipping exit.");
+            return;
+        }
+
+        if (_isPageUnloading) {
+            console.log("[API] Page is already unloading - skipping exit.");
+            return;
+        }
+
+        // Skip exit if user is in the middle of auth flow.
         var _currentPage = window.location.pathname.split('/').pop() || '';
         if (_currentPage === 'login.html' || _currentPage === 'verify.html') {
             return;
@@ -3655,6 +4306,7 @@ document.addEventListener('visibilitychange', function () {
         //    sessionStorage is automatically cleared when the process dies.
         //    localStorage (hasLoggedInOnce, bbnl_user) persists for relaunch.
         try {
+            localStorage.setItem('bbnl_relaunch_pending', '1');
             if (typeof tizen !== 'undefined' && tizen.application) {
                 tizen.application.getCurrentApplication().exit();
             }

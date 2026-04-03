@@ -116,25 +116,47 @@
     margin-bottom: 16px;
 }
 
-/* Try Again Button - White theme to match overall design */
+/* Button Container */
+.error-popup-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 25px;
+    width: 100%;
+}
+
+/* Base button style */
 .error-popup-btn {
     background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
     color: #000;
     border: 3px solid transparent;
     border-radius: 25px;
-    padding: 10px 32px;
+    padding: 10px 40px;
     font-size: 20px;
     font-weight: 600;
     cursor: pointer;
     outline: none;
     min-width: 180px;
+    transition: all 0.2s ease;
 }
 
 .error-popup-btn:hover,
 .error-popup-btn:focus {
-    border: 3px solid #ffffff;
+    border: 3px solid #ff4444; /* Alert color */
     outline: none;
-    box-shadow: none;
+    transform: scale(1.05);
+}
+
+.error-popup-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+.error-popup-btn-secondary:hover,
+.error-popup-btn-secondary:focus {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #fff;
 }
 
 .error-popup-btn:active {

@@ -7,17 +7,40 @@
     <!-- No meta refresh — JS handles all routing -->
     <title>Redirecting...</title>
     <script>
-        // If already logged in, skip login page entirely — go straight to home
+        // Enhanced redirect engine: bypass login whenever session is found
         (function () {
             try {
-                if (localStorage.getItem("hasLoggedInOnce") === "true") {
-                    var ud = localStorage.getItem("bbnl_user");
-                    if (ud && JSON.parse(ud).userid) {
-                        window.location.replace("home.html");
-                        return;
-                    }
+                var udRaw = localStorage.getItem("bbnl_user");
+                var backupRaw = localStorage.getItem("bbnl_user_backup");
+
+                var user = null;
+                var backupUser = null;
+
+                if (udRaw) {
+                    try {
+                        var parsedPrimary = JSON.parse(udRaw);
+                        if (parsedPrimary && parsedPrimary.userid) user = parsedPrimary;
+                    } catch (e1) {}
                 }
-            } catch (e) {}
+
+                if (backupRaw) {
+                    try {
+                        var parsedBackup = JSON.parse(backupRaw);
+                        if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                    } catch (e2) {}
+                }
+
+                var resolvedUser = user || backupUser;
+                if (resolvedUser) {
+                    var resolvedJson = JSON.stringify(resolvedUser);
+                    localStorage.setItem("bbnl_user", resolvedJson);
+                    localStorage.setItem("bbnl_user_backup", resolvedJson);
+                    localStorage.setItem("hasLoggedInOnce", "true");
+                    window.location.replace("home.html");
+                    return;
+                }
+            } catch (e) {
+            }
             window.location.replace('login.html');
         })();
     </script>

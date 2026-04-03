@@ -2,22 +2,52 @@
    BBNL IPTV - FAVORITES CONTROLLER
    ================================ */
 
+// ✅ NEW: Recover failed images from persistent cache on app load
+(function initImageRecovery() {
+    if (typeof BBNL_API !== 'undefined' && BBNL_API.retryFailedImages) {
+        BBNL_API.retryFailedImages();
+    }
+})();
+
 // Check authentication - redirect to login if never logged in
 // NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
 (function checkAuth() {
-    var hasLoggedInOnce = localStorage.getItem("hasLoggedInOnce");
-    if (hasLoggedInOnce !== "true") {
-        window.location.replace("login.html");
-        return;
-    }
     try {
-        var ud = localStorage.getItem("bbnl_user");
-        if (!ud || !JSON.parse(ud).userid) {
+        var primaryRaw = localStorage.getItem("bbnl_user");
+        var backupRaw = localStorage.getItem("bbnl_user_backup");
+        var primaryUser = null;
+        var backupUser = null;
+
+        if (primaryRaw) {
+            try {
+                var parsedPrimary = JSON.parse(primaryRaw);
+                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+            } catch (e1) {}
+        }
+
+        if (backupRaw) {
+            try {
+                var parsedBackup = JSON.parse(backupRaw);
+                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+            } catch (e2) {}
+        }
+
+        var resolvedUser = primaryUser || backupUser;
+        if (!resolvedUser) {
+            window.__BBNL_NAVIGATING = true;
             window.location.replace("login.html");
             return;
         }
+
+        var resolvedJson = JSON.stringify(resolvedUser);
+        if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+        if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+            localStorage.setItem("hasLoggedInOnce", "true");
+        }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
+        window.__BBNL_NAVIGATING = true;
         window.location.replace("login.html");
         return;
     }
@@ -28,7 +58,7 @@ var currentFocus = 0;
 var allChannels = [];
 var comingSoonPopupOpen = false;
 
-window.addEventListener('beforeunload', function () {
+window.addEventListener('pagehide', function () {
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.savePageState) {
         AppPerformanceCache.savePageState('favorites', {
             focusIndex: currentFocus,
@@ -37,7 +67,19 @@ window.addEventListener('beforeunload', function () {
     }
 });
 
+var _favoritesPageInitialized = false;
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted && _favoritesPageInitialized) {
+        // Page restored from BFCache — restore remote keys
+        if (typeof RemoteKeys !== 'undefined') {
+            RemoteKeys.registerAllKeys();
+        }
+        return; 
+    }
+});
+
 window.onload = function () {
+    _favoritesPageInitialized = true;
 
     // Show Coming Soon popup immediately
     showComingSoonPopup();
@@ -76,6 +118,7 @@ window.onload = function () {
 
         el.addEventListener("click", function (e) {
             if (el.classList.contains('back-btn') || el.id === 'goBackBtn') {
+                window.__BBNL_NAVIGATING = true;
                 if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
                 return;
             }
@@ -98,7 +141,19 @@ window.onload = function () {
  */
 function showComingSoonPopup() {
     var popup = document.getElementById("comingSoonPopup");
+    var content = document.querySelector(".subpage-section");
+    var header = document.querySelector(".subpage-header");
+    var filters = document.querySelector(".filters-bar");
+
     if (popup) {
+        // Blur background content
+        if (content) content.classList.add("blurred");
+        if (header) header.classList.add("blurred");
+        if (filters) filters.classList.add("blurred");
+        
+        popup.style.display = "flex";
+        comingSoonPopupOpen = true;
+
         // Load error image if available
         var img = document.getElementById("errorImg_comingSoonFav");
         if (img && typeof ErrorImagesAPI !== 'undefined') {
@@ -290,14 +345,16 @@ document.addEventListener("keydown", function (e) {
     if (comingSoonPopupOpen) {
         e.preventDefault();
         if (code === 13 || code === 10009) {
-            if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+            window.__BBNL_NAVIGATING = true;
+            window.location.replace('home.html');
         }
         return;
     }
 
     if (code === 10009) { // Back
         e.preventDefault();
-        if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }
+        window.__BBNL_NAVIGATING = true;
+        window.location.replace('home.html');
         return;
     }
 

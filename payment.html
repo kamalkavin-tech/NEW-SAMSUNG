@@ -162,7 +162,9 @@
             function goBack() {
                 var overlay = document.getElementById('paymentPopupOverlay');
                 if (overlay) overlay.classList.remove('visible');
-                window.location.href = 'player.html?resume=paynow';
+                var params = new URLSearchParams(window.location.search);
+                var returnTo = params.get('returnTo') || 'player.html?resume=paynow';
+                window.location.href = returnTo;
             }
 
             var backBtn = document.getElementById('paymentBackBtn');
