@@ -4,50 +4,103 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
-    <!-- No meta refresh — JS handles all routing -->
-    <title>Redirecting...</title>
+    <title>BBNL IPTV</title>
     <script>
-        // Enhanced redirect engine: bypass login whenever session is found
+        // Entry router — login.html is ONLY for first-time or after logout (hasLoggedInOnce cleared).
+        // If the user has ever logged in on this device, never open the login UI while TV storage is slow: wait until session reads, then home.
         (function () {
             try {
-                var udRaw = localStorage.getItem("bbnl_user");
-                var backupRaw = localStorage.getItem("bbnl_user_backup");
+                var relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
+                var hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
+                var RELAUNCH_POLL_MS = 120;
 
-                var user = null;
-                var backupUser = null;
-
-                if (udRaw) {
-                    try {
-                        var parsedPrimary = JSON.parse(udRaw);
-                        if (parsedPrimary && parsedPrimary.userid) user = parsedPrimary;
-                    } catch (e1) {}
+                function normalizeStoredUser(obj) {
+                    if (!obj || typeof obj !== 'object') return null;
+                    var uid = obj.userid != null && String(obj.userid).trim() !== '' ? String(obj.userid).trim()
+                        : (obj.userId != null && String(obj.userId).trim() !== '' ? String(obj.userId).trim() : '');
+                    if (!uid) return null;
+                    if (!obj.userid) obj.userid = uid;
+                    return obj;
                 }
 
-                if (backupRaw) {
-                    try {
-                        var parsedBackup = JSON.parse(backupRaw);
-                        if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
-                    } catch (e2) {}
-                }
+                function readResolvedUser() {
+                    var primaryRaw = localStorage.getItem("bbnl_user");
+                    var backupRaw = localStorage.getItem("bbnl_user_backup");
+                    var primaryUser = null;
+                    var backupUser = null;
 
-                var resolvedUser = user || backupUser;
-                if (resolvedUser) {
+                    if (primaryRaw) {
+                        try {
+                            primaryUser = normalizeStoredUser(JSON.parse(primaryRaw));
+                        } catch (e1) {}
+                    }
+                    if (backupRaw) {
+                        try {
+                            backupUser = normalizeStoredUser(JSON.parse(backupRaw));
+                        } catch (e2) {}
+                    }
+
+                    var resolvedUser = primaryUser || backupUser;
+                    if (!resolvedUser) return null;
+
                     var resolvedJson = JSON.stringify(resolvedUser);
-                    localStorage.setItem("bbnl_user", resolvedJson);
-                    localStorage.setItem("bbnl_user_backup", resolvedJson);
-                    localStorage.setItem("hasLoggedInOnce", "true");
+                    if (primaryRaw !== resolvedJson) localStorage.setItem("bbnl_user", resolvedJson);
+                    if (backupRaw !== resolvedJson) localStorage.setItem("bbnl_user_backup", resolvedJson);
+                    if (localStorage.getItem("hasLoggedInOnce") !== "true") {
+                        localStorage.setItem("hasLoggedInOnce", "true");
+                    }
+                    return resolvedUser;
+                }
+
+                function goHome() {
+                    try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e) {}
                     window.location.replace("home.html");
+                }
+
+                /** Login UI + login scripts only when never logged in (first install or Settings logout cleared storage). */
+                function goLogin() {
+                    try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e) {}
+                    window.location.replace("login.html");
+                }
+
+                var resolvedUser = readResolvedUser();
+                if (resolvedUser) {
+                    goHome();
                     return;
                 }
+
+                // First install or after logout: hasLoggedInOnce is absent/false.
+                if (!hadSessionBefore) {
+                    goLogin();
+                    return;
+                }
+
+                // Has logged in before: never open login.html while TV storage is slow — poll until session appears.
+                function pollForever() {
+                    var user = readResolvedUser();
+                    if (user) {
+                        goHome();
+                        return;
+                    }
+                    setTimeout(pollForever, RELAUNCH_POLL_MS);
+                }
+
+                setTimeout(pollForever, RELAUNCH_POLL_MS);
             } catch (e) {
+                try {
+                    if (localStorage.getItem('hasLoggedInOnce') === 'true') {
+                        window.location.replace('home.html');
+                    } else {
+                        window.location.replace('login.html');
+                    }
+                } catch (e2) {}
             }
-            window.location.replace('login.html');
         })();
     </script>
 </head>
 
 <body>
-    <p>Redirecting to login...</p>
+    <p style="margin:0;padding:24px;font-family:sans-serif;color:#888;">Starting…</p>
 </body>
 
 </html>

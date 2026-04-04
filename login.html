@@ -12,8 +12,20 @@
     <script>
         (function () {
             try {
-                var RELAUNCH_WAIT_MS = 1000;
-                var RELAUNCH_POLL_MS = 100;
+                var relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
+                var hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
+                // Login UI only for first-time or post-logout (both flags false). Otherwise leave before body/scripts (no login APIs).
+                var FIRST_LOGIN_WAIT_MS = 500;
+                var RELAUNCH_POLL_MS = 120;
+
+                function normalizeStoredUser(obj) {
+                    if (!obj || typeof obj !== 'object') return null;
+                    var uid = obj.userid != null && String(obj.userid).trim() !== '' ? String(obj.userid).trim()
+                        : (obj.userId != null && String(obj.userId).trim() !== '' ? String(obj.userId).trim() : '');
+                    if (!uid) return null;
+                    if (!obj.userid) obj.userid = uid;
+                    return obj;
+                }
 
                 function authDebug(message, details) {
                     try {
@@ -39,16 +51,16 @@
                     if (primaryRaw) {
                         try {
                             var parsedPrimary = JSON.parse(primaryRaw);
-                            if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
-                            else authDebug('Primary parsed but missing userid', parsedPrimary);
+                            primaryUser = normalizeStoredUser(parsedPrimary);
+                            if (!primaryUser) authDebug('Primary parsed but missing userid', parsedPrimary);
                         } catch (e1) {}
                     }
 
                     if (backupRaw) {
                         try {
                             var parsedBackup = JSON.parse(backupRaw);
-                            if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
-                            else authDebug('Backup parsed but missing userid', parsedBackup);
+                            backupUser = normalizeStoredUser(parsedBackup);
+                            if (!backupUser) authDebug('Backup parsed but missing userid', parsedBackup);
                         } catch (e2) {}
                     }
 
@@ -66,20 +78,38 @@
                     return resolvedUser;
                 }
 
-                function showLoginScreen() {
+                function clearAuthWaitVisibility() {
                     localStorage.removeItem('bbnl_relaunch_pending');
-                    authDebug('No session after polling, showing login screen');
                     if (document && document.documentElement) {
                         document.documentElement.style.visibility = '';
+                    }
+                    if (document.body) {
+                        document.body.style.visibility = '';
                     }
                 }
 
-                function goHome(user) {
-                    localStorage.removeItem('bbnl_relaunch_pending');
-                    authDebug('Session valid, redirecting to home', user);
-                    if (document && document.documentElement) {
-                        document.documentElement.style.visibility = '';
+                var loginFormRevealed = false;
+
+                function showLoginScreen() {
+                    if (loginFormRevealed) return;
+                    loginFormRevealed = true;
+                    authDebug('No session after polling, showing login screen');
+                    clearAuthWaitVisibility();
+                    function focusPhoneTwice() {
+                        var el = document.getElementById('phoneInput');
+                        if (!el) return;
+                        try {
+                            el.readOnly = false;
+                            el.focus();
+                        } catch (fe) {}
                     }
+                    setTimeout(focusPhoneTwice, 150);
+                    setTimeout(focusPhoneTwice, 600);
+                }
+
+                function goHome(user) {
+                    authDebug('Session valid, redirecting to home', user);
+                    clearAuthWaitVisibility();
                     window.location.replace("home.html");
                 }
 
@@ -89,8 +119,16 @@
                     return;
                 }
 
+                if (hadSessionBefore || relaunchPending) {
+                    window.location.replace('index.html');
+                    return;
+                }
+
                 if (document && document.documentElement) {
                     document.documentElement.style.visibility = 'hidden';
+                }
+                if (document.body) {
+                    document.body.style.visibility = 'hidden';
                 }
 
                 var waited = 0;
@@ -102,7 +140,7 @@
                     }
 
                     waited += RELAUNCH_POLL_MS;
-                    if (waited < RELAUNCH_WAIT_MS) {
+                    if (waited < FIRST_LOGIN_WAIT_MS) {
                         setTimeout(poll, RELAUNCH_POLL_MS);
                         return;
                     }
@@ -111,6 +149,12 @@
                 };
 
                 setTimeout(poll, RELAUNCH_POLL_MS);
+
+                setTimeout(function () {
+                    if (document.documentElement && document.documentElement.style.visibility === 'hidden') {
+                        showLoginScreen();
+                    }
+                }, FIRST_LOGIN_WAIT_MS + 2000);
             } catch (e) {}
         })();
     </script>

@@ -11,9 +11,12 @@
     }
 })();
 
-// Check authentication - redirect to login if never logged in
-// NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
+// Check authentication — post-HOME relaunch: wait for localStorage (api.js)
 (function checkAuth() {
+    if (typeof BBNL_gateAuthenticatedPage === 'function') {
+        BBNL_gateAuthenticatedPage({ useNavigatingFlag: true });
+        return;
+    }
     try {
         var primaryRaw = localStorage.getItem("bbnl_user");
         var backupRaw = localStorage.getItem("bbnl_user_backup");
@@ -51,7 +54,6 @@
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
         window.__BBNL_NAVIGATING = true;
         window.location.replace("login.html");
-        return;
     }
 })();
 

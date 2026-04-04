@@ -88,17 +88,18 @@ video {
     left: 50%;
     transform: translateX(-50%);
     --sidebar-width: 420px;
-    width: calc(100% - 80px);
-    max-width: 1800px;
+    width: calc(100% - 140px);
+    max-width: 1720px;
     height: 120px;
     background: rgba(10, 10, 18, 0.96);
     border-radius: 14px;
     padding: 0 28px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: none;
     overflow: hidden;
 }
 
@@ -113,8 +114,8 @@ video {
 /* Info bar position adjustment when sidebar is open */
 .info-bar-premium.sidebar-active {
     left: calc(50% + (var(--sidebar-width) / 2));
-    width: calc(100% - (var(--sidebar-width) + 90px));
-    max-width: 1350px;
+    width: calc(100% - (var(--sidebar-width) + 150px));
+    max-width: 1260px;
     z-index: 2050; /* Keep visible, but below sidebar (2100) so menu does not get covered */
 }
 
@@ -665,6 +666,23 @@ video {
     font-size: 16px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.7);
+}
+
+/* Channels shown under an expanded category (Movies ▼ Channel 1, 2, …) */
+.inline-channels-wrap {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0 8px 8px;
+    margin: 0 6px 6px 18px;
+    border-left: 2px solid rgba(0, 229, 255, 0.35);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.inline-channels-wrap .channel-item {
+    width: calc(100% - 16px);
+    margin: 4px 8px;
+    min-height: 96px;
+    height: auto;
 }
 
 /* ==========================================

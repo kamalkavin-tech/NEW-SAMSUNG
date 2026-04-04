@@ -15,7 +15,7 @@
         required_version="6.0"
         prelaunch="enable"/>
     
-    <content src="login.html"/>
+    <content src="index.html"/>
     <name>BBNL IPTV</name>
     <icon src="icon.png"/>
     

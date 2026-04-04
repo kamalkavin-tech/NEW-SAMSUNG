@@ -223,8 +223,23 @@ var fofiShouldAutoPlay = false;
 // Check authentication - redirect to login if never logged in
 (function checkAuth() {
     var attempts = 0;
-    var maxAttempts = 10;
-    var pollDelayMs = 100;
+    var relaunchPending = false;
+    var hadSessionBefore = false;
+    try {
+        relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
+        hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
+    } catch (e0) { }
+    var maxAttempts = (relaunchPending || hadSessionBefore) ? 250 : 12;
+    var pollDelayMs = 120;
+
+    function normalizeStoredUser(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        var uid = obj.userid != null && String(obj.userid).trim() !== '' ? String(obj.userid).trim()
+            : (obj.userId != null && String(obj.userId).trim() !== '' ? String(obj.userId).trim() : '');
+        if (!uid) return null;
+        if (!obj.userid) obj.userid = uid;
+        return obj;
+    }
 
     function authDebug(message, details) {
         try {
@@ -249,17 +264,17 @@ var fofiShouldAutoPlay = false;
 
         if (primaryRaw) {
             try {
-                var parsedPrimary = JSON.parse(primaryRaw);
-                if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
-                else authDebug('Primary parsed but missing userid', parsedPrimary);
+                var pP = JSON.parse(primaryRaw);
+                primaryUser = normalizeStoredUser(pP);
+                if (!primaryUser) authDebug('Primary parsed but missing userid', pP);
             } catch (e1) {}
         }
 
         if (backupRaw) {
             try {
-                var parsedBackup = JSON.parse(backupRaw);
-                if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
-                else authDebug('Backup parsed but missing userid', parsedBackup);
+                var pB = JSON.parse(backupRaw);
+                backupUser = normalizeStoredUser(pB);
+                if (!backupUser) authDebug('Backup parsed but missing userid', pB);
             } catch (e2) {}
         }
 
@@ -278,12 +293,14 @@ var fofiShouldAutoPlay = false;
     }
 
     function redirectLogin() {
+        try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (eL) { }
         window.location.replace("login.html");
     }
 
     try {
         var resolvedUser = readResolvedUser();
         if (resolvedUser) {
+            try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (eC) { }
             authDebug('Session valid, staying on home', resolvedUser);
             // Clear browser history to prevent back navigation to login pages
             if (window.history && window.history.replaceState) {
@@ -297,6 +314,7 @@ var fofiShouldAutoPlay = false;
             var retryUser = readResolvedUser();
             if (retryUser) {
                 clearInterval(authPollInterval);
+                try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (eC2) { }
                 authDebug('Session appeared during polling, staying on home', retryUser);
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState(null, '', window.location.href);
@@ -304,7 +322,8 @@ var fofiShouldAutoPlay = false;
                 return;
             }
 
-            if (attempts >= maxAttempts) {
+            var isReturningUser = hadSessionBefore || relaunchPending;
+            if (!isReturningUser && attempts >= maxAttempts) {
                 clearInterval(authPollInterval);
                 authDebug('No session after polling, redirecting to login');
                 redirectLogin();
@@ -313,7 +332,9 @@ var fofiShouldAutoPlay = false;
     } catch (e) {
         console.error("[Auth] Error validating session - redirecting to login:", e);
         authDebug('Auth check threw exception', String(e && e.message || e));
-        redirectLogin();
+        if (!hadSessionBefore) {
+            redirectLogin();
+        }
         return;
     }
 })();
@@ -2318,7 +2339,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (retryLoginBtn) {
         retryLoginBtn.addEventListener('click', function () {
             hideHomeErrorPopups();
-            window.location.href = 'login.html';
+            window.location.replace('index.html');
         });
     }
 

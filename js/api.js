@@ -65,6 +65,7 @@ if (USE_PROXY) {
 const DEFAULT_HEADERS = {
     "Content-Type": "application/json",
     "Authorization": "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=",
+    "X-App-Package": "com.lgiptv.bbnl",
     "devmac": "",
     "devslno": "",
     "deviceID": ""
@@ -1576,6 +1577,10 @@ const DeviceInfo = {
                         var mac = webapis.network.getMac();
                         if (mac) {
                             DEVICE_INFO.mac_address = mac;
+                            // SYNC: Populate devmac header for all subsequent API and Player requests
+                            if (typeof DEFAULT_HEADERS !== 'undefined') {
+                                DEFAULT_HEADERS["devmac"] = mac;
+                            }
                         }
                     } catch (e) {
                     }
@@ -3177,9 +3182,8 @@ const ChannelsAPI = {
             if (category) {
                 var normalizedCategory = String(category || '').trim().toLowerCase();
                 if (normalizedCategory === 'all' || normalizedCategory === 'all channels') {
-                    // "All" means no filter; keep session clean to avoid langid=all empty results on return.
-                    sessionStorage.removeItem('selectedLanguageId');
-                    sessionStorage.removeItem('selectedLanguageName');
+                    sessionStorage.setItem('selectedLanguageId', 'all');
+                    sessionStorage.setItem('selectedLanguageName', 'All Channels');
                 } else {
                     sessionStorage.setItem('selectedLanguageId', category);
                     // Also normalize known fixed category IDs.
@@ -4228,6 +4232,118 @@ if (typeof window !== 'undefined') {
     window.RemoteKeys = RemoteKeys;
 }
 
+// ==========================================
+// Post-relaunch auth (pages loaded after HOME→exit)
+// If localStorage is briefly empty, do not send the user to login unless they truly logged out
+// (logout clears hasLoggedInOnce and bbnl_user).
+// ==========================================
+/**
+ * @param {{ useNavigatingFlag?: boolean }} opts
+ */
+function BBNL_gateAuthenticatedPage(opts) {
+    opts = opts || {};
+    var useNav = opts.useNavigatingFlag === true;
+
+    function redirectLogin() {
+        try {
+            if (useNav) window.__BBNL_NAVIGATING = true;
+        } catch (e0) { }
+        try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e1) { }
+        window.location.replace('login.html');
+    }
+
+    function normalizeStoredUser(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        var uid = obj.userid != null && String(obj.userid).trim() !== '' ? String(obj.userid).trim()
+            : (obj.userId != null && String(obj.userId).trim() !== '' ? String(obj.userId).trim() : '');
+        if (!uid) return null;
+        if (!obj.userid) obj.userid = uid;
+        return obj;
+    }
+
+    function readResolvedUser() {
+        var primaryRaw = localStorage.getItem('bbnl_user');
+        var backupRaw = localStorage.getItem('bbnl_user_backup');
+        var primaryUser = null;
+        var backupUser = null;
+        if (primaryRaw) {
+            try {
+                primaryUser = normalizeStoredUser(JSON.parse(primaryRaw));
+            } catch (e2) { }
+        }
+        if (backupRaw) {
+            try {
+                backupUser = normalizeStoredUser(JSON.parse(backupRaw));
+            } catch (e3) { }
+        }
+        return primaryUser || backupUser || null;
+    }
+
+    function applySession(user) {
+        var primaryRaw = localStorage.getItem('bbnl_user');
+        var backupRaw = localStorage.getItem('bbnl_user_backup');
+        var resolvedJson = JSON.stringify(user);
+        if (primaryRaw !== resolvedJson) localStorage.setItem('bbnl_user', resolvedJson);
+        if (backupRaw !== resolvedJson) localStorage.setItem('bbnl_user_backup', resolvedJson);
+        if (localStorage.getItem('hasLoggedInOnce') !== 'true') {
+            localStorage.setItem('hasLoggedInOnce', 'true');
+        }
+        try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e4) { }
+    }
+
+    var resolved = readResolvedUser();
+    if (resolved) {
+        applySession(resolved);
+        return;
+    }
+
+    var relaunchPending = false;
+    var hadSessionBefore = false;
+    try {
+        relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
+        hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
+    } catch (e5) { }
+
+    if (!relaunchPending && !hadSessionBefore) {
+        redirectLogin();
+        return;
+    }
+
+    var maxMs = 30000;
+    var pollMs = 120;
+    var waited = 0;
+
+    function poll() {
+        var u = readResolvedUser();
+        if (u) {
+            applySession(u);
+            return;
+        }
+        waited += pollMs;
+        if (waited < maxMs) {
+            setTimeout(poll, pollMs);
+            return;
+        }
+        var rp = false;
+        var hb = false;
+        try {
+            rp = localStorage.getItem('bbnl_relaunch_pending') === '1';
+            hb = localStorage.getItem('hasLoggedInOnce') === 'true';
+        } catch (e6) { }
+        if (rp || hb) {
+            waited = 0;
+            setTimeout(poll, pollMs);
+            return;
+        }
+        redirectLogin();
+    }
+
+    setTimeout(poll, pollMs);
+}
+
+if (typeof window !== 'undefined') {
+    window.BBNL_gateAuthenticatedPage = BBNL_gateAuthenticatedPage;
+}
 
 // ==========================================
 // APP LIFECYCLE - HOME button handling
@@ -4332,6 +4448,7 @@ document.addEventListener('visibilitychange', function () {
         var currentPage = window.location.pathname.split('/').pop() || '';
         var isAuthPage = (currentPage === 'login.html' || currentPage === 'verify.html' || currentPage === 'index.html');
         if (!isAuthPage) {
+            try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (eRP) { }
             window.location.replace('home.html');
         }
 

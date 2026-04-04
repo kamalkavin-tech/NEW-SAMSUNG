@@ -20,9 +20,12 @@
     }
 })();
 
-// Check authentication - redirect to login if never logged in
-// NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
+// Check authentication — post-HOME relaunch: wait for localStorage (api.js)
 (function checkAuth() {
+    if (typeof BBNL_gateAuthenticatedPage === 'function') {
+        BBNL_gateAuthenticatedPage();
+        return;
+    }
     try {
         var primaryRaw = localStorage.getItem("bbnl_user");
         var backupRaw = localStorage.getItem("bbnl_user_backup");
@@ -58,7 +61,6 @@
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
         window.location.replace("login.html");
-        return;
     }
 })();
 
@@ -112,6 +114,17 @@ var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during ra
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
 var CHANNELS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes — reduces API calls on page navigation
 var channelsPageExiting = false;
+var _allChannelsObjectIndexMap = null;
+
+function rebuildAllChannelsObjectIndexMap() {
+    _allChannelsObjectIndexMap = null;
+    if (typeof Map === 'undefined' || !Array.isArray(allChannels) || allChannels.length === 0) return;
+    var map = new Map();
+    for (var i = 0; i < allChannels.length; i++) {
+        map.set(allChannels[i], i);
+    }
+    _allChannelsObjectIndexMap = map;
+}
 
 function exitChannelsToHome() {
     channelsPageExiting = true;
@@ -309,23 +322,14 @@ async function initPage() {
     var urlLang = urlParams.get('lang');
     var selectedLangId = sessionStorage.getItem('selectedLanguageId') || '';
     var selectedLangName = sessionStorage.getItem('selectedLanguageName') || '';
-
-    // Normalize "all" sentinel values to empty filter so first render never queries langid=all.
     var normalizedLangId = String(selectedLangId || '').trim().toLowerCase();
-    if (normalizedLangId === 'all' || normalizedLangId === 'all channels') {
-        selectedLangId = '';
-        try {
-            sessionStorage.removeItem('selectedLanguageId');
-            if (!selectedLangName || String(selectedLangName).trim().toLowerCase() === 'all channels') {
-                sessionStorage.removeItem('selectedLanguageName');
-            }
-        } catch (e) {}
-    }
 
-    // Build channel load options from language filter
+    // Build channel load options from language filter (never send langid=all to API — use unfiltered fetch)
     var channelOptions = {};
     if (selectedLangId === 'subs' || (selectedLangName && selectedLangName.toLowerCase().indexOf('subscribed') !== -1)) {
         channelOptions = { subscribed: 'yes' };
+    } else if (normalizedLangId === 'all' || normalizedLangId === 'all channels') {
+        channelOptions = {};
     } else if (selectedLangId && selectedLangId !== '') {
         channelOptions = { langid: selectedLangId };
     } else if (urlLang) {
@@ -365,9 +369,9 @@ async function initPage() {
     }
 
     try {
-        // Load master list + languages + filtered channels ALL IN PARALLEL
-        var [masterResult, languageResponse, channelsResult] = await Promise.all([
-            loadMasterChannelList(),
+        // Master list first so loadChannels can filter in-memory reliably (avoids empty grid races).
+        await loadMasterChannelList();
+        var [languageResponse, channelsResult] = await Promise.all([
             BBNL_API.getLanguageList(),
             loadChannels(channelOptions)
         ]);
@@ -450,6 +454,11 @@ function setInitialFocus() {
 
 function renderLanguagePills(languages) {
     allLanguages = languages;
+    _pillsCache = null;
+    if (_pillDebounce) {
+        clearTimeout(_pillDebounce);
+        _pillDebounce = null;
+    }
 
     var container = document.getElementById('languagePillsRow');
     if (!container) return;
@@ -507,10 +516,9 @@ function renderLanguagePills(languages) {
             allPills.forEach(function (p) { p.classList.remove('active'); });
             pill.classList.add('active');
 
-            // Store selection
             if (!langId || langId === '' || isAllChannels) {
-                sessionStorage.removeItem('selectedLanguageId');
-                sessionStorage.removeItem('selectedLanguageName');
+                sessionStorage.setItem('selectedLanguageId', 'all');
+                sessionStorage.setItem('selectedLanguageName', 'All Channels');
             } else {
                 sessionStorage.setItem('selectedLanguageId', langId);
                 sessionStorage.setItem('selectedLanguageName', langName);
@@ -635,16 +643,18 @@ function handleSidebarCategorySelect(item) {
     // Add active to selected
     item.classList.add('active');
     
-    // Clear language filter when category is selected
-    sessionStorage.removeItem('selectedLanguageId');
-    sessionStorage.removeItem('selectedLanguageName');
-    
-    // Reset language selector to "All Languages"
-    selectedLanguageIndex = 0;
+    // Keep language pill / sessionStorage (e.g. English) — only filter by sidebar category.
+    var savedLangName = sessionStorage.getItem('selectedLanguageName') || '';
+    if (savedLangName && allLanguages.length > 0) {
+        var matchIdx = allLanguages.findIndex(function (lang) {
+            return String(lang.langtitle || lang.lalng || lang.name || '').toLowerCase() === savedLangName.toLowerCase();
+        });
+        if (matchIdx >= 0) {
+            selectedLanguageIndex = matchIdx + 1;
+        }
+    }
     updateLanguageSelectorDisplay();
-    
-    // Update title
-    updateHeaderWithLanguage(null);
+    updateHeaderWithLanguage(savedLangName || null);
     
     // Filter channels by this category
     const categoryName = item.dataset.category;
@@ -741,9 +751,8 @@ function updateLanguageSelectorDisplay() {
 
 function applyLanguageFilter() {
     if (selectedLanguageIndex === 0) {
-        // All Languages - clear filter
-        sessionStorage.removeItem('selectedLanguageId');
-        sessionStorage.removeItem('selectedLanguageName');
+        sessionStorage.setItem('selectedLanguageId', 'all');
+        sessionStorage.setItem('selectedLanguageName', 'All Channels');
         updateHeaderWithLanguage(null);
         
         // Show all channels
@@ -1281,9 +1290,6 @@ async function loadChannels(options = {}) {
             }
             
             response = filtered;
-            
-            // Artificially delay slightly for UI consistency if resolving instantly
-            await new Promise(r => setTimeout(r, 50));
         } else {
             // Fallback: Real network request
             response = await BBNL_API.getChannelList(apiOptions);
@@ -1335,6 +1341,7 @@ function renderAllChannels(channels) {
 
     // Store currently displayed channels for LCN search
     currentDisplayedChannels = channels;
+    rebuildAllChannelsObjectIndexMap();
 
     if (channels.length === 0) {
         container.innerHTML = '<div class="loading-spinner">No channels found</div>';
@@ -1365,7 +1372,12 @@ function renderAllChannels(channels) {
         var end = Math.min(currentIndex + CHUNK_SIZE, len);
         
         for (var i = currentIndex; i < end; i++) {
-            frag.appendChild(createChannelCard(channels[i], i < IMMEDIATE_LOAD_COUNT));
+            var ch = channels[i];
+            var channelIdx = -1;
+            if (_allChannelsObjectIndexMap && _allChannelsObjectIndexMap.has(ch)) {
+                channelIdx = _allChannelsObjectIndexMap.get(ch);
+            }
+            frag.appendChild(createChannelCard(ch, i < IMMEDIATE_LOAD_COUNT, channelIdx));
         }
         
         grid.appendChild(frag);
@@ -1441,7 +1453,7 @@ function _setupLazyImageLoading(scrollContainer) {
 // Images are loaded when channel cards are rendered (no lazy loading)
 // ==========================================
 
-function createChannelCard(ch, loadImmediate) {
+function createChannelCard(ch, loadImmediate, channelIdx) {
     const chName = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
     const chLogo = getChannelCardLogo(ch);
     const streamLink = ch.streamlink || ch.channel_url || "";
@@ -1456,8 +1468,12 @@ function createChannelCard(ch, loadImmediate) {
     card.dataset.name = chName;
     card.dataset.logo = chLogo;
     card.dataset.channelno = chNo;
-    // Store channel index for player navigation (avoid JSON.stringify per card — blocks main thread)
-    card.dataset.channelIdx = String(allChannels.indexOf(ch));
+    // Store channel index for player navigation using precomputed object index map.
+    if (typeof channelIdx === 'number' && channelIdx >= 0) {
+        card.dataset.channelIdx = String(channelIdx);
+    } else {
+        card.dataset.channelIdx = '';
+    }
 
     // LCN Badge - Top Left
     const lcnBadge = document.createElement("div");
@@ -2028,23 +2044,31 @@ function moveWithinTabs(direction) {
 
     var langId = targetPill.dataset.langid || '';
     var langName = targetPill.dataset.langname || '';
+    var isAllTab = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
 
-    sessionStorage.setItem('selectedLanguageId', langId);
-    sessionStorage.setItem('selectedLanguageName', langName);
+    if (isAllTab) {
+        sessionStorage.setItem('selectedLanguageId', 'all');
+        sessionStorage.setItem('selectedLanguageName', 'All Channels');
+    } else {
+        sessionStorage.setItem('selectedLanguageId', langId);
+        sessionStorage.setItem('selectedLanguageName', langName);
+    }
 
     // Debounce: filter channels 100ms after user stops moving
     clearTimeout(_pillDebounce);
     _pillDebounce = setTimeout(function () {
-        // Try local filter first (instant) — fall back to API if no cache
+        // Try local filter first (instant) — use in-memory master list if available.
         var allCh = null;
-        if (typeof CacheManager !== 'undefined') {
+        if (Array.isArray(masterChannelList) && masterChannelList.length > 0) {
+            allCh = masterChannelList;
+        } else if (typeof CacheManager !== 'undefined') {
             allCh = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST, true);
         }
 
         if (allCh && allCh.length > 0) {
             // Filter locally — no API call
             var filtered;
-            var isAll = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+            var isAll = isAllTab;
             if (!langId || langId === '' || isAll) {
                 filtered = allCh;
             } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
@@ -2223,6 +2247,18 @@ function handleEnter(el) {
                 channelno: el.dataset.channelno || ""
             };
         }
+
+        try {
+            var activeCat = document.querySelector('.category-item.active');
+            if (activeCat && activeCat.dataset) {
+                var g = String(activeCat.dataset.grid || '').trim();
+                var ck = String(activeCat.dataset.category || '').trim().toLowerCase();
+                if (g) sessionStorage.setItem('bbnl_channels_category_grid', g);
+                else sessionStorage.removeItem('bbnl_channels_category_grid');
+                if (ck && ck !== 'all') sessionStorage.setItem('bbnl_channels_category_key', ck);
+                else sessionStorage.removeItem('bbnl_channels_category_key');
+            }
+        } catch (eCat) {}
 
         BBNL_API.playChannel(channel);
         return;

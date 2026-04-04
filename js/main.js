@@ -8,6 +8,16 @@ var otpRequestInProgress = false; // Flag to prevent duplicate OTP requests
 var otpVerifyInProgress = false; // Flag to prevent duplicate OTP verification
 var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fire from TV remote quirks)
 
+function focusLoginPhoneInput() {
+    var phoneInput = document.getElementById("phoneInput");
+    if (!phoneInput) return false;
+    phoneInput.readOnly = false;
+    phoneInput.focus();
+    var phoneIdx = Array.from(focusables).indexOf(phoneInput);
+    if (phoneIdx >= 0) currentFocus = phoneIdx;
+    return true;
+}
+
 // Check authentication on page load - redirect logged in users away from auth pages
 (function checkAuthRedirect() {
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
@@ -17,6 +27,14 @@ var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fi
     // If user has logged in before AND has valid session data, skip login pages and go to home
     if (isAuthPage) {
         try {
+            function normalizeStoredUser(obj) {
+                if (!obj || typeof obj !== 'object') return null;
+                var uid = obj.userid != null && String(obj.userid).trim() !== '' ? String(obj.userid).trim()
+                    : (obj.userId != null && String(obj.userId).trim() !== '' ? String(obj.userId).trim() : '');
+                if (!uid) return null;
+                if (!obj.userid) obj.userid = uid;
+                return obj;
+            }
             var primaryRaw = localStorage.getItem("bbnl_user");
             var backupRaw = localStorage.getItem("bbnl_user_backup");
             var primaryUser = null;
@@ -24,15 +42,13 @@ var lastOtpRequestTime = 0; // Timestamp of last OTP request (prevents double-fi
 
             if (primaryRaw) {
                 try {
-                    var parsedPrimary = JSON.parse(primaryRaw);
-                    if (parsedPrimary && parsedPrimary.userid) primaryUser = parsedPrimary;
+                    primaryUser = normalizeStoredUser(JSON.parse(primaryRaw));
                 } catch (e1) {}
             }
 
             if (backupRaw) {
                 try {
-                    var parsedBackup = JSON.parse(backupRaw);
-                    if (parsedBackup && parsedBackup.userid) backupUser = parsedBackup;
+                    backupUser = normalizeStoredUser(JSON.parse(backupRaw));
                 } catch (e2) {}
             }
 
@@ -58,8 +74,8 @@ window.onload = function () {
     // 1. Select Focusables
     focusables = document.querySelectorAll(".focusable");
 
-    // 2. Set Initial Focus
-    if (focusables.length > 0) {
+    // 2. Set Initial Focus (login page should always start on phone input)
+    if (!focusLoginPhoneInput() && focusables.length > 0) {
         currentFocus = 0;
         focusables[0].focus();
     }
@@ -128,7 +144,16 @@ window.onload = function () {
 
     // 8. Initialize phone input (clear any residual values)
     initializePhoneInput();
+
+    // Re-assert focus after initial paint to avoid focus loss on TV render/poll timing.
+    requestAnimationFrame(function () {
+        focusLoginPhoneInput();
+    });
 };
+
+window.addEventListener('pageshow', function () {
+    focusLoginPhoneInput();
+});
 
 /* DEVICE ID */
 function showDeviceId() {
@@ -690,6 +715,13 @@ function moveFocus(step) {
 
 function handleOK() {
     var active = document.activeElement;
+
+    // Login page guard: if nothing meaningful is focused, OK should focus phone input.
+    if (document.getElementById('phoneInput')) {
+        if (!active || active === document.body || active === document.documentElement) {
+            if (focusLoginPhoneInput()) return;
+        }
+    }
 
     // ERROR MODAL: Try Again Button
     if (active.id === "errorTryAgainBtn") {

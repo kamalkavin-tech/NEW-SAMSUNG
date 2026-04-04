@@ -10,9 +10,12 @@
     }
 })();
 
-// Check authentication - redirect to login if never logged in
-// NOTE: Never remove hasLoggedInOnce — it must persist across HOME relaunch.
+// Check authentication — post-HOME relaunch: wait for localStorage (api.js)
 (function checkAuth() {
+    if (typeof BBNL_gateAuthenticatedPage === 'function') {
+        BBNL_gateAuthenticatedPage();
+        return;
+    }
     try {
         var primaryRaw = localStorage.getItem("bbnl_user");
         var backupRaw = localStorage.getItem("bbnl_user_backup");
@@ -48,7 +51,6 @@
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
         window.location.replace("login.html");
-        return;
     }
 })();
 
@@ -68,6 +70,7 @@ window.addEventListener('pagehide', function (event) {
     if (typeof streamAdTimer !== 'undefined' && streamAdTimer) { clearTimeout(streamAdTimer); }
     if (typeof streamAdRotateTimer !== 'undefined' && streamAdRotateTimer) { clearInterval(streamAdRotateTimer); }
     if (typeof overlayTimeout !== 'undefined' && overlayTimeout) { clearTimeout(overlayTimeout); }
+    if (typeof clearPlayerChromeIdleTimer === 'function') clearPlayerChromeIdleTimer();
     if (typeof channelInputTimeout !== 'undefined' && channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
     if (typeof playerChannelSearchTimeout !== 'undefined' && playerChannelSearchTimeout) { clearTimeout(playerChannelSearchTimeout); playerChannelSearchTimeout = null; }
     // Release AVPlayer resources
@@ -494,42 +497,28 @@ function resetPlayerErrorUiTimer() {
     clearPlayerErrorUiTimer();
     if (!playerErrorPopupOpen) return;
 
+    var sidebar = document.getElementById('playerSidebar');
+
     playerErrorUiTimeout = setTimeout(function () {
-        // Force-hide sidebar + info bar after 10 seconds of no user action during popup.
-        var sidebar = document.getElementById('playerSidebar');
-        if (sidebar) {
-            sidebarState.isOpen = false;
-            sidebar.classList.remove('open');
-            sidebar.classList.add('close');
-            setTimeout(function () {
-                sidebar.classList.remove('close');
-            }, 300);
+        // Only hide the info bar/overlay if the sidebar is NOT open
+        if (sidebar && !sidebarState.isOpen) {
+            if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+            if (_overlayEl) {
+                _overlayEl.classList.remove('visible');
+                _overlayEl.classList.add('hidden');
+            }
+            if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+            if (_infoBarEl) {
+                _infoBarEl.classList.add('info-bar-hidden');
+                _infoBarEl.classList.remove('sidebar-active');
+            }
         }
-
-        if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
-        if (_overlayEl) {
-            _overlayEl.classList.remove('visible');
-            _overlayEl.classList.add('hidden');
-        }
-
-        if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
-        var infoBar = _infoBarEl;
-        if (infoBar) {
-            infoBar.classList.add('info-bar-hidden');
-            infoBar.classList.remove('sidebar-active');
-        }
-
-        clearSidebarInactivityTimer();
+        
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
             overlayTimeout = null;
         }
-        if (uiTimer) {
-            clearTimeout(uiTimer);
-            uiTimer = null;
-        }
-
-    }, PLAYER_ERROR_UI_HIDE_DELAY);
+    }, 10000); // 10 seconds of inactivity during popup
 }
 
 /**
@@ -628,6 +617,7 @@ function showPlayerErrorPopup(title, message) {
 
         popup.style.display = 'flex';
         playerErrorPopupOpen = true;
+        clearPlayerChromeIdleTimer();
         resetPlayerErrorUiTimer();
         setTimeout(function () {
             var btn = document.getElementById('playerRetryBtn');
@@ -653,18 +643,14 @@ function hidePlayerErrorPopup() {
             overlayTimeout = null;
         }
 
-        // Keep info bar visible until user changes channel
         _keepInfoBarVisible = true;
+        _keepChromeAfterErrorBack = true;
         if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
         if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
-        if (_infoBarEl) {
-            _infoBarEl.classList.remove('info-bar-hidden');
-            syncInfoBarSidebarState();
-        }
-        if (_overlayEl) {
-            _overlayEl.classList.remove('hidden');
-            _overlayEl.classList.add('visible');
-        }
+        showInfoBarForced();
+        requestAnimationFrame(function () {
+            showInfoBarForced();
+        });
     }
 }
 
@@ -684,7 +670,7 @@ function retryLastAttemptedChannel() {
                     var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                     return aNo - bNo;
                 });
-                _allChannelsUnfiltered = allChannels; // Same list for sidebar
+                _allChannelsUnfiltered = allChannels.slice(); // Keep sidebar cache isolated from player-list mutations
                 // Find the same channel in refreshed list by ID
                 if (chId) {
                     var updated = channels.find(function (ch) {
@@ -1099,8 +1085,12 @@ async function loadChannelList(lookupName = null) {
             if (langId === 'subs' || (langName && langName.toLowerCase().indexOf('subscribed') !== -1)) {
                 // Subscribed filter
                 allChannels = sortedAll.filter(function (ch) {
-                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                    return isChannelSubscribed(ch);
                 });
+            } else if (langId === 'all' || String(langId).toLowerCase() === 'all channels' ||
+                (langName && String(langName).trim().toLowerCase() === 'all channels')) {
+                // Explicit "All Channels" — full list for zapping (distinct from empty session = home default)
+                allChannels = sortedAll.slice();
             } else if (langId && langId !== '' && langId !== 'all') {
                 // Language filter
                 var filterLangId = String(langId).trim();
@@ -1115,9 +1105,9 @@ async function loadChannelList(lookupName = null) {
                     return false;
                 });
             } else {
-                // No filter selected (coming from home page) — default to subscribed channels
+                // No filter in session (e.g. home launch) — default to subscribed channels only
                 allChannels = sortedAll.filter(function (ch) {
-                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                    return isChannelSubscribed(ch);
                 });
             }
             if (allChannels.length === 0) allChannels = sortedAll;
@@ -1196,8 +1186,11 @@ async function loadChannelList(lookupName = null) {
 
                             if (currentLangId === 'subs' || (currentLangName && currentLangName.toLowerCase().indexOf('subscribed') !== -1)) {
                                 refreshedChannels = sortedFresh.filter(function (ch) {
-                                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                                    return isChannelSubscribed(ch);
                                 });
+                            } else if (currentLangId === 'all' || String(currentLangId).toLowerCase() === 'all channels' ||
+                                (currentLangName && String(currentLangName).trim().toLowerCase() === 'all channels')) {
+                                refreshedChannels = sortedFresh.slice();
                             } else if (currentLangId && currentLangId !== '' && currentLangId !== 'all') {
                                 var fLangId = String(currentLangId).trim();
                                 var fLangName = String(currentLangName || '').trim().toLowerCase();
@@ -1212,7 +1205,7 @@ async function loadChannelList(lookupName = null) {
                                 });
                             } else {
                                 refreshedChannels = sortedFresh.filter(function (ch) {
-                                    return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+                                    return isChannelSubscribed(ch);
                                 });
                             }
                             if (refreshedChannels.length === 0) refreshedChannels = sortedFresh;
@@ -1515,17 +1508,42 @@ function setupPlayer(channel) {
     if (!channel) channel = _lastAttemptedChannel;
     if (!channel) return;
 
+    try {
+        var enrichSrc = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0)
+            ? _allChannelsUnfiltered
+            : (sidebarState && sidebarState.allChannelsCache && sidebarState.allChannelsCache.length > 0)
+                ? sidebarState.allChannelsCache
+                : null;
+        if (enrichSrc) {
+            var eid = String(channel.channelno || channel.urno || channel.chid || '').trim();
+            if (eid) {
+                var found = enrichSrc.find(function (c) {
+                    return String(c.channelno || c.urno || c.chid || '').trim() === eid;
+                });
+                if (found) channel = Object.assign({}, found, channel);
+            }
+        }
+    } catch (enrichErr) { }
+
     _playerStreamGen++;
     var myGen = _playerStreamGen;
 
-    // Remove page-level loading screen
-    var pl = document.getElementById('page-loading');
-    if (pl) pl.remove();
+    clearPlayerChromeIdleTimer();
 
-    _keepInfoBarVisible = false;
+    // #page-loading stays visible until AVPlayer onBufferingStart removes it (menu channel picks)
 
-    // Stop previous stream
-    try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) { }
+    // INFO BAR PERSISTENCE: Keep info bar visible continuously during playback (no auto-hide)
+    // as requested by the user to avoid "blank screen" feel between channels.
+    _keepInfoBarVisible = true;
+
+    // Avoid hard stop on Tizen before changeStream to keep channel zapping fast.
+    var isTizenPlayback = false;
+    try {
+        isTizenPlayback = (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen && AVPlayer.isTizen());
+    } catch (e) { }
+    if (!isTizenPlayback) {
+        try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e2) { }
+    }
 
     if (window._streamTimeoutTimer) {
         clearTimeout(window._streamTimeoutTimer);
@@ -1534,6 +1552,7 @@ function setupPlayer(channel) {
 
     hasHiddenLoadingIndicator = false;
     _lastAttemptedChannel = channel;
+    _keepChromeAfterErrorBack = false;
 
     var chName = channel.channel_name || channel.chtitle || "Unknown Channel";
     var channelNum = channel.channelno || channel.urno || channel.chno || channel.ch_no || channel.id || "000";
@@ -1547,6 +1566,13 @@ function setupPlayer(channel) {
     // Draw logo immediately so sidebar/info bar feel responsive during stream setup.
     updatePlayerChannelLogo(channel);
 
+    // Update info bar SYNCHRONOUSLY on first load so channel metadata is visible immediately
+    // This ensures the info bar is not empty when the player page loads.
+    updateExpiryDisplay(channel);
+    
+    // Show overlay immediately so info bar is visible from the start
+    showOverlay();
+
     // ==========================================
     // DEFERRED UI UPDATES — run early to ensure UI updates even if stream is blocked
     // Uses requestAnimationFrame so these don't delay playback
@@ -1555,8 +1581,7 @@ function setupPlayer(channel) {
     var capturedChName = chName;
     requestAnimationFrame(function () {
         // Remaining UI updates deferred to keep playback setup smooth.
-        updateExpiryDisplay(capturedChannel);
-        showOverlay();
+        // Note: updateExpiryDisplay and showOverlay already called above synchronously
         var uiTitle = document.getElementById("ui-program-title");
         if (uiTitle) uiTitle.innerText = "Live Stream: " + capturedChName;
         var uiProgramTime = document.getElementById("ui-program-time");
@@ -1730,7 +1755,10 @@ function setupPlayer(channel) {
         const v = document.getElementById("video-player");
         if (v) {
             v.src = fixedStreamUrl;
-            v.play().catch(function (error) {
+            v.play().then(function () {
+                var plh = document.getElementById('page-loading');
+                if (plh) plh.style.display = 'none';
+            }).catch(function (error) {
                 console.error("HTML5 video play error:", error);
                 handlePlaybackFailure({
                     source: 'html5-play-error',
@@ -1916,10 +1944,11 @@ function syncSidebarWithCurrentPlayback(ensureCache) {
 
     if (sidebarState.isOpen) {
         alignSidebarToCurrentPlayback();
-        if (sidebarState.expandedCategoryIndex >= 0 && sidebarState.channels.length > 0) {
+        if (getSortedExpandedCategoryIndices().length > 0 && sidebarState.channels.length > 0) {
             sidebarState.currentLevel = 'channels';
             sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
-            focusChannelItem(sidebarState.channelIndex);
+            var cIxSync = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
+            focusChannelItem(sidebarState.channelIndex, cIxSync);
         } else if (sidebarState.categories.length > 0) {
             sidebarState.currentLevel = 'categories';
             sidebarState.categoryIndex = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
@@ -1982,13 +2011,15 @@ function prefetchSidebarChannelLogos(channels, maxCount) {
 // PLAYER SIDEBAR - 2-LEVEL DYNAMIC DESIGN
 // ==========================================
 
-// Auto-hide timer configuration
-const OVERLAY_HIDE_DELAY = 5000; // 5 seconds
-const SIDEBAR_HIDE_DELAY = 5000; // 5 seconds
+// Auto-hide: menu + info chrome after ~8.5s idle (user requested 8–9s)
+const OVERLAY_HIDE_DELAY = 8500;
+const PLAYER_CHROME_IDLE_MS = 8500;
+const INFO_BAR_PERSISTENT = true; // When false, overlay timer can hide bar; idle hide still applies after PLAYER_CHROME_IDLE_MS
 
 // Timers
 var overlayTimeout = null;
 var sidebarInactivityTimer = null;
+var playerChromeIdleTimer = null;
 
 // Sidebar state - 2-Level Navigation (Language → Categories → Channels)
 var sidebarState = {
@@ -1998,7 +2029,7 @@ var sidebarState = {
     categoryIndex: 0,
     channelIndex: 0,
     channelSortOrder: 'asc', // 'asc' (low->high channel number) or 'desc' (high->low)
-    expandedCategoryIndex: -1,
+    expandedCategories: {}, // { "0": true, "2": true } — multiple category rows can stay open
     languages: [
         { name: 'All Channels', code: 'all' },
         { name: 'Subscribed Channels', code: 'subscribed' }
@@ -2007,12 +2038,94 @@ var sidebarState = {
     categories: [],
     channels: [],
     allChannelsCache: [], // Cache all channels for filtering
+    allChannelsCacheVersion: 0,
     apiCategories: [],
     languageUiState: {},
     categoryChannelIndexMap: {}
 };
 
+// ◄► language row is browse-only until user OK-plays a channel from the sidebar.
+// CH+/- and sessionStorage follow the last "committed" context, not the preview tab.
+var _sidebarLanguageIndexAtOpen = 0;
+var _committedNavigationFromSidebarOpen = false;
+
 var _sidebarChannelsHydrationPromise = null;
+var _sidebarFilteredChannelsCache = {};
+var _sidebarBuiltCategoriesCache = {};
+
+function invalidateSidebarDerivedCaches() {
+    _sidebarFilteredChannelsCache = {};
+    _sidebarBuiltCategoriesCache = {};
+}
+
+function _sidebarExpandKey(catIdx) {
+    return String(catIdx);
+}
+
+function isSidebarCategoryExpanded(catIdx) {
+    return !!(sidebarState.expandedCategories && sidebarState.expandedCategories[_sidebarExpandKey(catIdx)]);
+}
+
+function setSidebarCategoryExpanded(catIdx, on) {
+    if (!sidebarState.expandedCategories) sidebarState.expandedCategories = {};
+    var k = _sidebarExpandKey(catIdx);
+    if (on) sidebarState.expandedCategories[k] = true;
+    else delete sidebarState.expandedCategories[k];
+}
+
+function clearSidebarExpandedCategories() {
+    sidebarState.expandedCategories = {};
+}
+
+function getSortedExpandedCategoryIndices() {
+    var o = sidebarState.expandedCategories || {};
+    return Object.keys(o).map(function (x) { return parseInt(x, 10); })
+        .filter(function (n) { return !isNaN(n) && n >= 0; })
+        .sort(function (a, b) { return a - b; });
+}
+
+function snapshotSidebarCommitBaseline() {
+    _sidebarLanguageIndexAtOpen = sidebarState.languageIndex;
+    _committedNavigationFromSidebarOpen = false;
+}
+
+/**
+ * Apply the current sidebar language tab to CH+/- list + sessionStorage.
+ * Call only when the user commits (e.g. OK on a channel in the menu), not when ◄► browsing.
+ */
+function applySidebarLanguageToZapListAndSession(playedChannel) {
+    var filteredForNav = getFilteredChannelsByLanguage();
+    if (filteredForNav && filteredForNav.length > 0) {
+        allChannels = filteredForNav.slice();
+        var ch = playedChannel || _lastAttemptedChannel || _lastPlayingChannel;
+        if (ch) {
+            var chId = String(ch.channelno || ch.urno || ch.chid || '');
+            var foundIdx = allChannels.findIndex(function (c) {
+                return String(c.channelno || c.urno || c.chid || '') === chId;
+            });
+            if (foundIdx >= 0) currentIndex = foundIdx;
+        }
+    }
+    var selectedLang = sidebarState.languages[sidebarState.languageIndex];
+    if (selectedLang) {
+        if (selectedLang.code === 'all') {
+            try {
+                sessionStorage.setItem('selectedLanguageId', 'all');
+                sessionStorage.setItem('selectedLanguageName', 'All Channels');
+            } catch (e) {}
+        } else if (selectedLang.code === 'subscribed') {
+            try {
+                sessionStorage.setItem('selectedLanguageId', 'subs');
+                sessionStorage.setItem('selectedLanguageName', 'Subscribed Channels');
+            } catch (e2) {}
+        } else {
+            try {
+                sessionStorage.setItem('selectedLanguageId', String(selectedLang.langid || selectedLang.code || ''));
+                sessionStorage.setItem('selectedLanguageName', selectedLang.name || '');
+            } catch (e3) {}
+        }
+    }
+}
 
 function getCurrentLanguageStateKey() {
     var currentLang = sidebarState.languages[sidebarState.languageIndex] || {};
@@ -2047,12 +2160,15 @@ function saveCurrentLanguageUiState() {
     var key = getCurrentLanguageStateKey();
     if (!key) return;
 
-    var expandedName = '';
-    if (sidebarState.expandedCategoryIndex >= 0 && sidebarState.categories[sidebarState.expandedCategoryIndex]) {
-        expandedName = String(sidebarState.categories[sidebarState.expandedCategoryIndex].name || '');
-    }
+    var expandedNames = [];
+    getSortedExpandedCategoryIndices().forEach(function (ii) {
+        var c = sidebarState.categories[ii];
+        if (c) expandedNames.push(String(c.name || ''));
+    });
+    var expandedName = expandedNames.length ? expandedNames[0] : '';
 
     sidebarState.languageUiState[key] = {
+        expandedCategoryNames: expandedNames.slice(),
         expandedCategoryName: expandedName,
         categoryIndex: sidebarState.categoryIndex,
         channelIndex: sidebarState.channelIndex,
@@ -2070,13 +2186,26 @@ function restoreCurrentLanguageUiState() {
         sidebarState.categoryIndex = Math.max(0, Math.min(saved.categoryIndex, Math.max(0, sidebarState.categories.length - 1)));
     }
 
-    if (saved.expandedCategoryName && Array.isArray(sidebarState.categories) && sidebarState.categories.length > 0) {
-        var idx = sidebarState.categories.findIndex(function (cat) {
-            return String(cat && cat.name || '') === String(saved.expandedCategoryName);
+    var namesToRestore = saved.expandedCategoryNames;
+    if (!namesToRestore || !namesToRestore.length) {
+        if (saved.expandedCategoryName) namesToRestore = [saved.expandedCategoryName];
+    }
+    if (Array.isArray(namesToRestore) && namesToRestore.length > 0 && Array.isArray(sidebarState.categories) && sidebarState.categories.length > 0) {
+        clearSidebarExpandedCategories();
+        var any = false;
+        namesToRestore.forEach(function (nm) {
+            var idx = sidebarState.categories.findIndex(function (cat) {
+                return String(cat && cat.name || '') === String(nm);
+            });
+            if (idx >= 0) {
+                setSidebarCategoryExpanded(idx, true);
+                any = true;
+            }
         });
-        if (idx >= 0) {
-            sidebarState.categoryIndex = idx;
-            sidebarState.expandedCategoryIndex = idx;
+        if (any) {
+            if (typeof saved.categoryIndex === 'number') {
+                sidebarState.categoryIndex = Math.max(0, Math.min(saved.categoryIndex, sidebarState.categories.length - 1));
+            }
             filterChannelsByCategory();
             if (typeof saved.channelIndex === 'number' && sidebarState.channels.length > 0) {
                 sidebarState.channelIndex = Math.max(0, Math.min(saved.channelIndex, sidebarState.channels.length - 1));
@@ -2091,7 +2220,7 @@ function restoreCurrentLanguageUiState() {
         }
     }
 
-    sidebarState.expandedCategoryIndex = -1;
+    clearSidebarExpandedCategories();
     sidebarState.channels = [];
     sidebarState.channelIndex = 0;
     sidebarState.currentLevel = 'categories';
@@ -2174,6 +2303,9 @@ async function initializeSidebar() {
     // Load available channels
     loadSidebarChannels();
 
+    // Fix Issue: Sync sidebar with current playing channel immediately on launch
+    alignSidebarToCurrentPlayback();
+    saveCurrentLanguageUiState();
 }
 
 async function loadSidebarCategoriesFromApi() {
@@ -2273,16 +2405,25 @@ function setupLanguageArrowNavigation() {
     var leftArrow = document.getElementById('langNavLeft');
     var rightArrow = document.getElementById('langNavRight');
 
+    function onArrowKeydown(e) {
+        if (!e || e.keyCode !== 13) return;
+        e.preventDefault();
+        if (e.target === leftArrow) changeLanguage(-1);
+        else if (e.target === rightArrow) changeLanguage(1);
+    }
+
     if (leftArrow) {
         leftArrow.addEventListener('click', function () {
             changeLanguage(-1);
         });
+        leftArrow.addEventListener('keydown', onArrowKeydown);
     }
 
     if (rightArrow) {
         rightArrow.addEventListener('click', function () {
             changeLanguage(1);
         });
+        rightArrow.addEventListener('keydown', onArrowKeydown);
     }
 
     // Update initial display
@@ -2308,54 +2449,19 @@ function changeLanguage(direction) {
     sidebarState.categoryIndex = 0;
     sidebarState.channelIndex = 0;
 
-    // Language change must always start in categories-only mode.
-    // Do not carry expanded category/channel list from previous language state.
-    var targetLangStateKey = getCurrentLanguageStateKey();
-    if (targetLangStateKey && sidebarState.languageUiState && sidebarState.languageUiState[targetLangStateKey]) {
-        delete sidebarState.languageUiState[targetLangStateKey];
-    }
-    sidebarState.expandedCategoryIndex = -1;
+    // Reset transient list state before rebuild; restoreCurrentLanguageUiState() may restore expansion
+    // for the language we switched to (LEFT/RIGHT ◄ ►). Do not wipe languageUiState[destination] — that
+    // broke remembering Movies/Sports/etc. when cycling All → Tamil → All.
+    clearSidebarExpandedCategories();
     sidebarState.channels = [];
     sidebarState.currentLevel = 'categories';
 
-    // Sync sessionStorage so CH+/CH- and sidebar stay in sync
-    var selectedLang = sidebarState.languages[newIndex];
-    if (selectedLang) {
-        if (selectedLang.code === 'all') {
-            sessionStorage.removeItem('selectedLanguageId');
-            sessionStorage.removeItem('selectedLanguageName');
-        } else if (selectedLang.code === 'subscribed') {
-            sessionStorage.setItem('selectedLanguageId', 'subs');
-            sessionStorage.setItem('selectedLanguageName', 'Subscribed Channels');
-        } else {
-            sessionStorage.setItem('selectedLanguageId', String(selectedLang.langid || selectedLang.code || ''));
-            sessionStorage.setItem('selectedLanguageName', selectedLang.name || '');
-        }
-    }
-
     updateLanguageDisplay();
 
-    // Rebuild categories and channels for new language
+    // Rebuild categories/channels for browsing only. Do NOT change allChannels, currentIndex,
+    // or sessionStorage here — user may be previewing English while still watching Subscribed;
+    // CH+/- stays on the last committed list until they OK a channel (see playChannelFromSidebar).
     buildCategoriesForLanguage();
-
-    // Sync CH+/CH- navigation to match sidebar language
-    var filteredForNav = getFilteredChannelsByLanguage();
-    if (filteredForNav && filteredForNav.length > 0) {
-        allChannels = filteredForNav.slice().sort(function (a, b) {
-            var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
-            var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
-            return aNo - bNo;
-        });
-        // Re-find current channel index in new filtered list
-        if (_lastAttemptedChannel) {
-            var chId = _lastAttemptedChannel.channelno || _lastAttemptedChannel.urno || _lastAttemptedChannel.chid || '';
-            var foundIdx = allChannels.findIndex(function (ch) {
-                return (ch.channelno || ch.urno || ch.chid || '') === chId;
-            });
-            if (foundIdx >= 0) currentIndex = foundIdx;
-            else currentIndex = 0;
-        }
-    }
 }
 
 /**
@@ -2371,6 +2477,13 @@ function updateLanguageDisplay() {
 function isSubscribedSidebarContext() {
     var lang = sidebarState.languages[sidebarState.languageIndex] || {};
     return String(lang.code || '').toLowerCase() === 'subscribed';
+}
+
+function isChannelSubscribed(ch) {
+    if (!ch) return false;
+    var raw = (typeof ch.subscribed !== 'undefined' ? ch.subscribed : ch.is_subscribed);
+    var normalized = String(raw === null || typeof raw === 'undefined' ? '' : raw).trim().toLowerCase();
+    return raw === true || raw === 1 || normalized === '1' || normalized === 'yes' || normalized === 'true' || normalized === 'y';
 }
 
 function isAllSidebarContext() {
@@ -2391,14 +2504,13 @@ function isFoFiChannel(ch) {
     return lcn === 999 || title.indexOf('fofi') !== -1;
 }
 
-function applySidebarChannelSort() {
-    if (!Array.isArray(sidebarState.channels) || sidebarState.channels.length <= 1) return;
+function applySidebarChannelSortToList(list) {
+    if (!Array.isArray(list) || list.length <= 1) return;
     var order = sidebarState.channelSortOrder === 'desc' ? 'desc' : 'asc';
-    sidebarState.channels.sort(function (a, b) {
+    list.sort(function (a, b) {
         var aFoFi = isFoFiChannel(a);
         var bFoFi = isFoFiChannel(b);
 
-        // Always pin FOFI first in both All Channels and Subscribed contexts.
         if ((isSubscribedSidebarContext() || isAllSidebarContext()) && aFoFi !== bFoFi) {
             return aFoFi ? -1 : 1;
         }
@@ -2408,6 +2520,10 @@ function applySidebarChannelSort() {
         var cmp = aNo - bNo;
         return order === 'asc' ? cmp : -cmp;
     });
+}
+
+function applySidebarChannelSort() {
+    applySidebarChannelSortToList(sidebarState.channels);
 }
 
 function getApiCategoryName(cat) {
@@ -2441,13 +2557,19 @@ function buildCategoriesForLanguage() {
     ensureSidebarAllChannelsCache();
     var currentLang = sidebarState.languages[sidebarState.languageIndex];
     var filteredChannels = getFilteredChannelsByLanguage();
+    var langKey = getCurrentLanguageStateKey();
+    var categoriesCacheKey = [
+        String(sidebarState.allChannelsCacheVersion || 0),
+        String(langKey || ''),
+        String((sidebarState.apiCategories && sidebarState.apiCategories.length) || 0)
+    ].join('|');
     var categoriesSection = document.getElementById('sidebarCategoriesSection');
     var channelsSection = document.getElementById('sidebarChannelsSection');
 
     if (currentLang && currentLang.code === 'all') {
         sidebarState.categories = [];
         sidebarState.categoryIndex = 0;
-        sidebarState.expandedCategoryIndex = -1;
+        clearSidebarExpandedCategories();
         sidebarState.channels = filteredChannels.slice();
         if (isAllSidebarContext()) applySidebarChannelSort();
         sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, Math.max(0, sidebarState.channels.length - 1)));
@@ -2476,54 +2598,60 @@ function buildCategoriesForLanguage() {
     }
 
     // Prefer categories from API (chnl_categlist), fallback to channel-derived buckets.
-    var builtCategories = [];
-    if (Array.isArray(sidebarState.apiCategories) && sidebarState.apiCategories.length > 0) {
-        var byName = {};
-        sidebarState.apiCategories.forEach(function (cat) {
-            if (!isApiCategoryForLanguage(cat, currentLang)) return;
-            var name = getApiCategoryName(cat);
-            if (!name) return;
-            var lower = name.toLowerCase();
-            if (lower === 'subscribed' || lower === 'all channels' || lower === 'subscribed channels') return;
+    var builtCategories = _sidebarBuiltCategoriesCache[categoriesCacheKey];
+    if (Array.isArray(builtCategories) && builtCategories.length > 0) {
+        builtCategories = builtCategories.slice();
+    } else {
+        builtCategories = [];
 
-            var grid = getApiCategoryGrid(cat);
-            var count = filteredChannels.filter(function (ch) {
-                var chGrid = String(ch.grid || ch.gridid || '').trim();
-                var chCat = String(ch.grtitle || ch.category || ch.genre || 'Miscellaneous');
-                if (grid) return chGrid === grid;
-                return chCat === name;
-            }).length;
-
-            if (count <= 0) return;
-            if (!byName[lower]) {
-                byName[lower] = { name: name, count: count, grid: grid };
-            }
-        });
-        builtCategories = Object.keys(byName).map(function (k) { return byName[k]; });
-    }
-
-    if (builtCategories.length === 0) {
-        // Fallback: derive categories from channel list.
-        var categoryMap = {};
+        var countByGrid = {};
+        var countByName = {};
         filteredChannels.forEach(function (ch) {
-            var cat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
-            if (!categoryMap[cat]) {
-                categoryMap[cat] = 0;
+            var chGrid = String(ch.grid || ch.gridid || '').trim();
+            var chCat = String(ch.grtitle || ch.category || ch.genre || 'Miscellaneous');
+            if (chGrid) {
+                countByGrid[chGrid] = (countByGrid[chGrid] || 0) + 1;
             }
-            categoryMap[cat]++;
+            countByName[chCat] = (countByName[chCat] || 0) + 1;
         });
-        builtCategories = Object.keys(categoryMap)
-            .filter(function (catName) {
-                var lowerCat = catName.toLowerCase();
-                return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
-            })
-            .map(function (catName) {
-                return {
-                    name: catName,
-                    count: categoryMap[catName],
-                    grid: ''
-                };
+
+        if (Array.isArray(sidebarState.apiCategories) && sidebarState.apiCategories.length > 0) {
+            var byName = {};
+            sidebarState.apiCategories.forEach(function (cat) {
+                if (!isApiCategoryForLanguage(cat, currentLang)) return;
+                var name = getApiCategoryName(cat);
+                if (!name) return;
+                var lower = name.toLowerCase();
+                if (lower === 'subscribed' || lower === 'all channels' || lower === 'subscribed channels') return;
+
+                var grid = getApiCategoryGrid(cat);
+                var count = grid ? (countByGrid[grid] || 0) : (countByName[name] || 0);
+                if (count <= 0) return;
+
+                if (!byName[lower]) {
+                    byName[lower] = { name: name, count: count, grid: grid };
+                }
             });
+            builtCategories = Object.keys(byName).map(function (k) { return byName[k]; });
+        }
+
+        if (builtCategories.length === 0) {
+            // Fallback: derive categories from channel list.
+            builtCategories = Object.keys(countByName)
+                .filter(function (catName) {
+                    var lowerCat = catName.toLowerCase();
+                    return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
+                })
+                .map(function (catName) {
+                    return {
+                        name: catName,
+                        count: countByName[catName],
+                        grid: ''
+                    };
+                });
+        }
+
+        _sidebarBuiltCategoriesCache[categoriesCacheKey] = builtCategories.slice();
     }
 
     sidebarState.categories = builtCategories;
@@ -2547,41 +2675,33 @@ function buildCategoriesForLanguage() {
     // 1. If a category is expanded, visually restore the 'active' class for expanded category
     // 2. Ensure focus is set to a valid element
     if (sidebarState.isOpen) {
-        if (sidebarState.expandedCategoryIndex >= 0 && sidebarState.expandedCategoryIndex < sidebarState.categories.length) {
-            // Expanded category exists - make sure it visually shows as expanded
-            var expandedCats = _getSidebarCategories();
-            if (expandedCats.length > sidebarState.expandedCategoryIndex) {
-                expandedCats[sidebarState.expandedCategoryIndex].classList.add('expanded');
-            }
-            // If channels are available, set focus to the expanded category
-            if (sidebarState.channels && sidebarState.channels.length > 0) {
+        if (getSortedExpandedCategoryIndices().length > 0) {
+            if (sidebarState.channels && sidebarState.channels.length > 0 && sidebarState.currentLevel === 'channels') {
                 setTimeout(function () {
                     if (sidebarState.isOpen) {
                         sidebarState.currentLevel = 'channels';
                         sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
-                        focusChannelItem(sidebarState.channelIndex);
+                        var cIx = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
+                        focusChannelItem(sidebarState.channelIndex, cIx);
                     }
                 }, 0);
-            } else {
+            } else if (sidebarState.categories && sidebarState.categories.length > 0) {
                 setTimeout(function () {
                     if (sidebarState.isOpen) {
                         sidebarState.currentLevel = 'categories';
-                        focusCategoryItem(sidebarState.expandedCategoryIndex);
-                    }
-                }, 0);
-            }
-        } else {
-            // No expanded category - focus to restored category index (NOT reset to 0)
-            if (sidebarState.categories && sidebarState.categories.length > 0) {
-                setTimeout(function () {
-                    if (sidebarState.isOpen) {
-                        sidebarState.currentLevel = 'categories';
-                        // Use the restored categoryIndex, NOT forcing it to 0
                         var focusIdx = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
                         focusCategoryItem(focusIdx);
                     }
                 }, 0);
             }
+        } else if (sidebarState.categories && sidebarState.categories.length > 0) {
+            setTimeout(function () {
+                if (sidebarState.isOpen) {
+                    sidebarState.currentLevel = 'categories';
+                    var focusIdx2 = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
+                    focusCategoryItem(focusIdx2);
+                }
+            }, 0);
         }
     }
 
@@ -2708,13 +2828,54 @@ function languageContainsCurrentPlayingChannel(langIndex) {
     });
 }
 
+/**
+ * After opening the player from TV Channels page, expand the same sidebar category (grid/name) when possible.
+ */
+function applyChannelsPageCategoryFromSession() {
+    try {
+        var grid = String(sessionStorage.getItem('bbnl_channels_category_grid') || '').trim();
+        var key = String(sessionStorage.getItem('bbnl_channels_category_key') || '').trim().toLowerCase();
+        if (!grid && !key) return false;
+        if (!sidebarState.categories || sidebarState.categories.length === 0) return false;
+        var idx = -1;
+        if (grid) {
+            idx = sidebarState.categories.findIndex(function (c) {
+                return String(c.grid || '').trim() === grid;
+            });
+        }
+        if (idx < 0 && key) {
+            idx = sidebarState.categories.findIndex(function (c) {
+                return String(c.name || '').trim().toLowerCase() === key;
+            });
+        }
+        if (idx < 0) return false;
+        sessionStorage.removeItem('bbnl_channels_category_grid');
+        sessionStorage.removeItem('bbnl_channels_category_key');
+        selectCategory(idx, true);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function clearChannelsPageCategorySessionHint() {
+    try {
+        sessionStorage.removeItem('bbnl_channels_category_grid');
+        sessionStorage.removeItem('bbnl_channels_category_key');
+    } catch (e) { }
+}
+
 function alignSidebarToCurrentPlayback() {
     var currentId = String(getCurrentPlayingChannelId() || '');
     if (!currentId) return;
 
-    // Respect user's language selection — don't override with "Subscribed"
-    // The user's choice is already set in sidebarState.languageIndex by applyPreferredSidebarLanguage
-    if (!languageContainsCurrentPlayingChannel(sidebarState.languageIndex)) {
+    // Respect user's language selection for sticky contexts (All/Subscribed).
+    var selectedLang = sidebarState.languages[sidebarState.languageIndex] || {};
+    var selectedLangCode = String(selectedLang.code || '').toLowerCase();
+    var isStickyContext = (selectedLangCode === 'all' || selectedLangCode === 'subscribed');
+
+    // The user's choice is already set in sidebarState.languageIndex by applyPreferredSidebarLanguage.
+    if (!isStickyContext && !languageContainsCurrentPlayingChannel(sidebarState.languageIndex)) {
         var langMatch = -1;
         for (var i = 0; i < sidebarState.languages.length; i++) {
             var langCode = String((sidebarState.languages[i] && sidebarState.languages[i].code) || '').toLowerCase();
@@ -2736,16 +2897,30 @@ function alignSidebarToCurrentPlayback() {
     // Focus priority must be: Currently playing channel (highest priority)
     var currentCatIdx = getCurrentPlayingCategoryIndex();
     if (currentCatIdx >= 0) {
+        clearChannelsPageCategorySessionHint();
         // Use the same flow as explicit category selection, but force current-channel preference.
         // This keeps language/category/channel indices and rendered UI in a single consistent path.
         selectCategory(currentCatIdx, true);
     } else {
         // Fallback: If channel isn't found in current language's categories
-        if (sidebarState.expandedCategoryIndex >= 0 && sidebarState.expandedCategoryIndex < sidebarState.categories.length) {
-            selectCategory(sidebarState.expandedCategoryIndex, true);
+        if (applyChannelsPageCategoryFromSession()) {
+            return;
+        }
+        if (getSortedExpandedCategoryIndices().length > 0) {
+            var prim = getSortedExpandedCategoryIndices()[0];
+            if (prim >= 0 && prim < sidebarState.categories.length) {
+                selectCategory(prim, true);
+            }
             sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+        } else if (isStickyContext) {
+            // CRITICAL: In All Channels or Subscribed mode, categories are empty/not relevant.
+            // Do NOT clear sidebarState.channels - instead ensure they are populated from the language filter.
+            sidebarState.channels = getFilteredChannelsByLanguage().slice();
+            var idx = findCurrentChannelInSidebar();
+            sidebarState.channelIndex = idx >= 0 ? idx : 0;
+            renderChannelsList();
         } else {
-            sidebarState.expandedCategoryIndex = -1;
+            clearSidebarExpandedCategories();
             sidebarState.channels = [];
             sidebarState.channelIndex = 0;
             renderChannelsList();
@@ -2759,18 +2934,42 @@ function alignSidebarToCurrentPlayback() {
 function getFilteredChannelsByLanguage() {
     var currentLang = sidebarState.languages[sidebarState.languageIndex];
 
+    // CRITICAL: Safety fallback to prevent empty 'All Channels' bug.
+    // If cache is empty but global data exists, restore it on-the-fly.
+    if ((!sidebarState.allChannelsCache || sidebarState.allChannelsCache.length === 0)) {
+        var source = (typeof _allChannelsUnfiltered !== 'undefined' && _allChannelsUnfiltered.length > 0) 
+            ? _allChannelsUnfiltered 
+            : ((typeof allChannels !== 'undefined') ? allChannels : []);
+        if (source.length > 0) {
+            sidebarState.allChannelsCache = source.slice();
+            sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
+            invalidateSidebarDerivedCaches();
+        }
+    }
+
+    var filterCacheKey = [
+        String(sidebarState.allChannelsCacheVersion || 0),
+        String(getCurrentLanguageStateKey() || '')
+    ].join('|');
+    if (_sidebarFilteredChannelsCache[filterCacheKey]) {
+        return _sidebarFilteredChannelsCache[filterCacheKey].slice();
+    }
+
     if (currentLang.code === 'all') {
-        return sidebarState.allChannelsCache;
+        _sidebarFilteredChannelsCache[filterCacheKey] = sidebarState.allChannelsCache.slice();
+        return _sidebarFilteredChannelsCache[filterCacheKey].slice();
     }
 
     if (currentLang.code === 'subscribed') {
-        return sidebarState.allChannelsCache.filter(function (ch) {
-            return ch.subscribed === true || ch.subscribed === 'yes' || ch.is_subscribed === true || ch.subscribed === '1';
+        var subscribed = sidebarState.allChannelsCache.filter(function (ch) {
+            return isChannelSubscribed(ch);
         });
+        _sidebarFilteredChannelsCache[filterCacheKey] = subscribed.slice();
+        return subscribed;
     }
 
     // Filter by language - try langid first, then language name
-    return sidebarState.allChannelsCache.filter(function (ch) {
+    var filtered = sidebarState.allChannelsCache.filter(function (ch) {
         // If we have a langid, use it for matching
         if (currentLang.langid) {
             var chLangId = ch.langid || ch.lang_id || '';
@@ -2784,6 +2983,8 @@ function getFilteredChannelsByLanguage() {
 
         return chLang === langCode || chLang === langName || chLang.includes(langCode);
     });
+    _sidebarFilteredChannelsCache[filterCacheKey] = filtered.slice();
+    return filtered;
 }
 
 function ensureSidebarAllChannelsCache() {
@@ -2815,7 +3016,9 @@ function ensureSidebarAllChannelsCache() {
     _allChannelsUnfiltered = cache.slice();
     if (sidebarState) {
         sidebarState.allChannelsCache = cache.slice();
+        sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
     }
+    invalidateSidebarDerivedCaches();
     return true;
 }
 
@@ -2882,8 +3085,7 @@ function renderCategoriesList() {
             btn.classList.add('active');
         }
 
-        // Add 'expanded' class for the category that is currently expanded (showing inline channels)
-        if (index === sidebarState.expandedCategoryIndex) {
+        if (isSidebarCategoryExpanded(index)) {
             btn.classList.add('expanded');
         }
 
@@ -2893,24 +3095,30 @@ function renderCategoriesList() {
 
         frag.appendChild(btn);
 
-        if (sidebarState.expandedCategoryIndex === index && sidebarState.channels.length > 0) {
-            var inlineWrap = document.createElement('div');
-            inlineWrap.className = 'inline-channels-wrap';
-            sidebarState.channels.forEach(function (ch, chIndex) {
-                inlineWrap.appendChild(createChannelItemButton(ch, chIndex));
-            });
-            frag.appendChild(inlineWrap);
+        if (isSidebarCategoryExpanded(index)) {
+            var catChans = getChannelsForCategoryAtIndex(index);
+            if (catChans.length > 0) {
+                var inlineWrap = document.createElement('div');
+                inlineWrap.className = 'inline-channels-wrap';
+                catChans.forEach(function (ch, chIndex) {
+                    inlineWrap.appendChild(createChannelItemButton(ch, chIndex, index));
+                });
+                frag.appendChild(inlineWrap);
+            }
         }
     });
     container.appendChild(frag);
 
 }
 
-function createChannelItemButton(ch, index) {
+function createChannelItemButton(ch, index, sidebarCategoryIndex) {
     var btn = document.createElement('button');
     btn.className = 'channel-item focusable';
     btn.tabIndex = 0;
     btn.dataset.channelIndex = index;
+    if (typeof sidebarCategoryIndex === 'number' && sidebarCategoryIndex >= 0) {
+        btn.dataset.sidebarCategoryIndex = String(sidebarCategoryIndex);
+    }
 
     var logoDiv = document.createElement('div');
     logoDiv.className = 'channel-item-logo';
@@ -2967,7 +3175,11 @@ function createChannelItemButton(ch, index) {
     btn.appendChild(infoDiv);
     btn.appendChild(lcnDiv);
 
-    if (index === sidebarState.channelIndex) {
+    if (typeof sidebarCategoryIndex === 'number' && sidebarCategoryIndex >= 0) {
+        if (sidebarCategoryIndex === sidebarState.categoryIndex && index === sidebarState.channelIndex) {
+            btn.classList.add('active');
+        }
+    } else if (index === sidebarState.channelIndex) {
         btn.classList.add('active');
     }
 
@@ -2986,16 +3198,16 @@ function selectCategory(index, preferCurrentChannel) {
 
     var shouldPreferCurrent = (preferCurrentChannel === true);
 
-    if (sidebarState.expandedCategoryIndex >= 0) {
-        rememberCategoryChannelIndex(sidebarState.expandedCategoryIndex, sidebarState.channelIndex);
+    if (sidebarState.categoryIndex >= 0 && isSidebarCategoryExpanded(sidebarState.categoryIndex)) {
+        rememberCategoryChannelIndex(sidebarState.categoryIndex, sidebarState.channelIndex);
     }
 
-    // Toggle collapse: selecting the same category again closes its channel list.
-    if (!shouldPreferCurrent && sidebarState.expandedCategoryIndex === index && sidebarState.channels.length > 0) {
+    // Toggle: OK on same category row again closes only that category's list (others stay open).
+    if (!shouldPreferCurrent && isSidebarCategoryExpanded(index)) {
         saveCurrentLanguageUiState();
         sidebarState.categoryIndex = index;
-        sidebarState.expandedCategoryIndex = -1;
-        sidebarState.channels = [];
+        setSidebarCategoryExpanded(index, false);
+        sidebarState.channels = getChannelsForCategoryAtIndex(index);
         sidebarState.channelIndex = 0;
         sidebarState.currentLevel = 'categories';
 
@@ -3006,8 +3218,13 @@ function selectCategory(index, preferCurrentChannel) {
         return;
     }
 
+    // Sync / align playback: only one expansion. User browsing: keep other categories open.
+    if (shouldPreferCurrent) {
+        clearSidebarExpandedCategories();
+    }
+
     sidebarState.categoryIndex = index;
-    sidebarState.expandedCategoryIndex = index;
+    setSidebarCategoryExpanded(index, true);
 
     // Update active category highlight (use cached list)
     _getSidebarCategories().forEach(function (cat, i) {
@@ -3049,7 +3266,7 @@ function selectCategory(index, preferCurrentChannel) {
             var rememberedIndex2 = getRememberedCategoryChannelIndex(index);
             sidebarState.channelIndex = rememberedIndex2 >= 0 ? Math.min(rememberedIndex2, sidebarState.channels.length - 1) : 0;
         }
-        focusChannelItem(sidebarState.channelIndex);
+        focusChannelItem(sidebarState.channelIndex, index);
     } else {
         sidebarState.currentLevel = 'categories';
         focusCategoryItem(index);
@@ -3096,6 +3313,43 @@ function filterChannelsByCategory() {
 }
 
 /**
+ * Channel list for one category row (used when multiple categories are expanded).
+ */
+function getChannelsForCategoryAtIndex(catIdx) {
+    if (catIdx < 0 || !Array.isArray(sidebarState.categories) || catIdx >= sidebarState.categories.length) return [];
+    var langFiltered = getFilteredChannelsByLanguage();
+    var selectedCat = sidebarState.categories[catIdx];
+    if (!selectedCat) return [];
+    var list = langFiltered.filter(function (ch) {
+        if (selectedCat.grid) {
+            var chGrid = String(ch.grid || ch.gridid || '').trim();
+            return chGrid === String(selectedCat.grid);
+        }
+        var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
+        return chCat === selectedCat.name;
+    });
+    if (isSubscribedSidebarContext() || isAllSidebarContext()) {
+        list = list.slice();
+        applySidebarChannelSortToList(list);
+    }
+    return list;
+}
+
+function syncSidebarStateFromChannelButton(el) {
+    if (!el || !el.dataset) return;
+    var sci = el.dataset.sidebarCategoryIndex;
+    if (sci !== undefined && sci !== '') {
+        var cidx = parseInt(sci, 10);
+        if (!isNaN(cidx)) sidebarState.categoryIndex = cidx;
+    }
+    var chi = parseInt(el.dataset.channelIndex, 10);
+    if (!isNaN(chi)) sidebarState.channelIndex = chi;
+    if (sidebarState.categoryIndex >= 0 && sidebarState.categories.length > 0) {
+        sidebarState.channels = getChannelsForCategoryAtIndex(sidebarState.categoryIndex);
+    }
+}
+
+/**
  * Load channels for sidebar (uses ALL channels — subscribed + unsubscribed)
  * Sidebar displays all channels; playback is controlled by subscription check in setupPlayer.
  */
@@ -3113,7 +3367,9 @@ function loadSidebarChannels() {
     }
 
     // Cache ALL channels for sidebar filtering (language/category)
-    sidebarState.allChannelsCache = channelsForSidebar;
+    sidebarState.allChannelsCache = channelsForSidebar.slice();
+    sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
+    invalidateSidebarDerivedCaches();
 
     // Preload a capped set so visible rows load faster without network saturation.
     prefetchSidebarChannelLogos(channelsForSidebar, 120);
@@ -3187,6 +3443,7 @@ function openSidebar() {
             if (!sidebarState || !sidebarState.isOpen) return;
             buildCategoriesForLanguage();
             syncSidebarWithCurrentPlayback(true);
+            snapshotSidebarCommitBaseline();
         });
     }
 
@@ -3218,17 +3475,15 @@ function openSidebar() {
     sidebarState.currentLevel = 'categories';
 
     if (!hasSidebarCache) {
+        snapshotSidebarCommitBaseline();
         return;
     }
 
-    // Restore sidebar from current language state instead of forcing alignment on every reopen.
-    buildCategoriesForLanguage();
-
-    // Recovery path only when state restoration has no data to show.
-    if ((sidebarState.categories.length === 0) && (!sidebarState.channels || sidebarState.channels.length === 0)) {
-        alignSidebarToCurrentPlayback();
-        saveCurrentLanguageUiState();
-    }
+    // ALWAYS sync sidebar with current playing channel on open.
+    // This ensures that if the channel was changed from an external screen (like the TV Channels section),
+    // the sidebar correctly highlights the actual playing channel and its correct category.
+    alignSidebarToCurrentPlayback();
+    saveCurrentLanguageUiState();
 
     // Handle focus based on updated state
     // CRITICAL: Respect the updated state from languageUiState, don't forcefully reset
@@ -3239,7 +3494,7 @@ function openSidebar() {
 
     // Check what level was restored from state
     var restoredLevel = sidebarState.currentLevel;
-    var hasExpandedCategory = sidebarState.expandedCategoryIndex >= 0 && sidebarState.expandedCategoryIndex < sidebarState.categories.length;
+    var hasExpandedCategory = getSortedExpandedCategoryIndices().length > 0;
     var hasChannelsInView = sidebarState.channels && sidebarState.channels.length > 0;
 
     // For "All Channels" (channels visible, no categories)
@@ -3254,12 +3509,12 @@ function openSidebar() {
     }
     // For language/category view with expanded category
     else if (hasExpandedCategory && hasChannelsInView && restoredLevel === 'channels') {
-        // User had a category expanded with channels visible - restore that state
         sidebarState.currentLevel = 'channels';
         setTimeout(function () {
             if (sidebarState.isOpen) {
                 sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
-                focusChannelItem(sidebarState.channelIndex);
+                var oIx2 = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
+                focusChannelItem(sidebarState.channelIndex, oIx2);
             }
         }, 0);
     }
@@ -3277,6 +3532,7 @@ function openSidebar() {
     // Sidebar auto-hide after 5s inactivity
     resetSidebarInactivityTimer();
 
+    snapshotSidebarCommitBaseline();
 }
 
 /**
@@ -3286,6 +3542,14 @@ function openSidebar() {
 function closeSidebar() {
     var sidebar = document.getElementById('playerSidebar');
     if (!sidebar) return;
+
+    // Browsed ◄► to another language but never OK'd a channel — restore tab to what it was at open
+    // so CH+/- and reopened menu match the committed viewing context (e.g. still Subscribed).
+    if (!_committedNavigationFromSidebarOpen && sidebarState.languageIndex !== _sidebarLanguageIndexAtOpen) {
+        sidebarState.languageIndex = _sidebarLanguageIndexAtOpen;
+        updateLanguageDisplay();
+        buildCategoriesForLanguage();
+    }
 
     // ✅ CRITICAL: Persist current sidebar state before closing
     // This ensures when user reopens sidebar, they return to the exact same position
@@ -3355,38 +3619,77 @@ function closeSidebar() {
 
     if (overlayTimeout) {
         clearTimeout(overlayTimeout);
+        overlayTimeout = null;
     }
-    overlayTimeout = setTimeout(function () {
-        hideOverlay();
-    }, OVERLAY_HIDE_DELAY);
 
+    if (!INFO_BAR_PERSISTENT) {
+        overlayTimeout = setTimeout(function () {
+            hideOverlay();
+        }, OVERLAY_HIDE_DELAY);
+    }
+
+    schedulePlayerChromeIdleHide();
 }
 
 /**
- * Reset sidebar inactivity timer
- * Called on every key press while sidebar is open
- * Timer resets at ALL navigation levels (language, categories, channels)
- */
-function resetSidebarInactivityTimer() {
-    clearSidebarInactivityTimer();
-
-    if (!sidebarState.isOpen) {
-        return;
-    }
-
-    // Auto-close sidebar after 5 seconds of inactivity
-    sidebarInactivityTimer = setTimeout(function () {
-        closeSidebar();
-    }, SIDEBAR_HIDE_DELAY);
-}
-
-/**
- * Clear sidebar inactivity timer
+ * Clear sidebar inactivity timer (legacy id; chrome idle uses playerChromeIdleTimer)
  */
 function clearSidebarInactivityTimer() {
     if (sidebarInactivityTimer) {
         clearTimeout(sidebarInactivityTimer);
         sidebarInactivityTimer = null;
+    }
+}
+
+function clearPlayerChromeIdleTimer() {
+    if (playerChromeIdleTimer) {
+        clearTimeout(playerChromeIdleTimer);
+        playerChromeIdleTimer = null;
+    }
+}
+
+/**
+ * After PLAYER_CHROME_IDLE_MS without a reset: close menu + hide info bar + overlay (unless error popup / sticky chrome).
+ */
+function autoHidePlayerChromeFromIdle() {
+    playerChromeIdleTimer = null;
+    if (playerErrorPopupOpen || _keepChromeAfterErrorBack) return;
+    if (sidebarState.isOpen) {
+        closeSidebar();
+    }
+    if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
+    if (_overlayEl) {
+        _overlayEl.classList.remove('visible');
+        _overlayEl.classList.add('hidden');
+    }
+    if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
+    if (_infoBarEl) {
+        _infoBarEl.classList.add('info-bar-hidden');
+        _infoBarEl.classList.remove('sidebar-active');
+    }
+    if (overlayTimeout) {
+        clearTimeout(overlayTimeout);
+        overlayTimeout = null;
+    }
+    if (uiTimer) {
+        clearTimeout(uiTimer);
+        uiTimer = null;
+    }
+}
+
+function schedulePlayerChromeIdleHide() {
+    if (playerErrorPopupOpen || _keepChromeAfterErrorBack) return;
+    clearPlayerChromeIdleTimer();
+    playerChromeIdleTimer = setTimeout(autoHidePlayerChromeFromIdle, PLAYER_CHROME_IDLE_MS);
+}
+
+/**
+ * Reset idle timer — sidebar open or any sidebar key
+ */
+function resetSidebarInactivityTimer() {
+    clearSidebarInactivityTimer();
+    if (sidebarState.isOpen) {
+        schedulePlayerChromeIdleHide();
     }
 }
 
@@ -3435,14 +3738,14 @@ function showPlayerUI() {
 }
 
 /**
- * Reset the shared UI timer (called on every key press inside sidebar)
+ * Reset the shared UI timer (sidebar + info bar chrome)
  */
 function resetUITimer() {
-    if (uiTimer) clearTimeout(uiTimer);
-
-    uiTimer = setTimeout(function () {
-        hidePlayerUI();
-    }, 5000);
+    if (uiTimer) {
+        clearTimeout(uiTimer);
+        uiTimer = null;
+    }
+    schedulePlayerChromeIdleHide();
 }
 
 /**
@@ -3450,7 +3753,6 @@ function resetUITimer() {
  */
 function hidePlayerUI() {
     if (playerErrorPopupOpen) {
-        // Keep info visible while the error popup is shown.
         return;
     }
 
@@ -3469,24 +3771,41 @@ function hidePlayerUI() {
         }, 300);
     }
 
-    // Hide gradient overlay
+    if (_keepChromeAfterErrorBack) {
+        if (infoBar) {
+            infoBar.classList.remove('info-bar-hidden');
+            infoBar.classList.remove('sidebar-active');
+        }
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('visible');
+        }
+        if (uiTimer) {
+            clearTimeout(uiTimer);
+            uiTimer = null;
+        }
+        clearPlayerChromeIdleTimer();
+        return;
+    }
+
     if (overlay) {
         overlay.classList.remove('visible');
         overlay.classList.add('hidden');
     }
 
-    // Hide info bar directly (it is now outside player-overlay in DOM)
-    if (infoBar) {
+    if (infoBar && !INFO_BAR_PERSISTENT) {
         infoBar.classList.add('info-bar-hidden');
+        infoBar.classList.remove('sidebar-active');
+    } else if (infoBar) {
         infoBar.classList.remove('sidebar-active');
     }
 
-    // Clear timers
     if (uiTimer) {
         clearTimeout(uiTimer);
         uiTimer = null;
     }
     clearSidebarInactivityTimer();
+    clearPlayerChromeIdleTimer();
     if (overlayTimeout) {
         clearTimeout(overlayTimeout);
         overlayTimeout = null;
@@ -3534,46 +3853,73 @@ function focusCategoryItem(index) {
  * Focus on a specific channel item
  * This properly sets both DOM focus and active class
  */
-function focusChannelItem(index) {
-    if (index < 0 || index >= sidebarState.channels.length) return;
+function focusChannelItem(index, optSidebarCategoryIndex) {
+    var items = _getSidebarChannels();
+    var target = null;
 
-    sidebarState.channelIndex = index;
-    if (sidebarState.expandedCategoryIndex >= 0) {
-        rememberCategoryChannelIndex(sidebarState.expandedCategoryIndex, index);
+    if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
+        for (var t = 0; t < items.length; t++) {
+            var el = items[t];
+            var ds = el.dataset || {};
+            if (parseInt(ds.sidebarCategoryIndex, 10) === optSidebarCategoryIndex &&
+                parseInt(ds.channelIndex, 10) === index) {
+                target = el;
+                break;
+            }
+        }
     }
 
-    // Keep focus visuals exclusive: clear category active state when channel gets focus.
+    if (!target && items.length > 0) {
+        if (typeof optSidebarCategoryIndex !== 'number' || optSidebarCategoryIndex < 0) {
+            if (index >= 0 && index < items.length) target = items[index];
+        }
+    }
+
+    if (!target) return;
+
+    sidebarState.channelIndex = index;
+    if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
+        sidebarState.categoryIndex = optSidebarCategoryIndex;
+    }
+    if (isSidebarCategoryExpanded(sidebarState.categoryIndex)) {
+        rememberCategoryChannelIndex(sidebarState.categoryIndex, index);
+    }
+    if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
+        sidebarState.channels = getChannelsForCategoryAtIndex(optSidebarCategoryIndex);
+    } else if (!sidebarState.categories.length) {
+        sidebarState.channels = getFilteredChannelsByLanguage().slice();
+        if (isAllSidebarContext()) applySidebarChannelSort();
+    } else {
+        sidebarState.channels = getChannelsForCategoryAtIndex(sidebarState.categoryIndex);
+    }
+
     _getSidebarCategories().forEach(function (catItem) {
         catItem.classList.remove('active');
     });
 
-    var items = _getSidebarChannels();
-    items.forEach(function (item, i) {
-        if (i === index) {
-            item.classList.add('active');
-            // CRITICAL: Call .focus() to update document.activeElement
-            item.focus();
+    items.forEach(function (item) {
+        item.classList.remove('active');
+    });
 
-            // Ensure item is fully visible with smooth scroll
-            requestAnimationFrame(function () {
-                item.scrollIntoView({
-                    behavior: 'auto',
-                    block: 'nearest',
-                    inline: 'nearest'
-                });
-            });
-        } else {
-            item.classList.remove('active');
-        }
+    target.classList.add('active');
+    target.focus();
+    requestAnimationFrame(function () {
+        target.scrollIntoView({
+            behavior: 'auto',
+            block: 'nearest',
+            inline: 'nearest'
+        });
     });
 
 }
 
 /**
- * Handle sidebar keydown navigation - New Layout
- * Language Arrows → Categories → Channels (all visible)
- * Returns true if keydown was handled by sidebar
- * Timer is reset on EVERY key press to keep sidebar visible during active navigation
+ * Sidebar remote map (production):
+ * LEFT/RIGHT — cycle language (◄ label ►), any focus row in sidebar
+ * UP/DOWN    — language row ↔ categories; categories ↔ channels (inline list)
+ * OK (13)    — expand category + focus channels, or play focused channel
+ * BACK/ESC   — close sidebar (player BACK again exits — see handleKeydown)
+ * CH±        — zap channel while menu open (sidebar state realigns after changeChannel)
  */
 // Cached DOM collections for sidebar — avoids querySelectorAll on every keypress.
 // Invalidated when sidebar content changes (renderSidebarCategories/renderSidebarChannels).
@@ -3633,30 +3979,15 @@ function handleSidebarKeydown(e) {
     var isOnCategory = activeEl && activeEl.classList.contains('category-item');
     var isOnChannel = activeEl && activeEl.classList.contains('channel-item');
 
-    // ==========================================
-    // GLOBAL LEFT/RIGHT → CYCLE LANGUAGE/HEADER TAB
-    // When the sidebar/menu is open, LEFT and RIGHT always cycle the top header
-    // (All Channels → Subscribed → Tamil → English → ...) and rebuild the
-    // category + channel list below it.  This matches the ◄ / ► arrows shown
-    // in the language navigation row.
-    // ==========================================
+    // LEFT/RIGHT always cycle language (◄ All / Subscribed / Tamil / … ►) from any sidebar focus.
+    // Focus and category/channel indices come from buildCategoriesForLanguage() + restoreCurrentLanguageUiState();
+    // Do not force categoryIndex = 0 here — that overwrote restored state after language change.
     if (code === 37 || code === 39) {
         if (code === 37) {
-            changeLanguage(-1); // LEFT — previous header tab (wraps)
+            changeLanguage(-1);
         } else {
-            changeLanguage(1);  // RIGHT — next header tab (wraps)
+            changeLanguage(1);
         }
-
-        if (sidebarState.categories.length > 0) {
-            sidebarState.currentLevel = 'categories';
-            sidebarState.categoryIndex = 0;
-            focusCategoryItem(0);
-        } else {
-            var leftArrowFocus = document.getElementById('langNavLeft');
-            if (leftArrowFocus) leftArrowFocus.focus();
-        }
-
-        var curLang = sidebarState.languages[sidebarState.languageIndex];
         e.preventDefault();
         return true;
     }
@@ -3666,38 +3997,36 @@ function handleSidebarKeydown(e) {
     // ==========================================
     if (isOnLanguageArrow) {
         switch (code) {
-            case 37: // LEFT
-                changeLanguage(-1);
-                e.preventDefault();
-                handled = true;
-                break;
-
-            case 39: // RIGHT
-                changeLanguage(1);
-                e.preventDefault();
-                handled = true;
-                break;
-
             case 38: // UP
                 // Stay at language (top of sidebar)
                 e.preventDefault();
                 handled = true;
                 break;
 
-            case 40: // DOWN
-                // Check if categories are visible
-                var categoriesSection = document.getElementById('sidebarCategoriesSection');
-                var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
+            case 13: // OK on ◄ / ► — same as click: change language
+                if (activeEl && activeEl.id === 'langNavLeft') changeLanguage(-1);
+                else if (activeEl && activeEl.id === 'langNavRight') changeLanguage(1);
+                e.preventDefault();
+                handled = true;
+                break;
 
-                if (!categoriesHidden && sidebarState.categories.length > 0) {
-                    // Categories visible - go to first category
-                    sidebarState.currentLevel = 'categories';
-                    sidebarState.categoryIndex = 0;
-                    focusCategoryItem(0);
-                } else {
-                    // No categories available — keep focus in language row.
-                    var leftArrow2 = document.getElementById('langNavLeft');
-                    if (leftArrow2) leftArrow2.focus();
+            case 40: // DOWN — enter list below (categories or flat channel list)
+                {
+                    var categoriesSection2 = document.getElementById('sidebarCategoriesSection');
+                    var categoriesHidden2 = categoriesSection2 && categoriesSection2.style.display === 'none';
+
+                    if (!categoriesHidden2 && sidebarState.categories.length > 0) {
+                        sidebarState.currentLevel = 'categories';
+                        sidebarState.categoryIndex = 0;
+                        focusCategoryItem(0);
+                    } else if (categoriesHidden2 && sidebarState.channels && sidebarState.channels.length > 0) {
+                        sidebarState.currentLevel = 'channels';
+                        sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+                        focusChannelItem(sidebarState.channelIndex);
+                    } else {
+                        var leftArrow2 = document.getElementById('langNavLeft');
+                        if (leftArrow2) leftArrow2.focus();
+                    }
                 }
                 e.preventDefault();
                 handled = true;
@@ -3722,63 +4051,7 @@ function handleSidebarKeydown(e) {
         var categoryCount = categories.length;
         var shouldUseSortHotkeys = isSubscribedSidebarContext() && categoryCount <= 1;
 
-        function enterChannelsFromCategory(catIdx) {
-            if (catIdx < 0 || catIdx >= sidebarState.categories.length) return false;
-
-            // Rebind current category to its channel list every time before entering.
-            // This prevents stale focus links after category switch.
-            if (sidebarState.expandedCategoryIndex !== catIdx || !Array.isArray(sidebarState.channels) || sidebarState.channels.length === 0) {
-                selectCategory(catIdx, true);
-            }
-
-            if (Array.isArray(sidebarState.channels) && sidebarState.channels.length > 0) {
-                sidebarState.currentLevel = 'channels';
-                var nextIdx = findCurrentChannelInSidebar();
-                sidebarState.channelIndex = nextIdx >= 0
-                    ? nextIdx
-                    : Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
-                focusChannelItem(sidebarState.channelIndex);
-                return true;
-            }
-
-            sidebarState.currentLevel = 'categories';
-            focusCategoryItem(catIdx);
-            return false;
-        }
-
         switch (code) {
-            case 37: // LEFT - Previous category (wrap)
-                if (categoryCount > 0) {
-                    var prevCatIdx = (currentCatIndex - 1 + categoryCount) % categoryCount;
-                    sidebarState.categoryIndex = prevCatIdx;
-                    sidebarState.currentLevel = 'categories';
-                    sidebarState.expandedCategoryIndex = -1;
-                    sidebarState.channels = [];
-                    sidebarState.channelIndex = 0;
-                    renderCategoriesList();
-                    renderChannelsList();
-                    focusCategoryItem(prevCatIdx);
-                }
-                e.preventDefault();
-                handled = true;
-                break;
-
-            case 39: // RIGHT - Move focus only; do not auto-expand categories
-                if (categoryCount > 0) {
-                    var nextCatIdx = (currentCatIndex + 1) % categoryCount;
-                    sidebarState.categoryIndex = nextCatIdx;
-                    sidebarState.currentLevel = 'categories';
-                    sidebarState.expandedCategoryIndex = -1;
-                    sidebarState.channels = [];
-                    sidebarState.channelIndex = 0;
-                    renderCategoriesList();
-                    renderChannelsList();
-                    focusCategoryItem(nextCatIdx);
-                }
-                e.preventDefault();
-                handled = true;
-                break;
-
             case 38: // UP
                 if (shouldUseSortHotkeys) {
                     sidebarState.channelSortOrder = 'asc';
@@ -3791,16 +4064,22 @@ function handleSidebarKeydown(e) {
                     break;
                 }
                 if (currentCatIndex > 0) {
-                    // Move to previous category
                     var prevIdx = currentCatIndex - 1;
-                    sidebarState.categoryIndex = prevIdx;
-                    sidebarState.currentLevel = 'categories';
-                    sidebarState.expandedCategoryIndex = -1;
-                    sidebarState.channels = [];
-                    sidebarState.channelIndex = 0;
-                    renderCategoriesList();
-                    renderChannelsList();
-                    focusCategoryItem(prevIdx);
+                    var prevChansUp = getChannelsForCategoryAtIndex(prevIdx);
+                    if (isSidebarCategoryExpanded(prevIdx) && prevChansUp.length > 0) {
+                        // After DOWN from last channel landed on next category row: UP must go back into
+                        // the previous category's channel list (last item), not stop on its header only.
+                        sidebarState.currentLevel = 'channels';
+                        sidebarState.categoryIndex = prevIdx;
+                        sidebarState.channels = prevChansUp;
+                        var lastCh = prevChansUp.length - 1;
+                        sidebarState.channelIndex = lastCh;
+                        focusChannelItem(lastCh, prevIdx);
+                    } else {
+                        sidebarState.categoryIndex = prevIdx;
+                        sidebarState.currentLevel = 'categories';
+                        focusCategoryItem(prevIdx);
+                    }
                 } else {
                     // At first category, move to language arrow
                     var leftArrow = document.getElementById('langNavLeft');
@@ -3822,18 +4101,24 @@ function handleSidebarKeydown(e) {
                     break;
                 }
 
-                // DOWN should only move focus to the next category.
-                if (categoryCount > 0) {
-                    var downCatIdx = (currentCatIndex + 1) % categoryCount;
-                    sidebarState.categoryIndex = downCatIdx;
-                    sidebarState.currentLevel = 'categories';
-                    sidebarState.expandedCategoryIndex = -1;
-                    sidebarState.channels = [];
+                // DOWN from category: if it's already expanded, return to its first channel (smooth re-entry)
+                // If not expanded, move focus to next category
+                if (isSidebarCategoryExpanded(currentCatIndex) &&
+                    getChannelsForCategoryAtIndex(currentCatIndex).length > 0) {
+                    sidebarState.currentLevel = 'channels';
+                    sidebarState.categoryIndex = currentCatIndex;
+                    sidebarState.channels = getChannelsForCategoryAtIndex(currentCatIndex);
                     sidebarState.channelIndex = 0;
-                    renderCategoriesList();
-                    renderChannelsList();
-                    focusCategoryItem(downCatIdx);
+                    focusChannelItem(0, currentCatIndex);
                     handled = true;
+                } else {
+                    if (categoryCount > 0) {
+                        var downCatIdx = (currentCatIndex + 1) % categoryCount;
+                        sidebarState.categoryIndex = downCatIdx;
+                        sidebarState.currentLevel = 'categories';
+                        focusCategoryItem(downCatIdx);
+                        handled = true;
+                    }
                 }
                 e.preventDefault();
                 break;
@@ -3859,45 +4144,49 @@ function handleSidebarKeydown(e) {
     // ==========================================
     if (isOnChannel) {
         var channels = _getSidebarChannels();
-        // Use actual focused item first so navigation always stays linear.
-        var currentChIndex = channels.findIndex(function (el) { return el === activeEl; });
-        if (currentChIndex === -1) currentChIndex = sidebarState.channelIndex;
-        // Clamp to valid range
-        if (currentChIndex < 0) currentChIndex = 0;
-        if (currentChIndex >= channels.length) currentChIndex = channels.length - 1;
+        var flatPos = channels.indexOf(activeEl);
+        if (flatPos < 0) flatPos = 0;
 
-        // Check if categories are hidden
+        var ds0 = activeEl && activeEl.dataset ? activeEl.dataset : {};
+        var rowCat = (ds0.sidebarCategoryIndex !== undefined && ds0.sidebarCategoryIndex !== '')
+            ? parseInt(ds0.sidebarCategoryIndex, 10) : -1;
+        var rowCh = parseInt(ds0.channelIndex, 10);
+        if (isNaN(rowCh)) rowCh = 0;
+
         var categoriesSection = document.getElementById('sidebarCategoriesSection');
         var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
 
         switch (code) {
-            case 37: // LEFT - Stay in sidebar (do nothing)
-                e.preventDefault();
-                handled = true;
-                break;
-
-            case 39: // RIGHT - Close sidebar
-                closeSidebar();
-                e.preventDefault();
-                handled = true;
-                break;
-
-            case 38: // UP
-                if (currentChIndex > 0) {
-                    // Move to previous channel
-                    var newIndex = currentChIndex - 1;
-                    sidebarState.channelIndex = newIndex;
-                    focusChannelItem(newIndex);
+            case 38: // UP — per-category: top channel → that category row (not previous category's list)
+                if (rowCat >= 0) {
+                    if (rowCh > 0) {
+                        focusChannelItem(rowCh - 1, rowCat);
+                    } else {
+                        if (categoriesHidden) {
+                            var leftArrow2 = document.getElementById('langNavLeft');
+                            if (leftArrow2) leftArrow2.focus();
+                        } else {
+                            sidebarState.currentLevel = 'categories';
+                            focusCategoryItem(rowCat);
+                        }
+                    }
+                } else if (flatPos > 0) {
+                    var prevEl = channels[flatPos - 1];
+                    var pds = prevEl.dataset || {};
+                    var pCat = (pds.sidebarCategoryIndex !== undefined && pds.sidebarCategoryIndex !== '')
+                        ? parseInt(pds.sidebarCategoryIndex, 10) : -1;
+                    var pCh = parseInt(pds.channelIndex, 10);
+                    if (isNaN(pCh)) pCh = 0;
+                    if (pCat >= 0) focusChannelItem(pCh, pCat);
+                    else focusChannelItem(pCh);
                 } else {
-                    // At first channel
                     if (categoriesHidden) {
-                        // Categories hidden - go to language arrow
                         var leftArrow = document.getElementById('langNavLeft');
                         if (leftArrow) leftArrow.focus();
                     } else {
-                        // Categories visible - go to last category
                         sidebarState.currentLevel = 'categories';
-                        focusCategoryItem(sidebarState.categoryIndex);
+                        var upCat = rowCat >= 0 ? rowCat : sidebarState.categoryIndex;
+                        focusCategoryItem(upCat >= 0 ? upCat : 0);
                     }
                 }
                 e.preventDefault();
@@ -3905,45 +4194,45 @@ function handleSidebarKeydown(e) {
                 break;
 
             case 40: // DOWN
-                if (currentChIndex < channels.length - 1) {
-                    // Move to next channel
-                    var newIndex = currentChIndex + 1;
-                    sidebarState.channelIndex = newIndex;
-                    focusChannelItem(newIndex);
-                } else {
-                    // At last channel - move to next category if one exists, otherwise stay in categories.
-                    if (!categoriesHidden) {
-                        var nextCategoryIndex = sidebarState.categoryIndex + 1;
-                        if (nextCategoryIndex < sidebarState.categories.length) {
-                            sidebarState.currentLevel = 'categories';
-                            // DO NOT close the expanded category - just move focus to next category
-                            // User can only collapse a category by pressing it explicitly
-                            sidebarState.categoryIndex = nextCategoryIndex;
-                            renderCategoriesList();
-                            focusCategoryItem(nextCategoryIndex);
-                            saveCurrentLanguageUiState();
-                        } else {
-                            sidebarState.currentLevel = 'categories';
-                            focusCategoryItem(sidebarState.categoryIndex);
-                        }
+                if (flatPos < channels.length - 1) {
+                    var nextEl = channels[flatPos + 1];
+                    var nds = nextEl.dataset || {};
+                    var nCat = (nds.sidebarCategoryIndex !== undefined && nds.sidebarCategoryIndex !== '')
+                        ? parseInt(nds.sidebarCategoryIndex, 10) : -1;
+                    var nCh = parseInt(nds.channelIndex, 10);
+                    if (isNaN(nCh)) nCh = 0;
+                    if (nCat >= 0) focusChannelItem(nCh, nCat);
+                    else focusChannelItem(nCh);
+                } else if (!categoriesHidden) {
+                    var fromCat = rowCat >= 0 ? rowCat : sidebarState.categoryIndex;
+                    var nextCategoryIndex = fromCat + 1;
+                    sidebarState.currentLevel = 'categories';
+                    if (nextCategoryIndex < sidebarState.categories.length) {
+                        sidebarState.categoryIndex = nextCategoryIndex;
+                        focusCategoryItem(nextCategoryIndex);
+                        saveCurrentLanguageUiState();
+                    } else {
+                        focusCategoryItem(fromCat >= 0 ? fromCat : sidebarState.categoryIndex);
                     }
                 }
                 e.preventDefault();
                 handled = true;
                 break;
 
-            case 13: // ENTER
-                // Play selected channel
-                if (sidebarState.channels.length > currentChIndex && currentChIndex >= 0) {
-                    var channel = sidebarState.channels[currentChIndex];
-                    playChannelFromSidebar(channel);
+            case 13: // ENTER — play (resolve row when multiple categories expanded)
+                var channelToPlay = null;
+                if (rowCat >= 0) {
+                    var arr = getChannelsForCategoryAtIndex(rowCat);
+                    channelToPlay = arr[rowCh];
+                } else if (sidebarState.channels.length > rowCh && rowCh >= 0) {
+                    channelToPlay = sidebarState.channels[rowCh];
                 }
+                if (channelToPlay) playChannelFromSidebar(channelToPlay);
                 e.preventDefault();
                 handled = true;
                 break;
 
             case 10009: // RETURN
-                // Always close sidebar on Back button, regardless of list level
                 closeSidebar();
                 e.preventDefault();
                 handled = true;
@@ -3962,12 +4251,19 @@ function handleSidebarKeydown(e) {
         var categoriesHidden = categoriesSection && categoriesSection.style.display === 'none';
 
         if (sidebarState.currentLevel === 'channels' || categoriesHidden) {
-            // Focus current channel
             var chArr = _getSidebarChannels();
             if (chArr.length > 0) {
-                var idx = Math.max(0, Math.min(sidebarState.channelIndex, chArr.length - 1));
-                sidebarState.channelIndex = idx;
-                focusChannelItem(idx);
+                if (!categoriesHidden && sidebarState.categories.length > 0) {
+                    var cib = Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1));
+                    var mc = getChannelsForCategoryAtIndex(cib).length;
+                    var idx2 = Math.max(0, Math.min(sidebarState.channelIndex, Math.max(0, mc - 1)));
+                    sidebarState.channelIndex = idx2;
+                    focusChannelItem(idx2, cib);
+                } else {
+                    var idx = Math.max(0, Math.min(sidebarState.channelIndex, chArr.length - 1));
+                    sidebarState.channelIndex = idx;
+                    focusChannelItem(idx);
+                }
                 handled = true;
             }
         } else {
@@ -3993,9 +4289,22 @@ function handleSidebarKeydown(e) {
 function playChannelFromSidebar(channel) {
     if (!channel) return;
 
-    // Preserve current sidebar view state so selecting a channel never collapses/reset the list.
+    var plSw = document.getElementById('page-loading');
+    if (!plSw) {
+        plSw = document.createElement('div');
+        plSw.id = 'page-loading';
+        plSw.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;z-index:99999;font-size:22px;';
+        if (document.body) document.body.insertBefore(plSw, document.body.firstChild);
+    }
+    plSw.textContent = 'Loading channel…';
+    plSw.style.display = 'flex';
+
+    _committedNavigationFromSidebarOpen = true;
+    applySidebarLanguageToZapListAndSession(channel);
+
     var wasAllChannelsContext = isAllSidebarContext();
-    var prevExpandedCategoryIndex = sidebarState.expandedCategoryIndex;
+    var prevLanguageIndex = sidebarState.languageIndex;
+    var prevExpandedCategories = Object.assign({}, sidebarState.expandedCategories || {});
     var prevCategoryIndex = sidebarState.categoryIndex;
     var prevLevel = sidebarState.currentLevel;
 
@@ -4008,14 +4317,20 @@ function playChannelFromSidebar(channel) {
     // Play the selected channel
     setupPlayer(channel);
 
-    // Sync sidebar to highlight the currently playing channel
-    // Match the behavior of changeChannel() which handles CH+/CH- zapping
-    syncSidebarWithCurrentPlayback(true);
+    // Sync sidebar after starting playback so Enter response remains snappy.
     requestAnimationFrame(function () {
+        syncSidebarWithCurrentPlayback(true);
         syncSidebarWithCurrentPlayback(false);
 
         // Keep sidebar stable after channel selection.
         if (!sidebarState || !sidebarState.isOpen) return;
+
+        // Preserve user-selected language/subscription context after OK playback.
+        if (prevLanguageIndex >= 0 && prevLanguageIndex < sidebarState.languages.length && sidebarState.languageIndex !== prevLanguageIndex) {
+            sidebarState.languageIndex = prevLanguageIndex;
+            updateLanguageDisplay();
+            buildCategoriesForLanguage();
+        }
 
         if (wasAllChannelsContext) {
             // All Channels should remain as a persistent list view.
@@ -4028,19 +4343,21 @@ function playChannelFromSidebar(channel) {
             return;
         }
 
-        // Non-all context: preserve previous expanded/collapsed state unless user explicitly changed it.
-        if (prevExpandedCategoryIndex >= 0 && prevExpandedCategoryIndex < sidebarState.categories.length) {
-            selectCategory(prevExpandedCategoryIndex, true);
-            sidebarState.currentLevel = 'channels';
+        sidebarState.expandedCategories = Object.assign({}, prevExpandedCategories);
+        renderCategoriesList();
+        renderChannelsList();
+
+        var catPlay = getCurrentPlayingCategoryIndex();
+        if (catPlay >= 0) {
+            sidebarState.categoryIndex = catPlay;
+            sidebarState.channels = getChannelsForCategoryAtIndex(catPlay);
             var idx = findCurrentChannelInSidebar();
-            sidebarState.channelIndex = idx >= 0 ? idx : Math.max(0, sidebarState.channelIndex);
-            focusChannelItem(sidebarState.channelIndex);
+            sidebarState.channelIndex = idx >= 0 ? idx : Math.max(0, Math.min(sidebarState.channelIndex, Math.max(0, sidebarState.channels.length - 1)));
+            sidebarState.currentLevel = 'channels';
+            focusChannelItem(sidebarState.channelIndex, catPlay);
         } else {
-            sidebarState.expandedCategoryIndex = -1;
             sidebarState.categoryIndex = Math.max(0, Math.min(prevCategoryIndex, Math.max(0, sidebarState.categories.length - 1)));
             sidebarState.currentLevel = (prevLevel === 'channels') ? 'categories' : prevLevel;
-            renderCategoriesList();
-            renderChannelsList();
             focusCategoryItem(sidebarState.categoryIndex);
         }
     });
@@ -4065,10 +4382,9 @@ function playChannelFromSidebar(channel) {
     if (uiTimer) { clearTimeout(uiTimer); uiTimer = null; }
     clearSidebarInactivityTimer();
 
-    // Both hide together after 5 seconds
     uiTimer = setTimeout(function () {
         hidePlayerUI();
-    }, 5000);
+    }, PLAYER_CHROME_IDLE_MS);
 
 }
 
@@ -4232,21 +4548,6 @@ function handleKeydown(e) {
     if (code === 39 && !sidebarState.isOpen) {
         e.preventDefault();
         showOverlay();
-        return;
-    }
-
-    // RIGHT Arrow - Close sidebar (if open)
-    if (code === 39) { // RIGHT
-        e.preventDefault();
-        if (sidebarState.isOpen) {
-            closeSidebar();
-        }
-        return;
-    }
-
-    // LEFT Arrow - handled above when sidebar closed; reaching here only if sidebar open
-    if (code === 37) {
-        e.preventDefault();
         return;
     }
 
@@ -4729,12 +5030,15 @@ var _infoBarEl = null;
 var _uiChName = null;
 var _uiChNum = null;
 var _keepInfoBarVisible = false; // Set after popup dismiss — prevents auto-hide until channel change
+/** After BACK on unsubscribed popup: do not hide overlay/info (black screen) until user changes channel or plays */
+var _keepChromeAfterErrorBack = false;
 
 function showOverlay() {
     if (!_lastAttemptedChannel) return;
 
     if (sidebarState.isOpen) {
         syncInfoBarSidebarState();
+        schedulePlayerChromeIdleHide();
         return;
     }
 
@@ -4757,12 +5061,13 @@ function showOverlay() {
         overlayTimeout = null;
     }
 
-    // Only auto-hide if stream is playing AND no error popup was just dismissed
-    if (hasHiddenLoadingIndicator && !_keepInfoBarVisible) {
+    if (hasHiddenLoadingIndicator && !_keepInfoBarVisible && !INFO_BAR_PERSISTENT) {
         overlayTimeout = setTimeout(function () {
             hideOverlay();
         }, OVERLAY_HIDE_DELAY);
     }
+
+    schedulePlayerChromeIdleHide();
 }
 
 /**
@@ -4770,6 +5075,7 @@ function showOverlay() {
  */
 function hideOverlay() {
     if (playerErrorPopupOpen) return;
+    if (_keepChromeAfterErrorBack) return;
 
     if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
     if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
@@ -4810,13 +5116,16 @@ var handleOKButton = function () {
     if (!overlay) return;
 
     if (overlay.classList.contains('visible')) {
-        // Already visible - reset the auto-hide timer
+        // Already visible - reset the auto-hide timer ONLY if not persistent
         if (overlayTimeout) {
             clearTimeout(overlayTimeout);
+            overlayTimeout = null;
         }
-        overlayTimeout = setTimeout(function () {
-            hideOverlay();
-        }, OVERLAY_HIDE_DELAY);
+        if (!INFO_BAR_PERSISTENT) {
+            overlayTimeout = setTimeout(function () {
+                hideOverlay();
+            }, OVERLAY_HIDE_DELAY);
+        }
     } else {
         // Hidden or initial state - show the info bar
         showOverlay();
