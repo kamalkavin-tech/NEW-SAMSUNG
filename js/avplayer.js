@@ -160,6 +160,15 @@ var AVPlayer = (function () {
             try {
                 // Set custom HTTP headers for stream requests
                 // Using browser-like User-Agent to avoid server blocking
+                // Authorization and Package headers for stream validation
+                var authHeader = (typeof DEFAULT_HEADERS !== 'undefined' && DEFAULT_HEADERS["Authorization"]) ? DEFAULT_HEADERS["Authorization"] : "Basic Zm9maWxhYkBnbWFpbC5jb206MTIzNDUtNTQzMjE=";
+                var pkgHeader = (typeof DEFAULT_HEADERS !== 'undefined' && DEFAULT_HEADERS["X-App-Package"]) ? DEFAULT_HEADERS["X-App-Package"] : "com.lgiptv.bbnl";
+                
+                // Dynamic device identifiers from initializeDeviceInfo in api.js
+                var devMac = (typeof DEFAULT_HEADERS !== 'undefined' && DEFAULT_HEADERS["devmac"]) ? DEFAULT_HEADERS["devmac"] : "";
+                var devSlno = (typeof DEFAULT_HEADERS !== 'undefined' && DEFAULT_HEADERS["devslno"]) ? DEFAULT_HEADERS["devslno"] : "";
+                var deviceId = (typeof DEFAULT_HEADERS !== 'undefined' && DEFAULT_HEADERS["deviceID"]) ? DEFAULT_HEADERS["deviceID"] : "";
+
                 var httpHeaders = [
                     "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept: */*",
@@ -167,7 +176,12 @@ var AVPlayer = (function () {
                     "Accept-Language: en-US,en;q=0.9",
                     "Connection: keep-alive",
                     "Origin: https://bbnl.in",
-                    "Referer: https://bbnl.in/"
+                    "Referer: https://bbnl.in/",
+                    "X-App-Package: " + pkgHeader,
+                    "Authorization: " + authHeader,
+                    "devmac: " + devMac,
+                    "devslno: " + devSlno,
+                    "deviceID: " + deviceId
                 ];
 
                 var headerString = httpHeaders.join("|");
