@@ -12,11 +12,28 @@
     <script>
         (function () {
             try {
-                var relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
-                var hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
-                // Login UI only for first-time or post-logout (both flags false). Otherwise leave before body/scripts (no login APIs).
-                var FIRST_LOGIN_WAIT_MS = 500;
+                // Login UI only for first-time install or explicit logout.
+                var FIRST_LOGIN_WAIT_MS = 1500;
                 var RELAUNCH_POLL_MS = 120;
+
+                function readEverLoginCookie() {
+                    try {
+                        var m = document.cookie.match(/(?:^|;\s*)bbnl_has_logged_in_once=([^;]+)/);
+                        return !!(m && decodeURIComponent(m[1]) === '1');
+                    } catch (e) {
+                        return false;
+                    }
+                }
+
+                function writeEverLoginCookie(on) {
+                    try {
+                        if (on) {
+                            document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax';
+                        } else {
+                            document.cookie = 'bbnl_has_logged_in_once=; path=/; max-age=0; SameSite=Lax';
+                        }
+                    } catch (e) {}
+                }
 
                 function normalizeStoredUser(obj) {
                     if (!obj || typeof obj !== 'object') return null;
@@ -74,8 +91,25 @@
                         localStorage.setItem("hasLoggedInOnce", "true");
                         authDebug('Repaired hasLoggedInOnce flag');
                     }
+                    writeEverLoginCookie(true);
+                    if (localStorage.getItem('bbnl_logged_out') === '1') {
+                        localStorage.removeItem('bbnl_logged_out');
+                        authDebug('Cleared stale explicit logout flag from valid session');
+                    }
                     authDebug('Resolved valid session user', resolvedUser);
                     return resolvedUser;
+                }
+
+                function readAuthFlags() {
+                    var hadSessionFlag = localStorage.getItem('hasLoggedInOnce') === 'true' || readEverLoginCookie();
+                    if (hadSessionFlag && localStorage.getItem('hasLoggedInOnce') !== 'true') {
+                        try { localStorage.setItem('hasLoggedInOnce', 'true'); } catch (e) {}
+                    }
+                    return {
+                        relaunchPending: localStorage.getItem('bbnl_relaunch_pending') === '1',
+                        hadSessionBefore: hadSessionFlag,
+                        explicitLogout: localStorage.getItem('bbnl_logged_out') === '1'
+                    };
                 }
 
                 function clearAuthWaitVisibility() {
@@ -119,8 +153,14 @@
                     return;
                 }
 
-                if (hadSessionBefore || relaunchPending) {
-                    window.location.replace('index.html');
+                var flags = readAuthFlags();
+                if (flags.explicitLogout) {
+                    showLoginScreen();
+                    return;
+                }
+
+                if (flags.hadSessionBefore || flags.relaunchPending) {
+                    goHome();
                     return;
                 }
 
@@ -133,9 +173,20 @@
 
                 var waited = 0;
                 var poll = function () {
+                    var nextFlags = readAuthFlags();
+                    if (nextFlags.explicitLogout) {
+                        showLoginScreen();
+                        return;
+                    }
+
                     var user = readResolvedUser();
                     if (user) {
                         goHome(user);
+                        return;
+                    }
+
+                    if (nextFlags.hadSessionBefore || nextFlags.relaunchPending) {
+                        goHome();
                         return;
                     }
 

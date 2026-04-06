@@ -48,7 +48,7 @@
 
         var resolvedUser = primaryUser || backupUser;
         if (!resolvedUser) {
-            window.location.replace("login.html");
+            window.location.replace("index.html");
             return;
         }
 
@@ -60,7 +60,7 @@
         }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
-        window.location.replace("login.html");
+        window.location.replace("index.html");
     }
 })();
 
@@ -115,6 +115,25 @@ var channelsResultCache = {}; // Reuse channel API responses per filter/category
 var CHANNELS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes — reduces API calls on page navigation
 var channelsPageExiting = false;
 var _allChannelsObjectIndexMap = null;
+var _renderGeneration = 0; // Cancels stale chunk renders when category changes quickly
+var _progressiveChannels = null;
+var _progressiveNextIndex = 0;
+var _progressiveGrid = null;
+var _progressiveRenderDone = true;
+var _quickCategoryCache = { all: null, subs: null };
+
+function fastLaunchChannelFromChannels(channel) {
+    if (!channel || !channel.streamlink) return false;
+    try {
+        window.__BBNL_NAVIGATING = true;
+        sessionStorage.setItem('playerReferrer', window.location.href);
+        sessionStorage.setItem('bbnl_player_channel', JSON.stringify(channel));
+        window.location.href = 'player.html?launch=fast';
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
 function rebuildAllChannelsObjectIndexMap() {
     _allChannelsObjectIndexMap = null;
@@ -124,6 +143,54 @@ function rebuildAllChannelsObjectIndexMap() {
         map.set(allChannels[i], i);
     }
     _allChannelsObjectIndexMap = map;
+}
+
+function resetProgressiveRender() {
+    _progressiveChannels = null;
+    _progressiveNextIndex = 0;
+    _progressiveGrid = null;
+    _progressiveRenderDone = true;
+}
+
+function prepareQuickCategoryCaches(sourceChannels) {
+    if (!Array.isArray(sourceChannels) || sourceChannels.length === 0) return;
+    _quickCategoryCache.all = sourceChannels.slice();
+    _quickCategoryCache.subs = sourceChannels.filter(function (ch) {
+        return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
+    });
+}
+
+function appendProgressiveCards(targetIndexExclusive) {
+    if (!_progressiveGrid || !_progressiveChannels || _progressiveRenderDone) return;
+
+    var len = _progressiveChannels.length;
+    var CHUNK_SIZE = 16;
+    var IMMEDIATE_LOAD_COUNT = 6;
+    var desired = Math.min(len, Math.max(targetIndexExclusive || 0, _progressiveNextIndex + CHUNK_SIZE));
+
+    while (_progressiveNextIndex < desired) {
+        var end = Math.min(_progressiveNextIndex + CHUNK_SIZE, desired);
+        var frag = document.createDocumentFragment();
+
+        for (var i = _progressiveNextIndex; i < end; i++) {
+            var ch = _progressiveChannels[i];
+            var channelIdx = -1;
+            if (_allChannelsObjectIndexMap && _allChannelsObjectIndexMap.has(ch)) {
+                channelIdx = _allChannelsObjectIndexMap.get(ch);
+            }
+            frag.appendChild(createChannelCard(ch, i < IMMEDIATE_LOAD_COUNT, channelIdx));
+        }
+
+        _progressiveGrid.appendChild(frag);
+        _progressiveNextIndex = end;
+    }
+
+    _progressiveRenderDone = _progressiveNextIndex >= len;
+    _cachedFocusables = null;
+    if (typeof invalidateCardsCache === 'function') invalidateCardsCache();
+
+    var container = document.getElementById('channel-grid-container');
+    if (container) _setupLazyImageLoading(container);
 }
 
 function exitChannelsToHome() {
@@ -411,6 +478,7 @@ async function loadMasterChannelList() {
             if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < CHANNELS_CACHE_TTL_MS) {
                 masterChannelList = parsed.data;
                 masterListLoaded = true;
+                prepareQuickCategoryCaches(masterChannelList);
                 return;
             }
         }
@@ -422,6 +490,7 @@ async function loadMasterChannelList() {
         if (Array.isArray(response) && response.length > 0) {
             masterChannelList = response;
             masterListLoaded = true;
+            prepareQuickCategoryCaches(masterChannelList);
             try {
                 sessionStorage.setItem('master_channel_list_cache', JSON.stringify({ ts: Date.now(), data: response }));
             } catch (e) {}
@@ -1261,6 +1330,7 @@ async function loadChannels(options = {}) {
         // PERFORMANCE: Filter master list in-memory instead of calling API if possible
         if (masterListLoaded && masterChannelList.length > 0 && !apiOptions.search) {
             let filtered = masterChannelList;
+            prepareQuickCategoryCaches(masterChannelList);
             
             // Apply Subscribed filter
             if (apiOptions.subscribed) {
@@ -1338,6 +1408,7 @@ function renderAllChannels(channels) {
     if (channelsPageExiting) return;
 
     var container = document.getElementById("channel-grid-container");
+    var renderGeneration = ++_renderGeneration;
 
     // Store currently displayed channels for LCN search
     currentDisplayedChannels = channels;
@@ -1351,48 +1422,27 @@ function renderAllChannels(channels) {
 
     // PERFORMANCE: Properly remove old grid to free event listeners + DOM nodes.
     while (container.firstChild) { container.removeChild(container.firstChild); }
+    resetProgressiveRender();
 
     var grid = document.createElement("div");
     grid.className = "channels-grid channels-grid-smooth";
     container.appendChild(grid); // Append grid early so first chunk is visible immediately
 
-    // PERFORMANCE: Chunk rendering to prevent main thread blocking when rendering thousands of items
-    var len = channels.length;
-    var CHUNK_SIZE = 40; // Render 40 cards per frame
-    var IMMEDIATE_LOAD_COUNT = 15;
-    var currentIndex = 0;
-
-    // Clear any previous ongoing chunk rendering
     if (window._renderChunkTimeout) {
         clearTimeout(window._renderChunkTimeout);
+        window._renderChunkTimeout = null;
     }
 
-    function renderChunk() {
-        var frag = document.createDocumentFragment();
-        var end = Math.min(currentIndex + CHUNK_SIZE, len);
-        
-        for (var i = currentIndex; i < end; i++) {
-            var ch = channels[i];
-            var channelIdx = -1;
-            if (_allChannelsObjectIndexMap && _allChannelsObjectIndexMap.has(ch)) {
-                channelIdx = _allChannelsObjectIndexMap.get(ch);
-            }
-            frag.appendChild(createChannelCard(ch, i < IMMEDIATE_LOAD_COUNT, channelIdx));
-        }
-        
-        grid.appendChild(frag);
-        currentIndex = end;
-        
-        if (currentIndex < len) {
-            window._renderChunkTimeout = setTimeout(renderChunk, 5); // Yield to main thread
-        } else {
-            _cachedFocusables = null; // Invalidate cache so next keypress rebuilds it
-            if (typeof invalidateCardsCache === 'function') invalidateCardsCache();
-            _setupLazyImageLoading(container);
-        }
-    }
+    if (renderGeneration !== _renderGeneration) return;
 
-    renderChunk();
+    // Progressive render: draw only the visible/near-visible set first for instant response.
+    _progressiveChannels = channels;
+    _progressiveGrid = grid;
+    _progressiveNextIndex = 0;
+    _progressiveRenderDone = false;
+
+    // Tiny first paint for faster menu-bar switching response; remaining rows append on demand.
+    appendProgressiveCards(30);
 }
 
 // ==========================================
@@ -1468,6 +1518,8 @@ function createChannelCard(ch, loadImmediate, channelIdx) {
     card.dataset.name = chName;
     card.dataset.logo = chLogo;
     card.dataset.channelno = chNo;
+    card.dataset.price = chPrice;
+    card.dataset.subscribed = isSubscribed ? '1' : '0';
     // Store channel index for player navigation using precomputed object index map.
     if (typeof channelIdx === 'number' && channelIdx >= 0) {
         card.dataset.channelIdx = String(channelIdx);
@@ -2045,6 +2097,7 @@ function moveWithinTabs(direction) {
     var langId = targetPill.dataset.langid || '';
     var langName = targetPill.dataset.langname || '';
     var isAllTab = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
+    var isSubscribedTab = (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1);
 
     if (isAllTab) {
         sessionStorage.setItem('selectedLanguageId', 'all');
@@ -2057,6 +2110,19 @@ function moveWithinTabs(direction) {
     // Debounce: filter channels 100ms after user stops moving
     clearTimeout(_pillDebounce);
     _pillDebounce = setTimeout(function () {
+        if (isAllTab && Array.isArray(_quickCategoryCache.all) && _quickCategoryCache.all.length > 0) {
+            allChannels = _quickCategoryCache.all.slice();
+            renderAllChannels(allChannels);
+            setChannelsLoadingState(false);
+            return;
+        }
+        if (isSubscribedTab && Array.isArray(_quickCategoryCache.subs) && _quickCategoryCache.subs.length > 0) {
+            allChannels = _quickCategoryCache.subs.slice();
+            renderAllChannels(allChannels);
+            setChannelsLoadingState(false);
+            return;
+        }
+
         // Try local filter first (instant) — use in-memory master list if available.
         var allCh = null;
         if (Array.isArray(masterChannelList) && masterChannelList.length > 0) {
@@ -2071,7 +2137,7 @@ function moveWithinTabs(direction) {
             var isAll = isAllTab;
             if (!langId || langId === '' || isAll) {
                 filtered = allCh;
-            } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+            } else if (isSubscribedTab) {
                 filtered = allCh.filter(function (ch) {
                     return ch.subscribed === 'yes' || ch.subscribed === '1' || ch.subscribed === true || ch.subscribed === 1;
                 });
@@ -2098,7 +2164,7 @@ function moveWithinTabs(direction) {
         var isAllChannels = langName.toLowerCase() === 'all channels' || langName.toLowerCase() === 'all' || langId === '';
         if (!langId || langId === '' || isAllChannels) {
             loadChannels();
-        } else if (langId === 'subs' || langName.toLowerCase().indexOf('subscribed') !== -1) {
+        } else if (isSubscribedTab) {
             loadChannels({ subscribed: 'yes' });
         } else {
             loadChannels({ langid: langId });
@@ -2158,6 +2224,12 @@ function moveWithinCardsGrid(deltaX, deltaY) {
     if (newRow < 0) return false;
 
     var newIndex = newRow * columnsPerRow + newCol;
+
+    // If user is moving down near the rendered tail, append more cards on demand.
+    if (!_progressiveRenderDone && deltaY > 0 && newIndex >= (cards.length - columnsPerRow)) {
+        appendProgressiveCards(newIndex + (columnsPerRow * 3));
+        cards = getCachedCards();
+    }
 
     if (newIndex >= 0 && newIndex < cards.length) {
         cards[newIndex].focus();
@@ -2225,6 +2297,13 @@ function handleEnter(el) {
     }
 
     if (el.classList.contains('channel-card')) {
+        // Stop any ongoing heavy grid work before leaving page.
+        _renderGeneration++;
+        if (window._renderChunkTimeout) {
+            clearTimeout(window._renderChunkTimeout);
+            window._renderChunkTimeout = null;
+        }
+
         const streamUrl = el.dataset.url;
         const channelName = el.dataset.name;
 
@@ -2232,21 +2311,38 @@ function handleEnter(el) {
             return;
         }
 
-        // Look up channel from allChannels by index (avoids JSON.stringify/parse per card)
-        var channel;
-        var chIdx = parseInt(el.dataset.channelIdx, 10);
-        if (!isNaN(chIdx) && chIdx >= 0 && allChannels[chIdx]) {
-            channel = allChannels[chIdx];
-        } else {
-            channel = {
-                chtitle: channelName,
-                channel_name: channelName,
-                streamlink: streamUrl,
-                chlogo: el.dataset.logo,
-                logo_url: el.dataset.logo,
-                channelno: el.dataset.channelno || ""
-            };
-        }
+        // Build a lightweight payload for fast player handoff.
+        // Large raw channel objects can slow JSON serialization on big "All Channels" lists.
+        var channel = {
+            chtitle: channelName,
+            channel_name: channelName,
+            streamlink: streamUrl,
+            channel_url: streamUrl,
+            chlogo: el.dataset.logo || "",
+            logo_url: el.dataset.logo || "",
+            channelno: el.dataset.channelno || "",
+            chprice: el.dataset.price || "",
+            subscribed: el.dataset.subscribed === '1' ? 'yes' : 'no'
+        };
+
+        // Prefer full channel object when available so Player sidebar can
+        // reliably resolve language/category/channel highlight on first open.
+        try {
+            var idxRaw = String(el.dataset.channelIdx || '').trim();
+            var idxNum = parseInt(idxRaw, 10);
+            if (!isNaN(idxNum) && idxNum >= 0 && Array.isArray(allChannels) && idxNum < allChannels.length) {
+                var fullChannel = allChannels[idxNum];
+                if (fullChannel && typeof fullChannel === 'object') {
+                    channel = Object.assign({}, fullChannel);
+                    // Keep critical values from clicked card as fallback guarantees.
+                    if (!channel.streamlink && streamUrl) channel.streamlink = streamUrl;
+                    if (!channel.channel_url && streamUrl) channel.channel_url = streamUrl;
+                    if (!channel.channelno && el.dataset.channelno) channel.channelno = el.dataset.channelno;
+                    if (!channel.chtitle && channelName) channel.chtitle = channelName;
+                    if (!channel.channel_name && channelName) channel.channel_name = channelName;
+                }
+            }
+        } catch (eFull) {}
 
         try {
             var activeCat = document.querySelector('.category-item.active');
@@ -2260,6 +2356,7 @@ function handleEnter(el) {
             }
         } catch (eCat) {}
 
+        if (fastLaunchChannelFromChannels(channel)) return;
         BBNL_API.playChannel(channel);
         return;
     }
@@ -2319,6 +2416,10 @@ function findAndPlayLCN(lcn) {
     });
 
     if (channel) {
+        try {
+            sessionStorage.setItem('selectedLanguageId', 'all');
+            sessionStorage.setItem('selectedLanguageName', 'All Channels');
+        } catch (eSet) {}
 
         // Clear search input
         var searchInput = document.getElementById('searchInput');
@@ -2326,7 +2427,8 @@ function findAndPlayLCN(lcn) {
             searchInput.value = '';
         }
 
-        // Play the channel immediately
+        // Play the channel immediately (prefer direct fast handoff)
+        if (fastLaunchChannelFromChannels(channel)) return;
         BBNL_API.playChannel(channel);
     } else {
         var searchInput = document.getElementById('searchInput');

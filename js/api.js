@@ -2350,6 +2350,8 @@ const AuthAPI = {
                 // Keep a backup copy to survive storage corruption on HOME relaunch
                 localStorage.setItem("bbnl_user_backup", userJson);
                 localStorage.setItem("hasLoggedInOnce", "true");
+                localStorage.removeItem('bbnl_logged_out');
+                try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie1) {}
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
                 CacheManager.clearAll();
@@ -2357,6 +2359,8 @@ const AuthAPI = {
                     localStorage.setItem("bbnl_user", userJson);
                     localStorage.setItem("bbnl_user_backup", userJson);
                     localStorage.setItem("hasLoggedInOnce", "true");
+                    localStorage.removeItem('bbnl_logged_out');
+                    try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie2) {}
                 } catch (retryErr) {
                     // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
@@ -2366,6 +2370,8 @@ const AuthAPI = {
                     if (savedBackup) localStorage.setItem("bbnl_user_backup", savedBackup);
                     localStorage.setItem("bbnl_user", userJson);
                     localStorage.setItem("hasLoggedInOnce", "true");
+                    localStorage.removeItem('bbnl_logged_out');
+                    try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie3) {}
                 }
             }
         } else {
@@ -2471,7 +2477,7 @@ const AuthAPI = {
 
     requireAuth: function () {
         if (!this.isAuthenticated()) {
-            window.location.href = "login.html";
+            window.location.href = "index.html";
         }
     }
 };
@@ -3196,6 +3202,21 @@ const ChannelsAPI = {
             // Store the current page as referrer for back navigation
             sessionStorage.setItem('playerReferrer', window.location.href);
 
+            // Fast handoff: avoid large query strings on low-power TVs.
+            var fastLaunch = false;
+            try {
+                sessionStorage.setItem('bbnl_player_channel', JSON.stringify(channel));
+                fastLaunch = true;
+            } catch (eFast) {
+                fastLaunch = false;
+            }
+
+            if (fastLaunch) {
+                window.location.href = 'player.html?launch=fast';
+                return;
+            }
+
+            // Fallback for storage-constrained cases.
             const data = encodeURIComponent(JSON.stringify(channel));
             window.location.href = `player.html?data=${data}`;
         } else {
@@ -4249,7 +4270,7 @@ function BBNL_gateAuthenticatedPage(opts) {
             if (useNav) window.__BBNL_NAVIGATING = true;
         } catch (e0) { }
         try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e1) { }
-        window.location.replace('login.html');
+        window.location.replace('index.html');
     }
 
     function normalizeStoredUser(obj) {
@@ -4287,6 +4308,9 @@ function BBNL_gateAuthenticatedPage(opts) {
         if (backupRaw !== resolvedJson) localStorage.setItem('bbnl_user_backup', resolvedJson);
         if (localStorage.getItem('hasLoggedInOnce') !== 'true') {
             localStorage.setItem('hasLoggedInOnce', 'true');
+        }
+        if (localStorage.getItem('bbnl_logged_out') === '1') {
+            localStorage.removeItem('bbnl_logged_out');
         }
         try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e4) { }
     }

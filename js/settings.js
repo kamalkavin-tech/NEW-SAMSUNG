@@ -56,7 +56,7 @@
 
         var resolvedUser = primaryUser || backupUser;
         if (!resolvedUser) {
-            window.location.replace("login.html");
+            window.location.replace("index.html");
             return;
         }
 
@@ -68,7 +68,7 @@
         }
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
-        window.location.replace("login.html");
+        window.location.replace("index.html");
     }
 })();
 
@@ -586,12 +586,15 @@ async function handleLogout() {
         }
 
         // 4. CLEAR ALL localStorage — this is an EXPLICIT logout
-        // Remove hasLoggedInOnce and bbnl_user so login page shows on next launch
+        // Remove hasLoggedInOnce, bbnl_user, and login timestamp so login page shows on next launch
         localStorage.clear();
 
         // 5. Restore device-level data only (not user session data)
         if (savedMac) localStorage.setItem('macAddress', savedMac);
         if (savedDeviceId) localStorage.setItem('deviceId', savedDeviceId);
+        // Mark explicit logout to force login on next app launch
+        localStorage.setItem('bbnl_logged_out', '1');
+        try { document.cookie = 'bbnl_has_logged_in_once=; path=/; max-age=0; SameSite=Lax'; } catch (eCookie) {}
 
         // 6. Clear all sessionStorage
         sessionStorage.clear();

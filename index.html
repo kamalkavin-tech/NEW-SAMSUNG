@@ -10,9 +10,28 @@
         // If the user has ever logged in on this device, never open the login UI while TV storage is slow: wait until session reads, then home.
         (function () {
             try {
-                var relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1';
-                var hadSessionBefore = localStorage.getItem('hasLoggedInOnce') === 'true';
-                var RELAUNCH_POLL_MS = 120;
+                var RELAUNCH_POLL_MS = 200;
+                var FIRST_INSTALL_WAIT_MS = 1500;
+                var RELAUNCH_RECOVERY_WAIT_MS = 15000;
+
+                function readEverLoginCookie() {
+                    try {
+                        var m = document.cookie.match(/(?:^|;\s*)bbnl_has_logged_in_once=([^;]+)/);
+                        return !!(m && decodeURIComponent(m[1]) === '1');
+                    } catch (e) {
+                        return false;
+                    }
+                }
+
+                function writeEverLoginCookie(on) {
+                    try {
+                        if (on) {
+                            document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax';
+                        } else {
+                            document.cookie = 'bbnl_has_logged_in_once=; path=/; max-age=0; SameSite=Lax';
+                        }
+                    } catch (e) {}
+                }
 
                 function normalizeStoredUser(obj) {
                     if (!obj || typeof obj !== 'object') return null;
@@ -49,7 +68,23 @@
                     if (localStorage.getItem("hasLoggedInOnce") !== "true") {
                         localStorage.setItem("hasLoggedInOnce", "true");
                     }
+                    writeEverLoginCookie(true);
+                    if (localStorage.getItem('bbnl_logged_out') === '1') {
+                        localStorage.removeItem('bbnl_logged_out');
+                    }
                     return resolvedUser;
+                }
+
+                function readAuthFlags() {
+                    var hadSessionFlag = localStorage.getItem('hasLoggedInOnce') === 'true' || readEverLoginCookie();
+                    if (hadSessionFlag && localStorage.getItem('hasLoggedInOnce') !== 'true') {
+                        try { localStorage.setItem('hasLoggedInOnce', 'true'); } catch (e) {}
+                    }
+                    return {
+                        relaunchPending: localStorage.getItem('bbnl_relaunch_pending') === '1',
+                        hadSessionBefore: hadSessionFlag,
+                        explicitLogout: localStorage.getItem('bbnl_logged_out') === '1'
+                    };
                 }
 
                 function goHome() {
@@ -69,26 +104,64 @@
                     return;
                 }
 
-                // First install or after logout: hasLoggedInOnce is absent/false.
-                if (!hadSessionBefore) {
+                var flags = readAuthFlags();
+                if (flags.explicitLogout) {
                     goLogin();
                     return;
                 }
 
-                // Has logged in before: never open login.html while TV storage is slow — poll until session appears.
-                function pollForever() {
-                    var user = readResolvedUser();
-                    if (user) {
+                // Returning users should never see login on relaunch unless explicit logout was requested.
+                // Keep retrying longer on slow TVs so bbnl_user has time to load.
+                if (flags.hadSessionBefore || flags.relaunchPending) {
+                    var relaunchWaited = 0;
+                    var waitForSessionOnRelaunch = function () {
+                        var relaunchUser = readResolvedUser();
+                        if (relaunchUser) {
+                            goHome();
+                            return;
+                        }
+
+                        relaunchWaited += RELAUNCH_POLL_MS;
+                        if (relaunchWaited < RELAUNCH_RECOVERY_WAIT_MS) {
+                            setTimeout(waitForSessionOnRelaunch, RELAUNCH_POLL_MS);
+                            return;
+                        }
+
+                        // If storage never recovers, still go home for returning users.
+                        goHome();
+                    };
+
+                    setTimeout(waitForSessionOnRelaunch, RELAUNCH_POLL_MS);
+                    return;
+                }
+
+                // First-install path only: wait a bit, then show login.
+                setTimeout(function () {
+                    var latestFlags = readAuthFlags();
+                    if (latestFlags.explicitLogout) {
+                        goLogin();
+                        return;
+                    }
+                    if (readResolvedUser()) {
                         goHome();
                         return;
                     }
-                    setTimeout(pollForever, RELAUNCH_POLL_MS);
-                }
-
-                setTimeout(pollForever, RELAUNCH_POLL_MS);
+                    if (latestFlags.hadSessionBefore || latestFlags.relaunchPending) {
+                        goHome();
+                        return;
+                    }
+                    goLogin();
+                }, FIRST_INSTALL_WAIT_MS);
             } catch (e) {
                 try {
-                    if (localStorage.getItem('hasLoggedInOnce') === 'true') {
+                    var cookieEverLoggedIn = false;
+                    try {
+                        var cookieMatch = document.cookie.match(/(?:^|;\s*)bbnl_has_logged_in_once=([^;]+)/);
+                        cookieEverLoggedIn = !!(cookieMatch && decodeURIComponent(cookieMatch[1]) === '1');
+                    } catch (eCookieFallback) {}
+                    if (localStorage.getItem('bbnl_logged_out') === '1') {
+                        window.location.replace('login.html');
+                    } else if (localStorage.getItem('hasLoggedInOnce') === 'true' || cookieEverLoggedIn) {
                         window.location.replace('home.html');
                     } else {
                         window.location.replace('login.html');

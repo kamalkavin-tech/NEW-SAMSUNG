@@ -38,7 +38,7 @@
         var resolvedUser = primaryUser || backupUser;
         if (!resolvedUser) {
             window.__BBNL_NAVIGATING = true;
-            window.location.replace("login.html");
+            window.location.replace("index.html");
             return;
         }
 
@@ -51,7 +51,7 @@
     } catch (e) {
         console.error("[Auth] Corrupted session data - redirecting to login:", e);
         window.__BBNL_NAVIGATING = true;
-        window.location.replace("login.html");
+        window.location.replace("index.html");
     }
 })();
 

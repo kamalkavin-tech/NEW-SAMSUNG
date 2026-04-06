@@ -294,7 +294,7 @@ var fofiShouldAutoPlay = false;
 
     function redirectLogin() {
         try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (eL) { }
-        window.location.replace("login.html");
+        window.location.replace("index.html");
     }
 
     try {
@@ -940,7 +940,24 @@ function handleClick(element) {
     // Check if it's a channel card
     var channelType = element.getAttribute('data-channel');
     if (channelType) {
-        // Navigate to player, let player.js find the details
+        // Fast path: build a channel object from card dataset and hand off via BBNL_API.playChannel.
+        // This avoids slow player-side lookup by name on low-power TVs.
+        var streamLink = element.dataset ? (element.dataset.streamlink || '') : '';
+        var channelNo = element.dataset ? (element.dataset.channelno || '') : '';
+        var channelLogo = element.dataset ? (element.dataset.logo || '') : '';
+
+        if (streamLink && typeof BBNL_API !== 'undefined' && BBNL_API.playChannel) {
+            BBNL_API.playChannel({
+                chtitle: channelType,
+                channel_name: channelType,
+                streamlink: streamLink,
+                channelno: channelNo,
+                chlogo: channelLogo
+            }, 'subs');
+            return;
+        }
+
+        // Fallback: preserve older behavior if dataset is incomplete.
         window.__BBNL_NAVIGATING = true;
         window.location.href = "player.html?name=" + encodeURIComponent(channelType);
         return;
@@ -2402,6 +2419,10 @@ function playChannelByLCNFromHome(lcn) {
             });
 
             if (channel) {
+                try {
+                    sessionStorage.setItem('selectedLanguageId', 'all');
+                    sessionStorage.setItem('selectedLanguageName', 'All Channels');
+                } catch (eSet) {}
                 BBNL_API.playChannel(channel);
             } else {
                 showSearchNotFound("Channel Not Found");
