@@ -1121,6 +1121,27 @@ function renderAdsInHeroBanner(ads) {
     sliderContainer.className = 'ad-slider';
 
     // Build all slides in a fragment first (single DOM insert = single reflow)
+    var hasAdjustedBannerHeight = false;
+    function adjustHeroBannerFromImage(imgEl) {
+        if (hasAdjustedBannerHeight || !imgEl) return;
+        var naturalW = Number(imgEl.naturalWidth || 0);
+        var naturalH = Number(imgEl.naturalHeight || 0);
+        if (naturalW <= 0 || naturalH <= 0) return;
+        var ratio = naturalW / naturalH;
+        if (!isFinite(ratio) || ratio <= 0) return;
+
+        var containerWidth = Number(container.clientWidth || 0);
+        if (containerWidth <= 0) return;
+
+        // Keep banner in a safe TV-friendly height range while matching ad ratio.
+        var targetHeight = Math.round(containerWidth / ratio);
+        if (targetHeight < 420) targetHeight = 420;
+        if (targetHeight > 760) targetHeight = 760;
+
+        container.style.height = targetHeight + 'px';
+        hasAdjustedBannerHeight = true;
+    }
+
     var fragment = document.createDocumentFragment();
     ads.forEach(function (ad, index) {
         var slide = document.createElement('div');
@@ -1135,6 +1156,12 @@ function renderAdsInHeroBanner(ads) {
             img.src = adUrl;
         }
         img.alt = 'Advertisement ' + (index + 1);
+
+        img.onload = function () {
+            if (index === 0) {
+                adjustHeroBannerFromImage(this);
+            }
+        };
 
         // Handle image load errors gracefully
         img.onerror = function () {
@@ -2525,7 +2552,6 @@ function loadFoFiLogo() {
  * Fetches FoFi channel (LCN 999) from API and plays it
  */
 function playFoFiChannel() {
-
     BBNL_API.getChannelList()
         .then(function (channels) {
             
@@ -2565,7 +2591,6 @@ function playFoFiChannel() {
             }
 
             // NO FALLBACK: Only play FoFi channel, never fall back to other channels
-
             if (fofiChannel) {
                 // Play FoFi channel on app launch - NO subscription restriction for FoFi
                 sessionStorage.setItem('fofi_autoplay_done', 'true');

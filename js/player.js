@@ -654,7 +654,7 @@ function hidePlayerErrorPopup() {
             overlayTimeout = null;
         }
 
-            _keepInfoBarVisible = false;
+        _keepInfoBarVisible = false;
             _keepChromeAfterErrorBack = false;
         if (!_infoBarEl) _infoBarEl = document.querySelector('.info-bar-premium');
         if (!_overlayEl) _overlayEl = document.querySelector('.player-overlay');
@@ -1550,7 +1550,10 @@ function setupPlayer(channel) {
                 var found = enrichSrc.find(function (c) {
                     return String(c.channelno || c.urno || c.chid || '').trim() === eid;
                 });
-                if (found) channel = Object.assign({}, found, channel);
+                if (found && typeof found.subscribed !== 'undefined') {
+                    // Keep current object/flow intact; refresh only entitlement flag from latest local snapshot.
+                    channel.subscribed = found.subscribed;
+                }
             }
         }
     } catch (enrichErr) { }
@@ -1731,18 +1734,39 @@ function setupPlayer(channel) {
         }
     }
 
-    // PRE-PLAY subscription check — block only when explicitly "no"
-    if (channel.subscribed === "no" || channel.subscribed === "No" || channel.subscribed === "NO" ||
-        channel.subscribed === false || channel.subscribed === 0 || channel.subscribed === "0") {
+    // PRE-PLAY subscription check — use freshest local snapshot to avoid missing popup outside channels redirect flow.
+    var latestKnownChannel = findLatestKnownChannel(channel) || channel;
+    var latestSubscribed = latestKnownChannel ? latestKnownChannel.subscribed : channel.subscribed;
+    if (latestSubscribed === "no" || latestSubscribed === "No" || latestSubscribed === "NO" ||
+        latestSubscribed === false || latestSubscribed === 0 || latestSubscribed === "0") {
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) { }
         reportPlaybackFailure('subscription', {
             source: 'setup-precheck-local',
-            channel: channel,
+            channel: latestKnownChannel || channel,
             stream: analyzeStreamUrl(fixedStreamUrl),
             detail: 'channel flagged unsubscribed before playback (local)'
         });
         return;
     }
+
+    // Safety-net verification: ensure subscription popup is enforced even when entering
+    // Player from non-Channels flows that may carry stale entitlement data.
+    (function verifyEntitlementAcrossFlows(currentChannel, streamUrlForCheck, generation) {
+        resolveChannelEntitlement(currentChannel).then(function (entitlement) {
+            if (generation !== _playerStreamGen) return;
+            if (!entitlement || entitlement.subscribed !== false) return;
+
+            try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (eStop) { }
+            reportPlaybackFailure('subscription', {
+                source: 'setup-postcheck-entitlement',
+                channel: entitlement.channel || currentChannel,
+                stream: analyzeStreamUrl(streamUrlForCheck),
+                detail: 'channel flagged unsubscribed after entitlement verification'
+            });
+        }).catch(function () {
+            // Keep existing playback flow if entitlement verification fails unexpectedly.
+        });
+    })(latestKnownChannel || channel, fixedStreamUrl, myGen);
 
     _lastPlayingChannel = channel;
 
@@ -2732,8 +2756,28 @@ function buildCategoriesForLanguage() {
 
     sidebarState.categories = builtCategories;
 
-    // Sort by count (descending)
+    // Sort by fixed priority first, then by count for unknown categories.
+    var categoryPriority = {
+        'entertainment': 1,
+        'movies': 2,
+        'kids': 3,
+        'sports': 4,
+        'infotainment': 5,
+        'music': 6,
+        'news': 7,
+        'devotional': 8,
+        'miscellaneous': 9
+    };
     sidebarState.categories.sort(function (a, b) {
+        var aName = String((a && a.name) || '').trim().toLowerCase();
+        var bName = String((b && b.name) || '').trim().toLowerCase();
+        var aRank = categoryPriority.hasOwnProperty(aName) ? categoryPriority[aName] : 999;
+        var bRank = categoryPriority.hasOwnProperty(bName) ? categoryPriority[bName] : 999;
+        if (aRank !== bRank) return aRank - bRank;
+        if (aRank === 999 && bRank === 999) {
+            var countDiff = (Number((b && b.count) || 0) - Number((a && a.count) || 0));
+            if (countDiff !== 0) return countDiff;
+        }
         return b.count - a.count;
     });
 
@@ -4661,6 +4705,7 @@ function handleKeydown(e) {
             showOverlay();
         } else if (code === 10253 || code === 77) {
             // Menu - toggle sidebar
+            hidePlayerErrorPopup();
             toggleSidebar();
         }
         return;
@@ -5115,10 +5160,6 @@ function playChannelByLCNFromPlayer(lcn) {
 
     if (channel) {
         // Found in full list - play immediately in Player (no navigation)
-        try {
-            sessionStorage.setItem('selectedLanguageId', 'all');
-            sessionStorage.setItem('selectedLanguageName', 'All Channels');
-        } catch (eSet) {}
         channelNumberBuffer = '';
         hideChannelNumberInput();
         setupPlayer(channel);

@@ -261,6 +261,8 @@ body {
     -webkit-overflow-scrolling: touch;
     transform: translateZ(0); /* GPU compositing for scroll */
     will-change: scroll-position;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 /* ==========================================
@@ -393,7 +395,9 @@ body {
    ========================================== */
 
 .main-content::-webkit-scrollbar {
-    width: 8px;
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .main-content::-webkit-scrollbar-track {
