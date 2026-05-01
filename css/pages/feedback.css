@@ -199,10 +199,17 @@ body {
     font-size: 34px;
     color: rgba(255, 255, 255, 0.18);
     cursor: pointer;
+    /* Force text-presentation so the star glyph honours `color`
+       instead of being painted as a colored emoji on Tizen WebKit. */
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-variant-emoji: text;
+    -webkit-font-feature-settings: "liga" off;
+    text-rendering: geometricPrecision;
 }
 
 .star.active {
-    color: #fbbf24;
+    color: #ffffff !important;
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .rating-hint {

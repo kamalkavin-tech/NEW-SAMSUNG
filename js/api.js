@@ -370,8 +370,13 @@ function _cleanupBlobResources() {
     _blobFetchInFlight = {};
 }
 
-// Ensure cleanup on page navigation to prevent memory leaks on Tizen
-window.addEventListener('pagehide', _cleanupBlobResources);
+// Ensure cleanup on page navigation to prevent memory leaks on Tizen.
+// RC-9: skip cleanup when the page is going into BFCache (event.persisted === true)
+// so the restored page can reuse blob/queue state without re-fetching everything.
+window.addEventListener('pagehide', function (event) {
+    if (event && event.persisted) return;
+    _cleanupBlobResources();
+});
 window.addEventListener('pageshow', function(e) {
     if (e.persisted) {
         // Reset state after BFCache restore (queue should be clean)
@@ -798,11 +803,11 @@ const CacheManager = {
 
     // Default cache expiry times (in milliseconds)
     EXPIRY: {
-        CHANNEL_LIST: 60 * 60 * 1000,   // 1 hour
-        CATEGORIES: 60 * 60 * 1000,      // 1 hour
-        LANGUAGES: 60 * 60 * 1000,       // 1 hour
+        CHANNEL_LIST: 10 * 60 * 1000,   // 10 minutes
+        CATEGORIES: 10 * 60 * 1000,      // 10 minutes
+        LANGUAGES: 10 * 60 * 1000,       // 10 minutes
         LAST_CHANNEL: 7 * 24 * 60 * 60 * 1000,  // 7 days
-        EXPIRING_CHANNELS: 60 * 60 * 1000  // 1 hour
+        EXPIRING_CHANNELS: 10 * 60 * 1000  // 10 minutes
     },
 
     /**
@@ -928,6 +933,14 @@ const CacheManager = {
     remove: function (key) {
         try {
             localStorage.removeItem(key);
+            // RC-2: cascade derived caches when the source channel list is
+            // invalidated. Categories and the expiring-channel list are derived
+            // from the channel list; if the source changed, the derivations
+            // are by definition stale and must be refetched.
+            if (key === this.KEYS.CHANNEL_LIST) {
+                try { localStorage.removeItem(this.KEYS.CATEGORIES); } catch (eCat) {}
+                try { localStorage.removeItem(this.KEYS.EXPIRING_CHANNELS); } catch (eExp) {}
+            }
         } catch (e) {
             console.error('[CacheManager] Failed to remove cache:', key, e);
         }
@@ -997,6 +1010,58 @@ const CacheManager = {
 
 // Make CacheManager globally available
 window.CacheManager = CacheManager;
+
+// ==========================================
+// SUBSCRIPTION SYNC MARKER
+// Provides one shared signal so Home/Channels/Player can invalidate stale
+// entitlement/channel caches after payment and app relaunch.
+// ==========================================
+window.BBNLSubscriptionSync = {
+    KEY: 'bbnl_subscription_updated_at',
+    WINDOW_MS: 10 * 60 * 1000,
+
+    markUpdated: function () {
+        var ts = Date.now();
+        try { localStorage.setItem(this.KEY, String(ts)); } catch (e) {}
+        try { sessionStorage.setItem('subscription_completed', 'true'); } catch (e2) {}
+        try { sessionStorage.setItem('paymentJustCompleted', 'true'); } catch (e3) {}
+    },
+
+    isRecent: function (maxAgeMs) {
+        var windowMs = Number(maxAgeMs || this.WINDOW_MS);
+        var raw = '';
+        try { raw = localStorage.getItem(this.KEY) || ''; } catch (e) { raw = ''; }
+        if (!raw) return false;
+        var ts = Number(raw);
+        if (!isFinite(ts) || ts <= 0) return false;
+        return (Date.now() - ts) <= windowMs;
+    },
+
+    consumeRecent: function (maxAgeMs) {
+        var recent = this.isRecent(maxAgeMs);
+        if (!recent) return false;
+        try { localStorage.removeItem(this.KEY); } catch (e) {}
+        return true;
+    },
+
+    clearChannelDerivedCaches: function () {
+        try {
+            if (window.CacheManager && CacheManager.remove) {
+                CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
+                CacheManager.remove(CacheManager.KEYS.CATEGORIES);
+                CacheManager.remove(CacheManager.KEYS.LANGUAGES);
+                CacheManager.remove(CacheManager.KEYS.EXPIRING_CHANNELS);
+            }
+        } catch (e) {}
+
+        try {
+            sessionStorage.removeItem('master_channel_list_cache');
+            sessionStorage.removeItem('home_channels_cache');
+            sessionStorage.removeItem('home_languages_cache');
+            sessionStorage.removeItem('channels_state_cache');
+        } catch (e2) {}
+    }
+};
 
 // ==========================================
 // APP PERFORMANCE CACHE
@@ -2882,13 +2947,13 @@ const ChannelsAPI = {
             var sampleLogos = [];
             for (var dci = 0; dci < Math.min(5, channels.length); dci++) {
                 var dch = channels[dci] || {};
-                var dlogo = dch.chlogo || dch.chnllogo || dch.logo_url || dch.channel_logo || dch.channellogo || dch.logo || dch.image || dch.img || '';
+                var dlogo = extractChannelLogoUrl(dch);
                 if (dlogo) sampleLogos.push('[' + (dch.chtitle || dch.chname || 'Channel') + '] ' + dlogo);
             }
-            
+
             for (var lci = 0; lci < channels.length; lci++) {
                 var lch = channels[lci] || {};
-                var llogo = lch.chlogo || lch.chnllogo || lch.logo_url || lch.channel_logo || lch.channellogo || lch.logo || lch.image || lch.img || '';
+                var llogo = extractChannelLogoUrl(lch);
                 if (llogo) {
                     // Extract host from URL
                     var hostMatch = llogo.match(/https?:\/\/([^\/]+)/i);
@@ -2907,7 +2972,7 @@ const ChannelsAPI = {
             var channelImages = [];
             for (var ci = 0; ci < channels.length; ci++) {
                 var ch = channels[ci] || {};
-                var logo = ch.chlogo || ch.chnllogo || ch.logo_url || ch.channel_logo || ch.channellogo || ch.logo || ch.image || ch.img || '';
+                var logo = extractChannelLogoUrl(ch);
                 if (logo) channelImages.push(logo);
             }
             _preloadImageBatch(channelImages);
@@ -3886,6 +3951,37 @@ const ErrorImagesAPI = {
 };
 
 // ==========================================
+// CHANNEL LOGO FIELD RESOLVER (centralized)
+// ==========================================
+// Single field-priority lookup so player, channels page, info bar, and
+// hydration paths all resolve the same URL for a given channel record.
+// Prevents logos that only exist under fields like `default_logo` /
+// `defaultimage` / `logo_path` from being missed in some surfaces (CI-10).
+function extractChannelLogoUrl(channel) {
+    if (!channel) return '';
+    var fields = [
+        channel.chlogo,
+        channel.chnllogo,
+        channel.logo_url,
+        channel.channel_logo,
+        channel.channellogo,
+        channel.logo,
+        channel.logo_path,
+        channel.default_logo,
+        channel.defaultimage,
+        channel.image,
+        channel.img
+    ];
+    for (var i = 0; i < fields.length; i++) {
+        var v = fields[i];
+        if (v === null || v === undefined) continue;
+        var s = String(v).trim();
+        if (s) return s;
+    }
+    return '';
+}
+
+// ==========================================
 // GLOBAL EXPORT
 // ==========================================
 // Create BBNL_API object and expose it globally
@@ -3949,6 +4045,7 @@ const BBNL_API = {
     getErrorImageUrl: ErrorImagesAPI.getImageUrl.bind(ErrorImagesAPI),
     resolveAssetUrl: resolveAssetUrl,
     getValidatedImageUrl: getValidatedImageUrl,
+    extractChannelLogoUrl: extractChannelLogoUrl,
     setImageSource: setImageSource,
     getImagePlaceholderUrl: getImagePlaceholderUrl,
     invalidateImageUrlCaches: invalidateImageUrlCaches,

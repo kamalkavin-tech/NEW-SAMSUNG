@@ -112,7 +112,7 @@ window.addEventListener('pagehide', function() {
 var channelsSearchActivated = false; // Only activate keypad after explicit user action
 var _channelLogoPrefetchInFlight = {}; // Prevent duplicate prefetches during rapid category switches
 var channelsResultCache = {}; // Reuse channel API responses per filter/category
-var CHANNELS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes — reduces API calls on page navigation
+var CHANNELS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 var channelsPageExiting = false;
 var _allChannelsObjectIndexMap = null;
 var _renderGeneration = 0; // Cancels stale chunk renders when category changes quickly
@@ -164,8 +164,8 @@ function appendProgressiveCards(targetIndexExclusive) {
     if (!_progressiveGrid || !_progressiveChannels || _progressiveRenderDone) return;
 
     var len = _progressiveChannels.length;
-    var CHUNK_SIZE = 16;
-    var IMMEDIATE_LOAD_COUNT = 6;
+    var CHUNK_SIZE = 24;
+    var IMMEDIATE_LOAD_COUNT = 12;
     var desired = Math.min(len, Math.max(targetIndexExclusive || 0, _progressiveNextIndex + CHUNK_SIZE));
 
     while (_progressiveNextIndex < desired) {
@@ -436,6 +436,14 @@ async function initPage() {
     }
 
     try {
+        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.consumeRecent && BBNLSubscriptionSync.consumeRecent()) {
+            if (typeof BBNLSubscriptionSync.clearChannelDerivedCaches === 'function') {
+                BBNLSubscriptionSync.clearChannelDerivedCaches();
+            }
+            masterChannelList = [];
+            masterListLoaded = false;
+        }
+
         // Master list first so loadChannels can filter in-memory reliably (avoids empty grid races).
         await loadMasterChannelList();
         var [languageResponse, channelsResult] = await Promise.all([
@@ -470,19 +478,26 @@ async function loadMasterChannelList() {
         return;
     }
 
+    var bypassSessionCache = false;
+    if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.isRecent) {
+        bypassSessionCache = BBNLSubscriptionSync.isRecent();
+    }
+
     // Check sessionStorage cache first to avoid API call on page reload (e.g. returning from player)
-    try {
-        var raw = sessionStorage.getItem('master_channel_list_cache');
-        if (raw) {
-            var parsed = JSON.parse(raw);
-            if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < CHANNELS_CACHE_TTL_MS) {
-                masterChannelList = parsed.data;
-                masterListLoaded = true;
-                prepareQuickCategoryCaches(masterChannelList);
-                return;
+    if (!bypassSessionCache) {
+        try {
+            var raw = sessionStorage.getItem('master_channel_list_cache');
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.data) && parsed.ts && (Date.now() - Number(parsed.ts)) < CHANNELS_CACHE_TTL_MS) {
+                    masterChannelList = parsed.data;
+                    masterListLoaded = true;
+                    prepareQuickCategoryCaches(masterChannelList);
+                    return;
+                }
             }
-        }
-    } catch (e) {}
+        } catch (e) {}
+    }
 
     try {
         const response = await BBNL_API.getChannelList({}); // No filters = ALL channels
@@ -1190,6 +1205,9 @@ function primeChannelLogoCache(channels, maxCount) {
 
 function getChannelCardLogo(ch) {
     if (!ch || typeof ch !== 'object') return '';
+    if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.extractChannelLogoUrl === 'function') {
+        return BBNL_API.extractChannelLogoUrl(ch);
+    }
     var candidates = [
         ch.chlogo,
         ch.chnllogo,
@@ -1200,7 +1218,8 @@ function getChannelCardLogo(ch) {
         ch.logo_path,
         ch.default_logo,
         ch.defaultimage,
-        ch.image
+        ch.image,
+        ch.img
     ];
 
     for (var i = 0; i < candidates.length; i++) {
@@ -1442,7 +1461,7 @@ function renderAllChannels(channels) {
     _progressiveRenderDone = false;
 
     // Tiny first paint for faster menu-bar switching response; remaining rows append on demand.
-    appendProgressiveCards(30);
+    appendProgressiveCards(48);
 }
 
 // ==========================================
@@ -1477,7 +1496,7 @@ function _setupLazyImageLoading(scrollContainer) {
                     _lazyObserver.unobserve(img);
                 }
             });
-        }, { root: scrollContainer, rootMargin: '200px 0px' }); // 200px buffer
+        }, { root: null, rootMargin: '200px 0px' }); // 200px buffer (window viewport)
 
         lazyImages.forEach(function (img) { _lazyObserver.observe(img); });
     } else {
@@ -2229,6 +2248,11 @@ function moveWithinCardsGrid(deltaX, deltaY) {
     if (!_progressiveRenderDone && deltaY > 0 && newIndex >= (cards.length - columnsPerRow)) {
         appendProgressiveCards(newIndex + (columnsPerRow * 3));
         cards = getCachedCards();
+    }
+
+    // Clamp index for partially filled rows so navigation never stalls.
+    if (newIndex >= cards.length && deltaY > 0 && cards.length > 0) {
+        newIndex = cards.length - 1;
     }
 
     if (newIndex >= 0 && newIndex < cards.length) {

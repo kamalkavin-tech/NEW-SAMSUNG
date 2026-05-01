@@ -164,6 +164,8 @@
                 if (overlay) overlay.classList.remove('visible');
                 var params = new URLSearchParams(window.location.search);
                 var returnTo = params.get('returnTo') || 'player.html?resume=paynow';
+                // ✅ FIX ISSUE #1: Set flag for post-payment subscription refresh
+                try { sessionStorage.setItem('paymentJustCompleted', 'true'); } catch (e) {}
                 window.location.href = returnTo;
             }
 

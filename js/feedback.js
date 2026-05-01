@@ -150,6 +150,26 @@ window.onload = function () {
         });
     });
 
+    // Direct keydown listener on the star-rating element so LEFT/RIGHT are
+    // guaranteed to be handled here before bubbling to the document-level
+    // listener (which previously could be intercepted by the submit/cancel
+    // horizontal-navigation block on some remote variants).
+    var starRatingEl = document.querySelector('.star-rating');
+    if (starRatingEl) {
+        starRatingEl.addEventListener('keydown', function (ev) {
+            var c = ev.keyCode;
+            var k = ev.key || '';
+            var leftPressed = (c === 37) || k === 'ArrowLeft' || k === 'Left';
+            var rightPressed = (c === 39) || k === 'ArrowRight' || k === 'Right';
+            if (leftPressed || rightPressed) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                toggleStars(rightPressed); // RIGHT increases, LEFT decreases
+                return false;
+            }
+        });
+    }
+
     // Register All Remote Keys (supports all Samsung remote types)
     if (typeof RemoteKeys !== 'undefined') {
         RemoteKeys.registerAllKeys();
@@ -166,6 +186,20 @@ document.addEventListener("keydown", function (e) {
     if (code === 10009) { // Back
         e.preventDefault();
         navigateToHomeFromFeedback();
+        return;
+    }
+
+    // Star-rating LEFT/RIGHT must be handled FIRST so the submit/cancel
+    // horizontal-navigation block below cannot intercept it, and so any
+    // non-standard remote keyCode is still recognised via e.key.
+    var keyName = e.key || '';
+    var isLeft = (code === 37) || keyName === 'ArrowLeft' || keyName === 'Left';
+    var isRight = (code === 39) || keyName === 'ArrowRight' || keyName === 'Right';
+    var activeEl = document.activeElement;
+    var onStarRating = !!(activeEl && activeEl.classList && activeEl.classList.contains('star-rating'));
+    if (onStarRating && (isLeft || isRight)) {
+        e.preventDefault();
+        toggleStars(isRight); // RIGHT increases, LEFT decreases
         return;
     }
 
@@ -214,14 +248,6 @@ document.addEventListener("keydown", function (e) {
             el.click();
         }
     }
-
-    // Left/Right for star rating if focused
-    var active = document.activeElement;
-    if (active.classList.contains('star-rating')) {
-        if (code === 37 || code === 39) {
-            toggleStars(code === 39); // true for right (increase)
-        }
-    }
 });
 
 function moveFocus(step) {
@@ -239,19 +265,28 @@ function moveFocus(step) {
 
 var currentRating = 0;
 function toggleStars(increase = true) {
-    var stars = document.querySelectorAll('.star');
     if (increase) {
         currentRating++;
-        if (currentRating > 5) currentRating = 1;
+        if (currentRating > 5) currentRating = 5;
     } else {
-        // Just cycle or simple toggle
-        currentRating++;
-        if (currentRating > 5) currentRating = 0;
+        currentRating--;
+        if (currentRating < 0) currentRating = 0;
     }
+    renderStarRating();
+}
 
-    stars.forEach((s, i) => {
-        if (i < currentRating) s.innerHTML = '★'; // Filled
-        else s.innerHTML = '☆'; // Empty
+function renderStarRating() {
+    var stars = document.querySelectorAll('.star');
+    stars.forEach(function (s, i) {
+        if (i < currentRating) {
+            s.classList.add('active');
+            // U+FE0E forces text-presentation so the glyph is monochrome
+            // (Tizen WebKit otherwise renders ★ as a colored emoji).
+            s.innerHTML = '★︎';
+        } else {
+            s.classList.remove('active');
+            s.innerHTML = '☆︎';
+        }
     });
 }
 

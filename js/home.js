@@ -14,9 +14,75 @@ var homeLanguageLogoCache = {}; // URL -> true
 var homeLanguageLogoPrefetchInFlight = {}; // URL -> true
 var homeAdImageCache = {}; // URL -> true
 
+// CI-08: data-URI cache for language logos so home revisits paint instantly
+// without a network fetch. Persists across page navigations via sessionStorage.
+// Keyed on the original (post-normalised) image URL.
+var _LANG_LOGO_DATAURL_KEY = 'bbnl_lang_logo_dataurl_v1';
+var _langLogoDataUrlCache = (function () {
+    try {
+        var raw = sessionStorage.getItem(_LANG_LOGO_DATAURL_KEY);
+        if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+        }
+    } catch (e) {}
+    return {};
+})();
+var _langLogoDataUrlInFlight = {};
+
+function _getLangLogoDataUrl(originalUrl) {
+    if (!originalUrl) return '';
+    return _langLogoDataUrlCache[originalUrl] || '';
+}
+
+function _saveLangLogoDataUrl(originalUrl, dataUrl) {
+    if (!originalUrl || !dataUrl) return;
+    _langLogoDataUrlCache[originalUrl] = dataUrl;
+    try {
+        sessionStorage.setItem(_LANG_LOGO_DATAURL_KEY, JSON.stringify(_langLogoDataUrlCache));
+    } catch (e) {
+        // sessionStorage quota exceeded — drop oldest entry and retry once.
+        try {
+            var keys = Object.keys(_langLogoDataUrlCache);
+            if (keys.length > 0) {
+                delete _langLogoDataUrlCache[keys[0]];
+                sessionStorage.setItem(_LANG_LOGO_DATAURL_KEY, JSON.stringify(_langLogoDataUrlCache));
+            }
+        } catch (e2) {}
+    }
+}
+
+function _fetchAndCacheLangLogoDataUrl(originalUrl) {
+    if (!originalUrl) return;
+    if (_langLogoDataUrlCache[originalUrl]) return;
+    if (_langLogoDataUrlInFlight[originalUrl]) return;
+    if (typeof fetch !== 'function' || typeof FileReader !== 'function') return;
+    _langLogoDataUrlInFlight[originalUrl] = true;
+    fetch(originalUrl, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.blob();
+        })
+        .then(function (blob) {
+            return new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(new Error('FileReader failed')); };
+                reader.readAsDataURL(blob);
+            });
+        })
+        .then(function (dataUrl) {
+            _saveLangLogoDataUrl(originalUrl, dataUrl);
+            delete _langLogoDataUrlInFlight[originalUrl];
+        })
+        .catch(function () {
+            delete _langLogoDataUrlInFlight[originalUrl];
+        });
+}
+
 function primeHomeAds(ads, maxCount) {
     if (!Array.isArray(ads) || ads.length === 0) return;
-    var limit = Math.min(maxCount || 2, ads.length);
+    var limit = Math.min(maxCount || 5, ads.length);
     for (var i = 0; i < limit; i++) {
         var ad = ads[i] || {};
         var url = normalizeHomeAssetUrl(ad.adpath || '');
@@ -339,8 +405,72 @@ var fofiShouldAutoPlay = false;
     }
 })();
 
+// ✅ FIX ISSUE #1: Handle post-payment subscription refresh
+function handlePostPaymentSubscriptionRefresh() {
+    return Promise.resolve().then(function() {
+        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.clearChannelDerivedCaches) {
+            BBNLSubscriptionSync.clearChannelDerivedCaches();
+        } else {
+            if (typeof CacheManager !== 'undefined' && CacheManager.remove) {
+                CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
+                CacheManager.remove(CacheManager.KEYS.CATEGORIES);
+                CacheManager.remove(CacheManager.KEYS.LANGUAGES);
+                CacheManager.remove(CacheManager.KEYS.EXPIRING_CHANNELS);
+            }
+            try {
+                sessionStorage.removeItem('master_channel_list_cache');
+                sessionStorage.removeItem('home_languages_cache');
+                sessionStorage.removeItem('home_channels_cache');
+            } catch (e) {}
+        }
+        
+        // Force fresh subscription/channel data from API
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelList) {
+            return BBNL_API.getChannelList(true); // Force refresh
+        }
+        return Promise.resolve();
+    }).then(function() {
+        // Re-render home UI with fresh data
+        if (typeof loadHomeLanguages === 'function') {
+            loadHomeLanguages();
+        }
+        if (typeof loadHomeAds === 'function') {
+            loadHomeAds();
+        }
+        console.log('[Home] Post-payment subscription refresh completed');
+    }).catch(function(err) {
+        console.warn('[Home] Post-payment refresh error:', err);
+    });
+}
+
 // Initialize on page load
 window.onload = function () {
+    // ✅ FIX ISSUE #1: Check if user just returned from payment
+    var checkPaymentFlag = false;
+    try {
+        var justPaid = sessionStorage.getItem('paymentJustCompleted');
+        if (justPaid === 'true') {
+            sessionStorage.removeItem('paymentJustCompleted');
+            checkPaymentFlag = true;
+        }
+        if (!checkPaymentFlag && typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.consumeRecent && BBNLSubscriptionSync.consumeRecent()) {
+            checkPaymentFlag = true;
+        }
+    } catch (e) {}
+    
+    // If returning from payment, refresh subscriptions before normal init
+    if (checkPaymentFlag) {
+        handlePostPaymentSubscriptionRefresh().then(function() {
+            runInitializeHomePage();
+        });
+        return;
+    }
+    
+    // Normal initialization (not from payment)
+    runInitializeHomePage();
+}
+
+function runInitializeHomePage() {
 
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
         AppPerformanceCache.primeAfterLogin(false);
@@ -924,6 +1054,9 @@ function handleClick(element) {
     // Check for data-route attribute first (highest priority)
     var route = element.getAttribute('data-route');
     if (route) {
+        if (window.location && window.location.pathname && window.location.pathname.indexOf(route) !== -1) {
+            return;
+        }
         window.__BBNL_NAVIGATING = true;
         window.location.href = route;
         return;
@@ -1048,6 +1181,7 @@ function handleClick(element) {
  * Fails silently if API returns no data or encounters errors
  */
 function loadHomeAds() {
+    var renderedFromCache = false;
 
     // Check sessionStorage cache first
     try {
@@ -1055,9 +1189,11 @@ function loadHomeAds() {
         if (cachedAds) {
             var ads = JSON.parse(cachedAds);
             if (ads && Array.isArray(ads) && ads.length > 0) {
-                primeHomeAds(ads, 2);
+                primeHomeAds(ads, 5);
                 renderAdsInHeroBanner(ads);
-                return;
+                renderedFromCache = true;
+                // If cache has fewer than expected banners, continue to API refresh.
+                if (ads.length >= 5) return;
             }
         }
     } catch (e) {}
@@ -1069,9 +1205,10 @@ function loadHomeAds() {
             var persistedList = JSON.parse(persistentAds);
             if (persistedList && Array.isArray(persistedList) && persistedList.length > 0) {
                 try { sessionStorage.setItem('home_ads_cache', JSON.stringify(persistedList)); } catch (cacheErr) {}
-                primeHomeAds(persistedList, 2);
+                primeHomeAds(persistedList, 5);
                 renderAdsInHeroBanner(persistedList);
-                return;
+                renderedFromCache = true;
+                if (persistedList.length >= 5) return;
             }
         }
     } catch (e) {}
@@ -1085,9 +1222,9 @@ function loadHomeAds() {
                 // Cache in sessionStorage
                 try { sessionStorage.setItem('home_ads_cache', JSON.stringify(ads)); } catch (e) {}
                 try { localStorage.setItem('home_ads_cache_persistent', JSON.stringify(ads)); } catch (e) {}
-                primeHomeAds(ads, 2);
+                primeHomeAds(ads, 5);
                 renderAdsInHeroBanner(ads);
-            } else {
+            } else if (!renderedFromCache) {
             }
         })
         .catch(function (error) {
@@ -1112,6 +1249,8 @@ function renderAdsInHeroBanner(ads) {
         clearInterval(homeAdInterval);
         homeAdInterval = null;
     }
+
+    var renderAds = Array.isArray(ads) ? ads.slice(0, 5) : [];
 
     // Clear any existing content
     container.innerHTML = '';
@@ -1143,7 +1282,7 @@ function renderAdsInHeroBanner(ads) {
     }
 
     var fragment = document.createDocumentFragment();
-    ads.forEach(function (ad, index) {
+    renderAds.forEach(function (ad, index) {
         var slide = document.createElement('div');
         slide.className = 'ad-slide';
         slide.style.cssText = index === 0 ? 'opacity:1;z-index:1' : 'opacity:0;z-index:0';
@@ -1176,11 +1315,11 @@ function renderAdsInHeroBanner(ads) {
     container.appendChild(sliderContainer);
 
     // Add navigation dots if multiple ads
-    if (ads.length > 1) {
+    if (renderAds.length > 1) {
         var dotsContainer = document.createElement('div');
         dotsContainer.className = 'ad-dots';
 
-        ads.forEach(function (ad, index) {
+        renderAds.forEach(function (ad, index) {
             var dot = document.createElement('div');
             dot.className = 'ad-dot' + (index === 0 ? ' active' : '');
             dot.setAttribute('data-index', index);
@@ -1191,7 +1330,7 @@ function renderAdsInHeroBanner(ads) {
     }
 
     // Start auto-rotation if multiple ads (6 seconds interval)
-    if (ads.length > 1) {
+    if (renderAds.length > 1) {
         var currentIndex = 0;
         var slides = sliderContainer.querySelectorAll('.ad-slide');
         var dots = container.querySelectorAll('.ad-dot');
@@ -1314,7 +1453,10 @@ function renderChannelsInHomeGrid(channels) {
 
     channels.forEach(function (channel) {
         var channelName = channel.chtitle || channel.channel_name || "Channel";
-        var channelLogo = normalizeHomeAssetUrl(channel.chlogo || channel.logo_url || channel.logo || "");
+        var rawLogo = (typeof BBNL_API !== 'undefined' && typeof BBNL_API.extractChannelLogoUrl === 'function')
+            ? BBNL_API.extractChannelLogoUrl(channel)
+            : (channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.channellogo || channel.logo || channel.logo_path || channel.default_logo || channel.defaultimage || channel.image || channel.img || "");
+        var channelLogo = normalizeHomeAssetUrl(rawLogo);
         var channelNo = channel.channelno || channel.channel_no || "";
         var streamLink = channel.streamlink || channel.channel_url || "";
 
@@ -1476,6 +1618,11 @@ function prefetchHomeLanguageLogos(languages, maxCount) {
         var lang = languages[i] || {};
         var logoUrl = getHomeLanguageLogoUrl(lang);
         if (!logoUrl || logoUrl.indexOf('noimage') !== -1) continue;
+
+        // CI-08: kick off data-URI cache fetch so subsequent home revisits paint
+        // instantly from sessionStorage (no network).
+        _fetchAndCacheLangLogoDataUrl(logoUrl);
+
         var globalLangCached = typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(logoUrl);
         if (homeLanguageLogoCache[logoUrl] || homeLanguageLogoPrefetchInFlight[logoUrl] || globalLangCached) continue;
 
@@ -1545,15 +1692,35 @@ function renderLanguagesInHomeGrid(languages) {
             img.className = 'language-logo';
             img.decoding = 'async';
             img.alt = langName;
-            // Fast path: use in-memory blob cache if available
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                BBNL_API.setImageSource(img, langLogo);
-            } else {
-                img.src = langLogo;
-            }
             img.onload = function () {
                 homeLanguageLogoCache[langLogo] = true;
+                if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) {
+                    BBNL_API.markImageCached(langLogo);
+                }
+                // CI-08: ensure the data-URI cache has this logo so the next
+                // home revisit can paint synchronously from sessionStorage.
+                if (!_langLogoDataUrlCache[langLogo]) {
+                    _fetchAndCacheLangLogoDataUrl(langLogo);
+                }
             };
+            // CI-08: prefer instant render from sessionStorage data-URI cache.
+            // On Tizen file:// the browser HTTP cache is unreliable for cross-origin
+            // images, so a remote URL src can still trigger a visible reload even when
+            // marked "cached". A data-URI src paints in the same frame with zero network.
+            var cachedLangDataUrl = _getLangLogoDataUrl(langLogo);
+            if (cachedLangDataUrl) {
+                img.src = cachedLangDataUrl;
+            } else {
+                var langLogoCached = (homeLanguageLogoCache[langLogo] === true)
+                    || (typeof BBNL_API !== 'undefined' && BBNL_API.isImageCached && BBNL_API.isImageCached(langLogo));
+                if (langLogoCached) {
+                    img.src = langLogo;
+                } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, langLogo);
+                } else {
+                    img.src = langLogo;
+                }
+            }
             img.onerror = function () {
                 var fallback = document.createElement('div');
                 fallback.className = 'language-logo-fallback';
@@ -2552,6 +2719,7 @@ function loadFoFiLogo() {
  * Fetches FoFi channel (LCN 999) from API and plays it
  */
 function playFoFiChannel() {
+    console.log("[HOME] Attempting FoFi auto-play...");
     BBNL_API.getChannelList()
         .then(function (channels) {
             
@@ -2561,6 +2729,7 @@ function playFoFiChannel() {
 
             var fofiChannel = null;
 
+            console.log("[HOME] Searching for FoFi channel...");
             // FIRST: Look for LCN 999 (FoFi Info channel)
             fofiChannel = channels.find(function (ch) {
                 var chNo = parseInt(ch.channelno || ch.urno || ch.chno || ch.ch_no || 0, 10);
@@ -2568,6 +2737,7 @@ function playFoFiChannel() {
             });
             
             if (fofiChannel) {
+                console.log("[HOME] FoFi channel found by LCN 999:", fofiChannel.chtitle || fofiChannel.channel_name);
             }
 
             // SECOND: Look for channel with "fofi" or "fo-fi" in name
@@ -2577,6 +2747,7 @@ function playFoFiChannel() {
                     return title.indexOf('fofi') !== -1 || title.indexOf('fo-fi') !== -1;
                 });
                 if (fofiChannel) {
+                    console.log("[HOME] FoFi channel found by name (fofi/fo-fi):", fofiChannel.chtitle || fofiChannel.channel_name);
                 }
             }
 

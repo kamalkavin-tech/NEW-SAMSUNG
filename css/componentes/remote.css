@@ -97,6 +97,6 @@ button.focusable:focus {
 /* Player sidebar items */
 .lang-nav-arrow:focus {
     outline: none;
-    border: 2px solid #FFFFFF !important;
-    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid transparent !important;
+    background: rgba(255, 255, 255, 0.1);
 }

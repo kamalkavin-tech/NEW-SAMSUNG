@@ -347,11 +347,26 @@ body.channels-page-pills {
     outline: none;
 }
 
+/* Selected (but not focused) — keep a clear "this is the current tab" cue,
+   but use a tab-specific border colour so it does NOT visually mimic the
+   :focus white-border. This way only the element with keyboard focus shows
+   a white border, removing the "two buttons appear focused" confusion. */
 .category-pill.active {
     background: rgba(80, 120, 255, 0.28);
     color: #ffffff;
-    border: 2px solid #FFFFFF;
+    border: 2px solid rgba(120, 160, 255, 0.55);
     font-weight: 700;
+}
+
+/* Selected AND focused — combine both: solid white focus border on top of
+   the selected blue tint so the user can tell at a glance "OK will trigger
+   this, and this is the current tab". */
+.category-pill.active:focus,
+.category-pill.active:hover {
+    background: rgba(80, 120, 255, 0.42);
+    border: 2px solid #FFFFFF;
+    color: #ffffff;
+    outline: none;
 }
 
 /* Language Pill - text only, wraps into two rows */
@@ -418,6 +433,14 @@ body.channels-page-pills {
     box-sizing: border-box;
     transform: translateZ(0); /* GPU compositing for scroll container */
     will-change: scroll-position;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.subpage-section::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
 }
 
 /* Section Headers */
