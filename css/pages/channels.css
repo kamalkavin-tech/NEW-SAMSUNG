@@ -347,27 +347,11 @@ body.channels-page-pills {
     outline: none;
 }
 
-/* Selected (but not focused) — keep a clear "this is the current tab" cue,
-   but use a tab-specific border colour so it does NOT visually mimic the
-   :focus white-border. This way only the element with keyboard focus shows
-   a white border, removing the "two buttons appear focused" confusion. */
-.category-pill.active {
-    background: rgba(80, 120, 255, 0.28);
-    color: #ffffff;
-    border: 2px solid rgba(120, 160, 255, 0.55);
-    font-weight: 700;
-}
-
-/* Selected AND focused — combine both: solid white focus border on top of
-   the selected blue tint so the user can tell at a glance "OK will trigger
-   this, and this is the current tab". */
-.category-pill.active:focus,
-.category-pill.active:hover {
-    background: rgba(80, 120, 255, 0.42);
-    border: 2px solid #FFFFFF;
-    color: #ffffff;
-    outline: none;
-}
+/* No persistent style for the .active (selected) tab — pills look identical
+   to every other unfocused button when not focused, matching how the Back
+   button and other controls behave. The .active class remains as a JS state
+   marker only; selection state is conveyed by the page content (which
+   channels are shown), not by tab-bar highlighting. */
 
 /* Language Pill - text only, wraps into two rows */
 .lang-pill {
