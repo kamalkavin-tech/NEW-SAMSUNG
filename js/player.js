@@ -4209,10 +4209,11 @@ function openSidebar() {
         sidebarState.currentLevel = 'categories';
         focusCategoryItem(Math.max(0, Math.min(sidebarState.categoryIndex, sidebarState.categories.length - 1)));
     }
-    // No categories - focus on language navigation (for empty states)
+    // Empty state — language nav arrows are decorative only (non-focusable),
+    // so when there are no categories AND no channels we leave focus alone.
+    // The user can press Back to close the menu.
     else {
-        var leftArrow = document.getElementById('langNavLeft');
-        if (leftArrow) leftArrow.focus();
+        // intentional no-op — arrows are not focus targets anymore.
     }
 
     // Final focus pass after deferred renders to avoid late focus jumps.
@@ -4811,9 +4812,9 @@ function handleSidebarKeydown(e) {
                         focusCategoryItem(prevIdx);
                     }
                 } else {
-                    // At first category, move to language arrow
-                    var leftArrow = document.getElementById('langNavLeft');
-                    if (leftArrow) leftArrow.focus();
+                    // At first category and pressing UP — language arrows are
+                    // decorative only (non-focusable), so stay where we are.
+                    // User presses Back to leave the menu.
                 }
                 e.preventDefault();
                 handled = true;
