@@ -3085,7 +3085,19 @@ function buildCategoriesForLanguage() {
         clearSidebarExpandedCategories();
         sidebarState.channels = filteredChannels.slice();
         if (isAllSidebarContext() || isSubscribedSidebarContext()) applySidebarChannelSort();
-        sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, Math.max(0, sidebarState.channels.length - 1)));
+
+        // FIX (All Channels / Subscribed reopen focus): always align to the
+        // currently-playing channel, not to whatever row the user last scrolled
+        // to. Category-grouped tabs already get this via the
+        // getCurrentPlayingCategoryIndex block in openSidebar — that path is
+        // skipped here because categories.length is 0 in flat-list mode, so
+        // we do the equivalent search inline.
+        var _flatPlayingIdx = findCurrentChannelInSidebar();
+        if (_flatPlayingIdx >= 0) {
+            sidebarState.channelIndex = _flatPlayingIdx;
+        } else {
+            sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, Math.max(0, sidebarState.channels.length - 1)));
+        }
         sidebarState.currentLevel = 'channels';
 
         if (categoriesSection) categoriesSection.style.display = 'none';
@@ -3099,7 +3111,14 @@ function buildCategoriesForLanguage() {
         if (sidebarState.channels && sidebarState.channels.length > 0 && sidebarState.isOpen) {
             setTimeout(function () {
                 if (sidebarState.isOpen) {
-                    sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+                    // Re-resolve playing channel here too, in case state shifted
+                    // between sync and async render (e.g. CH+/CH- mid-render).
+                    var _flatPlayingIdx2 = findCurrentChannelInSidebar();
+                    if (_flatPlayingIdx2 >= 0) {
+                        sidebarState.channelIndex = _flatPlayingIdx2;
+                    } else {
+                        sidebarState.channelIndex = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+                    }
                     focusChannelItem(sidebarState.channelIndex);
                 }
             }, 0);
