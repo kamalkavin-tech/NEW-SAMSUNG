@@ -1077,7 +1077,22 @@ function startSimpleAutoResumeWatcher() {
         if (!_lastAttemptedChannel) return;
         if (typeof currentChannelNeedsInternet === 'function' && !currentChannelNeedsInternet()) return;
 
-        var nowOffline = _simpleWatcherCheckOffline();
+        var tizenOffline = _simpleWatcherCheckOffline();
+
+        // STREAM-STALL DETECTOR: even if Tizen's network API hasn't
+        // flipped yet, if the stream had been playing healthily and now
+        // onCurrentPlayTime hasn't fired in 5+ seconds, treat it as
+        // offline. This guarantees the popup appears within 5-6 seconds
+        // of an actual disconnect on TV models where webapis.network is
+        // slow to report state changes.
+        var stallOffline = false;
+        if (hasHiddenLoadingIndicator && _lastPlaybackProgressAt > 0) {
+            if ((Date.now() - _lastPlaybackProgressAt) >= 5000) {
+                stallOffline = true;
+            }
+        }
+
+        var nowOffline = tizenOffline || stallOffline;
 
         if (nowOffline && !_simpleWatcherWasOffline) {
             // ONLINE -> OFFLINE TRANSITION
