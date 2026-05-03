@@ -657,14 +657,15 @@ function markPlayerPlaybackHealthy() {
     _pausedByNetwork = false;
     // Stop the dedicated resume poller — we are healthy now.
     if (typeof stopPausedByNetworkResumePoller === 'function') stopPausedByNetworkResumePoller();
-    // THE REAL AUTO-RESUME FIX: hide the popup if we either know the
-    // popup category is 'network' OR we know this whole episode was
-    // caused by a network outage (wasPausedByNetwork). This catches the
-    // case where AvPlay's onError fires BEFORE Tizen's disconnect API
-    // updates, which classifies the popup as 'playback' / 'startup_error'
-    // even though the user is experiencing a network outage. Without
-    // this OR-condition the popup hangs after auto-resume succeeds.
-    if (playerErrorPopupOpen && (playerLastErrorCategory === 'network' || wasPausedByNetwork)) {
+    // GATE THE AUTO-HIDE BY VERIFIED ONLINE STATE: the popup must stay
+    // visible the entire time the internet is down, even if a leftover
+    // buffered onCurrentPlayTime tick fires after disconnect. Only hide
+    // the popup when the simple watcher confirms we are back online.
+    // Without this gate, the popup flashes for ~0.5 seconds then
+    // disappears while still offline, hiding the error from the user.
+    var actuallyOffline = false;
+    try { actuallyOffline = _simpleWatcherCheckOffline(); } catch (eOff) {}
+    if (!actuallyOffline && playerErrorPopupOpen && (playerLastErrorCategory === 'network' || wasPausedByNetwork)) {
         hidePlayerErrorPopup();
         // Brief "Resuming..." toast so the user understands the popup
         // vanished because the channel auto-resumed, not a random UI glitch.
@@ -1103,6 +1104,14 @@ function startSimpleAutoResumeWatcher() {
                 clearTimeout(_simpleWatcherResumeTimer);
                 _simpleWatcherResumeTimer = null;
             }
+            // STOP the avplay stream FIRST so any leftover buffered video
+            // is not playing behind the popup. The resume path calls
+            // setupPlayer (full re-init) when the network returns, so
+            // stopping here has no compatibility cost — only a cleaner
+            // visual state where the user sees popup over a black screen.
+            try {
+                if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop();
+            } catch (eStopAvp) {}
             // Show popup if not already shown by some other path.
             if (!playerErrorPopupOpen) {
                 try {
@@ -1221,6 +1230,12 @@ function startPlayerNetworkWatchdog() {
                         // no point pretending it might recover invisibly.
                         try { stopSilentRetry(); } catch (eStop) {}
                         try { hideBufferingIndicator(); } catch (eHide) {}
+                        // Stop avplay BEFORE showing the popup so leftover
+                        // buffered video is not playing behind it. Resume
+                        // path uses setupPlayer (full re-init) anyway.
+                        try {
+                            if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop();
+                        } catch (eStopAvp2) {}
                         if (!playerErrorPopupOpen) {
                             try {
                                 showPlayerErrorPopup(
@@ -1754,22 +1769,22 @@ window.onload = function () {
                         try { hideBufferingIndicator(); } catch (eHideBi) {}
                     }
 
-                    // DEFENSIVE FIX 1: ground-truth popup dismiss. If the
-                    // stream is actually advancing AND a popup is showing,
-                    // the popup is wrong by definition — playback is healthy
-                    // right now. Force-hide it regardless of category, flag,
-                    // or any other state. Catches every edge case where the
-                    // bookkeeping (category, _pausedByNetwork, etc.) is out
-                    // of sync but the actual stream is fine.
+                    // DEFENSIVE FIX 1: ground-truth popup dismiss — but
+                    // ONLY when network is actually verified online. The
+                    // gate prevents leftover buffered onCurrentPlayTime
+                    // ticks from hiding the popup while the user is still
+                    // offline (which caused the popup to flash for ~0.5s
+                    // then disappear). The simple watcher's resume path
+                    // is the authoritative dismiss, this is just a backup.
                     if (time > 0 && playerErrorPopupOpen && playerLastErrorCategory !== 'subscription') {
-                        try { markPlayerPlaybackHealthy(); } catch (eMph) {}
-                        // markPlayerPlaybackHealthy may not hide if the OR
-                        // condition does not match — force-hide here as a
-                        // last-resort safety net. Subscription popups are
-                        // exempt because they require explicit user action.
-                        if (playerErrorPopupOpen && playerLastErrorCategory !== 'subscription') {
-                            try { hidePlayerErrorPopup(); } catch (eHpep) {}
-                            try { if (typeof showResumeToast === 'function') showResumeToast(); } catch (eToast) {}
+                        var _stillOffline = false;
+                        try { _stillOffline = _simpleWatcherCheckOffline(); } catch (eDfx) {}
+                        if (!_stillOffline) {
+                            try { markPlayerPlaybackHealthy(); } catch (eMph) {}
+                            if (playerErrorPopupOpen && playerLastErrorCategory !== 'subscription') {
+                                try { hidePlayerErrorPopup(); } catch (eHpep) {}
+                                try { if (typeof showResumeToast === 'function') showResumeToast(); } catch (eToast) {}
+                            }
                         }
                     }
 
