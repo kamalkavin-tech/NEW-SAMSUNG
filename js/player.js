@@ -1689,6 +1689,21 @@ window.onload = function () {
             // lists and the sidebar so the menubar reflects the latest
             // subscription state without needing another relaunch.
             ChannelsAPI.forceSubscriptionRefresh().then(function () {
+                // CRITICAL: clear the in-memory channel arrays BEFORE
+                // calling loadChannelList(). loadChannelList is cache-first
+                // and will short-circuit on _allChannelsUnfiltered if it
+                // has any data — meaning it would re-use the stale
+                // pre-refresh snapshot and never read the fresh data
+                // that forceSubscriptionRefresh just wrote into
+                // CacheManager. This is the exact reason the menubar
+                // showed stale subscription state on relaunch even though
+                // the TV Channels page (which always queries CacheManager
+                // via BBNL_API.getChannelList directly) showed it correctly.
+                try {
+                    allChannels = [];
+                    _allChannelsUnfiltered = [];
+                    if (sidebarState) sidebarState.allChannelsCache = [];
+                } catch (eClrMem) {}
                 if (typeof loadChannelList === 'function') {
                     return loadChannelList();
                 }
@@ -1697,12 +1712,32 @@ window.onload = function () {
                     sidebarState.allChannelsCache = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0)
                         ? _allChannelsUnfiltered.slice()
                         : [];
-                    sidebarState.languageCategoriesCache = {};
+                    // Bump the version so filter-cache keys never collide
+                    // with entries built from the old (stale-subscription)
+                    // channel snapshot.
+                    sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
+                    // Clear the REAL top-level derived caches. The previous
+                    // line `sidebarState.languageCategoriesCache = {}` was
+                    // a no-op because that property is not read anywhere —
+                    // the actual caches that were holding stale subscription
+                    // state are _sidebarBuiltCategoriesCache and
+                    // _sidebarFilteredChannelsCache.
+                    if (typeof invalidateSidebarDerivedCaches === 'function') {
+                        try { invalidateSidebarDerivedCaches(); } catch (eInv) {}
+                    }
                     if (typeof buildCategoriesForLanguage === 'function') {
                         try { buildCategoriesForLanguage(); } catch (eBuild) {}
                     }
                     if (typeof syncSidebarWithCurrentPlayback === 'function') {
                         try { syncSidebarWithCurrentPlayback(true); } catch (eSync) {}
+                    }
+                    // If the sidebar is currently open, force a render
+                    // refresh so the visible category list and channel
+                    // rows reflect the new subscription state without
+                    // requiring a close/reopen.
+                    if (sidebarState.isOpen) {
+                        try { if (typeof renderCategoriesList === 'function') renderCategoriesList(); } catch (eRc) {}
+                        try { if (typeof renderChannelsList === 'function') renderChannelsList(); } catch (eRcl) {}
                     }
                 }
             }).catch(function () {});
@@ -1915,10 +1950,19 @@ window.onload = function () {
                     sidebarState.allChannelsCache = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0)
                         ? _allChannelsUnfiltered.slice()
                         : [];
-                    // Clear cached categories since channel data changed
-                    sidebarState.languageCategoriesCache = {};
+                    // Bump version + clear the REAL derived caches (the
+                    // previous languageCategoriesCache assignment was a
+                    // no-op against a non-existent property).
+                    sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
+                    if (typeof invalidateSidebarDerivedCaches === 'function') {
+                        try { invalidateSidebarDerivedCaches(); } catch (eInv) {}
+                    }
                     buildCategoriesForLanguage();
                     syncSidebarWithCurrentPlayback(true);
+                    if (sidebarState.isOpen) {
+                        try { if (typeof renderCategoriesList === 'function') renderCategoriesList(); } catch (eRc) {}
+                        try { if (typeof renderChannelsList === 'function') renderChannelsList(); } catch (eRcl) {}
+                    }
                 }
             }).catch(function (e) {
                 // Silent fail - subscription refresh is non-critical to playback
