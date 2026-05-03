@@ -347,11 +347,23 @@ body.channels-page-pills {
     outline: none;
 }
 
-/* No persistent style for the .active (selected) tab — pills look identical
-   to every other unfocused button when not focused, matching how the Back
-   button and other controls behave. The .active class remains as a JS state
-   marker only; selection state is conveyed by the page content (which
-   channels are shown), not by tab-bar highlighting. */
+/* Persistent style for the .active (selected) language/category pill so
+   the user can still see which filter is applied after focus moves down.
+   Active state keeps the DEFAULT dark border so it does not look focused —
+   only the background tint and bright text mark it as the selected filter.
+   The bright white border is reserved for :focus, so when the user moves
+   focus to the back button (or any other element), only that focused
+   element shows the white outline — no double-focus appearance. */
+.category-pill.active {
+    background: rgba(255, 255, 255, 0.18);
+    border: 2px solid #3a3a50;
+    color: #ffffff;
+}
+.category-pill.active:focus {
+    background: rgba(255, 255, 255, 0.22);
+    border: 2px solid #FFFFFF;
+    color: #ffffff;
+}
 
 /* Language Pill - text only, wraps into two rows */
 .lang-pill {

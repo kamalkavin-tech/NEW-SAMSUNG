@@ -95,8 +95,8 @@ body.ott-apps-page {
 
 .search-bar:focus-within {
     background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
 }
 
 .search-bar .search-icon {

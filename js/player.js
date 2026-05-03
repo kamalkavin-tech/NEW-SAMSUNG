@@ -99,6 +99,7 @@ window.addEventListener('pageshow', function (event) {
             RemoteKeys.registerAllKeys();
         }
         startPlayerNetworkWatchdog();
+        startSimpleAutoResumeWatcher();
         // RC-7: refresh sidebar derivations against the live channel cache
         // before any focus/render runs. Without this, an open sidebar restored
         // from BFCache may paint against stale categories/channels (e.g. the
@@ -180,11 +181,11 @@ var playerErrorActionMode = 'retry'; // retry | paynow
 var PAYMENT_GATEWAY_URL = 'https://bbnl.in/renew';
 var playerErrorUiTimeout = null;
 var PLAYER_ERROR_UI_HIDE_DELAY = 10000; // 10 seconds
-var PLAYER_STREAM_START_TIMEOUT_MS = 10000; // 10s — IPTV streams on Samsung TV can take 5-8s to buffer
+var PLAYER_STREAM_START_TIMEOUT_MS = 6000; // 6s — surface error fast when internet is slow/dead
 var playerNetworkWatchInterval = null;
 var playerNetworkDisconnectSince = 0;
-var PLAYER_NETWORK_WATCH_INTERVAL_MS = 2000; // Point 6A: faster polling so popup appears within ~2s of disconnect
-var PLAYER_NETWORK_POPUP_DELAY_MS = 1500;
+var PLAYER_NETWORK_WATCH_INTERVAL_MS = 1000; // Poll every 1s so polling-watchdog picks up disconnect within 1s on devices where the network event listener does not fire reliably.
+var PLAYER_NETWORK_POPUP_DELAY_MS = 0;        // No additional delay — surface the popup immediately on first detected disconnect tick.
 var PLAYER_NETWORK_RESUME_STABLE_MS = 1000; // 1s stable wait — total resume target ~4-5s when CDN buffer is fast
 var PLAYER_AUTO_RESUME_MAX_RETRIES = 2;
 var PLAYER_AUTO_RESUME_WINDOW_MS = 15000;
@@ -211,6 +212,46 @@ var _ERROR_MEMORY_DURATION_MS = 10000;
 // ✅ FIX ISSUE #4: Network error tracking for auto-resume
 var _lastNetworkErrorTime = 0;
 var _NETWORK_ERROR_WINDOW_MS = 60000;
+
+// Mid-playback stall detection. Tizen network API reports "connected" even
+// when the modem has no internet, so avplay buffers silently for 60-90s
+// before its onerror fires. Track last play-time progress so the watchdog
+// can surface the error in ~8s instead.
+var _lastPlaybackProgressAt = 0;
+var PLAYER_PLAYBACK_STALL_THRESHOLD_MS = 3000; // 3s — start silent retry fast on freeze
+var _playbackStallNotified = false;
+
+// Explicit "paused-by-network" flag. Set when the network event listener,
+// stall watchdog, or silent-retry cutoff causes the player to stop because
+// of connectivity (not user action). Cleared by markPlayerPlaybackHealthy
+// when playback resumes successfully. Auto-resume uses this flag as a gate
+// so we never resume when the user manually stopped playback for some
+// other reason (e.g. dismissed a non-network popup).
+var _pausedByNetwork = false;
+
+// Dedicated resume poller. While _pausedByNetwork is true, we keep firing
+// retry attempts on a fixed cadence regardless of the per-window retry
+// cap (PLAYER_AUTO_RESUME_MAX_RETRIES). The Tizen network state change
+// listener is the primary trigger but on some Samsung models it does not
+// fire reliably for reconnect; this poller is the safety net that ensures
+// auto-resume always happens within a few seconds of the network actually
+// returning. Stops as soon as markPlayerPlaybackHealthy clears the flag
+// or the user dismisses the popup.
+var _pausedByNetworkResumeTimer = null;
+var PAUSED_BY_NETWORK_RESUME_INTERVAL_MS = 3000;
+
+// Silent retry: when a playback freeze or stream-start timeout is detected,
+// instead of showing the error popup immediately, retry the stream silently
+// for up to PLAYER_SILENT_RETRY_MAX_MS. If onCurrentPlayTime fires anywhere
+// in that window the popup is never shown — the user just sees the buffering
+// indicator briefly. Only after the full window without recovery does the
+// error popup appear. Schedule retries at PLAYER_SILENT_RETRY_INTERVAL_MS.
+var _silentRetryActive = false;
+var _silentRetryTimer = null;        // final timeout that shows the popup
+var _silentRetryAttemptTimers = [];  // in-window retry-nudge timers
+var _silentRetryReason = '';
+var PLAYER_SILENT_RETRY_INTERVAL_MS = 2000;
+var PLAYER_SILENT_RETRY_MAX_MS = 5000; // 5s — popup shows in ~8s total (3s stall + 5s silent retry)
 
 /**
  * Check if the network is disconnected
@@ -480,11 +521,48 @@ function handlePlaybackFailure(options) {
 
     if (shouldSuppressDuplicatePlaybackFailure(fingerprint)) return;
 
+    // Bug A fix: while silent retry is in flight, suppress mid-retry failure
+    // popups (e.g. avplayer-onerror, stream-timeout). The silent-retry cutoff
+    // timer is the ONLY path that should surface a popup. The cutoff calls
+    // stopSilentRetry() before calling handlePlaybackFailure, so by the time
+    // the cutoff path arrives here _silentRetryActive is already false and
+    // this guard does not block it.
+    if (_silentRetryActive) return;
+
     hideBufferingIndicator();
     hidePageLoadingOverlay();
     hasHiddenLoadingIndicator = true;
 
-    if (isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
+    // Mark this episode as "paused by network" for any source that is
+    // reasonably suspected to be a connectivity failure (not subscription
+    // / DRM / no-stream-url). This unlocks auto-resume even when the
+    // first popup gets categorized as 'playback' (which happens when
+    // AvPlay's onError fires before Tizen's network API flips state).
+    // markPlayerPlaybackHealthy() will then auto-hide the popup on the
+    // first successful onCurrentPlayTime, regardless of category.
+    var networkSuspectSources = {
+        'avplayer-onerror': true,
+        'stream-timeout': true,
+        'change-stream-exception': true,
+        'playback-stall': true,
+        'silent-retry-exhausted': true
+    };
+    if (networkSuspectSources[source] || isNetworkDisconnected() || hasRecentApiNetworkFailure()) {
+        if (currentChannelNeedsInternet()) {
+            _pausedByNetwork = true;
+            try { startPausedByNetworkResumePoller(); } catch (eSp) {}
+        }
+    }
+
+    // Treat mid-playback stall as a network failure: the user perceives a
+    // frozen stream as a network problem. Routing it to the 'network' reason
+    // gives the right popup copy and lets markPlayerPlaybackHealthy()
+    // auto-hide the popup once playback resumes (Issue 2 auto-resume).
+    // Sticky behaviour: while a network popup is already on screen, route
+    // any subsequent failures (e.g. retry stream-timeout) through 'network'
+    // too, so the category does not flip and prevent auto-hide.
+    var stickyNetworkPopup = playerErrorPopupOpen && playerLastErrorCategory === 'network';
+    if (isNetworkDisconnected() || hasRecentApiNetworkFailure() || source === 'playback-stall' || stickyNetworkPopup) {
         reportPlaybackFailure('network', {
             source: source,
             channel: channel,
@@ -570,9 +648,290 @@ function markPlayerPlaybackHealthy() {
     resetPlayerAutoResumeWindow();
     clearPlayerAutoResumeRetryTimer();
     _lastNetworkErrorTime = 0;
-    if (playerErrorPopupOpen && playerLastErrorCategory === 'network') {
+    _lastPlaybackProgressAt = Date.now();
+    _playbackStallNotified = false;
+    // Stream is healthy again — cancel any silent-retry in flight so the
+    // popup never shows for transient hiccups.
+    if (typeof stopSilentRetry === 'function') stopSilentRetry();
+    var wasPausedByNetwork = _pausedByNetwork;
+    _pausedByNetwork = false;
+    // Stop the dedicated resume poller — we are healthy now.
+    if (typeof stopPausedByNetworkResumePoller === 'function') stopPausedByNetworkResumePoller();
+    // THE REAL AUTO-RESUME FIX: hide the popup if we either know the
+    // popup category is 'network' OR we know this whole episode was
+    // caused by a network outage (wasPausedByNetwork). This catches the
+    // case where AvPlay's onError fires BEFORE Tizen's disconnect API
+    // updates, which classifies the popup as 'playback' / 'startup_error'
+    // even though the user is experiencing a network outage. Without
+    // this OR-condition the popup hangs after auto-resume succeeds.
+    if (playerErrorPopupOpen && (playerLastErrorCategory === 'network' || wasPausedByNetwork)) {
         hidePlayerErrorPopup();
+        // Brief "Resuming..." toast so the user understands the popup
+        // vanished because the channel auto-resumed, not a random UI glitch.
+        if (wasPausedByNetwork && typeof showResumeToast === 'function') {
+            try { showResumeToast(); } catch (eToast) {}
+        }
     }
+}
+
+/**
+ * Change B: brief on-screen "Resuming..." pill to confirm to the user
+ * that playback came back automatically (not by chance). Only fires when
+ * markPlayerPlaybackHealthy auto-hides a network popup that was triggered
+ * by an actual network outage. Self-cleans after 1500ms.
+ */
+var _resumeToastTimer = null;
+function showResumeToast() {
+    var existing = document.getElementById('player-resume-toast');
+    if (_resumeToastTimer) {
+        clearTimeout(_resumeToastTimer);
+        _resumeToastTimer = null;
+    }
+    var toast = existing;
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'player-resume-toast';
+        toast.className = 'player-resume-toast';
+        toast.textContent = 'Resuming...';
+        document.body.appendChild(toast);
+    } else {
+        toast.textContent = 'Resuming...';
+        toast.classList.remove('hide');
+    }
+    // Trigger a fresh fade-in even if the element was already in the DOM.
+    requestAnimationFrame(function () {
+        toast.classList.add('show');
+    });
+    _resumeToastTimer = setTimeout(function () {
+        if (!toast || !toast.parentNode) return;
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        // Remove after the fade transition finishes.
+        setTimeout(function () {
+            if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 250);
+        _resumeToastTimer = null;
+    }, 1500);
+}
+
+/**
+ * Change A: verify the stream URL is actually reachable before triggering
+ * auto-resume. webapis.network reports "connected" the instant the LAN
+ * link is up, but DHCP/DNS/gateway are often not usable for another
+ * 1-3 seconds. Without verification, the first retry attempt burns its
+ * window on a half-connected network.
+ *
+ * Issues a HEAD request with a hard timeout. Any HTTP response (2xx-4xx)
+ * counts as reachable; only network-level failure or timeout counts as
+ * unreachable.
+ */
+function verifyStreamReachable(url, timeoutMs, callback) {
+    if (!url || typeof callback !== 'function') {
+        if (typeof callback === 'function') callback(false);
+        return;
+    }
+    var done = false;
+    var resolve = function (ok) {
+        if (done) return;
+        done = true;
+        try { callback(!!ok); } catch (eCb) {}
+    };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('HEAD', url, true);
+        xhr.timeout = Math.max(500, timeoutMs || 1500);
+        xhr.onload = function () { resolve(xhr.status > 0 && xhr.status < 500); };
+        xhr.onerror = function () { resolve(false); };
+        xhr.ontimeout = function () { resolve(false); };
+        xhr.send();
+    } catch (eXhr) {
+        resolve(false);
+    }
+}
+
+var _verifiedAutoResumeProbeTimer = null;
+var _verifiedAutoResumeAttempts = 0;
+var VERIFIED_AUTO_RESUME_MAX_PROBES = 3;
+var VERIFIED_AUTO_RESUME_PROBE_INTERVAL_MS = 1000;
+var VERIFIED_AUTO_RESUME_PROBE_TIMEOUT_MS = 1500;
+
+/**
+ * Change A: probe-then-retry chain. Only triggers attemptPlayerAutoResumeRetry
+ * once a HEAD probe confirms the stream URL is reachable. Probes up to
+ * VERIFIED_AUTO_RESUME_MAX_PROBES times at VERIFIED_AUTO_RESUME_PROBE_INTERVAL_MS
+ * spacing. Caller is the network-event reconnect path.
+ */
+function triggerVerifiedAutoResume(sourceTag) {
+    if (_verifiedAutoResumeProbeTimer) {
+        clearTimeout(_verifiedAutoResumeProbeTimer);
+        _verifiedAutoResumeProbeTimer = null;
+    }
+    _verifiedAutoResumeAttempts = 0;
+
+    // CRITICAL CHANGE: the network event from Tizen is the ground-truth
+    // signal that the link is back up. We trigger the retry directly with
+    // a short gateway-settle delay, instead of gating on a HEAD probe that
+    // can fail for reasons unrelated to actual reachability (CDN rejecting
+    // HEAD method, CORS, browser caching). The retry itself is the real
+    // reachability test — if it fails, the silent-retry / popup chain
+    // handles it normally.
+    //
+    // The HEAD probe still runs in the background as a best-effort early
+    // signal: if it succeeds, we trigger an immediate retry without
+    // waiting the gateway-settle delay. If it fails, we still proceed.
+    function fireRetryNow(tagSuffix) {
+        if (!_pausedByNetwork) return;
+        if (playerAutoResumeInProgress) return;
+        try {
+            if (typeof attemptPlayerAutoResumeRetry === 'function') {
+                attemptPlayerAutoResumeRetry((sourceTag || 'verified-resume') + (tagSuffix ? '-' + tagSuffix : ''));
+            }
+        } catch (eAr) {}
+    }
+
+    var alreadyFired = false;
+    function fireOnce(tagSuffix) {
+        if (alreadyFired) return;
+        alreadyFired = true;
+        fireRetryNow(tagSuffix);
+    }
+
+    // Schedule the guaranteed retry (does not depend on probe outcome).
+    var settleDelayMs = 700;
+    _verifiedAutoResumeProbeTimer = setTimeout(function () {
+        fireOnce('settled');
+    }, settleDelayMs);
+
+    // Best-effort probe: if it succeeds before the settle delay, fire
+    // sooner. If it fails, the settle-delay retry still fires.
+    var ch = _lastAttemptedChannel || ((currentIndex >= 0 && allChannels[currentIndex]) ? allChannels[currentIndex] : null);
+    var probeUrl = ch ? (ch.streamlink || ch.channel_url || '') : '';
+    if (probeUrl) {
+        verifyStreamReachable(probeUrl, VERIFIED_AUTO_RESUME_PROBE_TIMEOUT_MS, function (reachable) {
+            if (reachable) {
+                if (_verifiedAutoResumeProbeTimer) {
+                    clearTimeout(_verifiedAutoResumeProbeTimer);
+                    _verifiedAutoResumeProbeTimer = null;
+                }
+                fireOnce('probe-ok');
+            }
+            // If unreachable, do nothing — the settle-delay retry will fire.
+        });
+    }
+}
+
+/**
+ * Start the dedicated paused-by-network resume poller. Runs every
+ * PAUSED_BY_NETWORK_RESUME_INTERVAL_MS while _pausedByNetwork is true,
+ * triggering attemptPlayerAutoResumeRetry. Bypasses the normal retry
+ * cap because the cap only matters for transient errors — for persistent
+ * paused-by-network state we keep probing until the network actually
+ * returns, and the retry attempt itself is the network test.
+ */
+function startPausedByNetworkResumePoller() {
+    if (_pausedByNetworkResumeTimer) return;
+    _pausedByNetworkResumeTimer = setInterval(function () {
+        if (!_pausedByNetwork) {
+            stopPausedByNetworkResumePoller();
+            return;
+        }
+        if (!playerErrorPopupOpen) {
+            // Popup was dismissed by user — they took manual action,
+            // back off until they explicitly retry.
+            stopPausedByNetworkResumePoller();
+            return;
+        }
+        if (!currentChannelNeedsInternet()) return;
+        if (playerAutoResumeInProgress) return;
+        // Reset the per-window retry cap so the next attempt is allowed.
+        // The reason this poller exists is precisely that the cap
+        // (2 retries / 15s) is too tight for long outages.
+        try { resetPlayerAutoResumeWindow(); } catch (eRst) {}
+        try {
+            if (typeof attemptPlayerAutoResumeRetry === 'function') {
+                attemptPlayerAutoResumeRetry('paused-by-network-poll');
+            }
+        } catch (eRetry) {}
+    }, PAUSED_BY_NETWORK_RESUME_INTERVAL_MS);
+}
+
+function stopPausedByNetworkResumePoller() {
+    if (_pausedByNetworkResumeTimer) {
+        clearInterval(_pausedByNetworkResumeTimer);
+        _pausedByNetworkResumeTimer = null;
+    }
+}
+
+function stopSilentRetry() {
+    _silentRetryActive = false;
+    _silentRetryReason = '';
+    if (_silentRetryTimer) {
+        clearTimeout(_silentRetryTimer);
+        _silentRetryTimer = null;
+    }
+    if (_silentRetryAttemptTimers && _silentRetryAttemptTimers.length) {
+        for (var i = 0; i < _silentRetryAttemptTimers.length; i++) {
+            try { clearTimeout(_silentRetryAttemptTimers[i]); } catch (e) {}
+        }
+        _silentRetryAttemptTimers = [];
+    }
+}
+
+function startSilentRetry(reason) {
+    if (_silentRetryActive) return;
+    _silentRetryActive = true;
+    _silentRetryReason = reason || 'silent-retry';
+
+    // Keep buffering indicator visible so the user sees a "still loading" state
+    // during the silent window. No popup yet.
+    try { showBufferingIndicator(); } catch (eBuf) {}
+
+    // Schedule retry nudges within the silent window. Each tick calls
+    // retryLastAttemptedChannel, which restarts the stream. If any attempt
+    // triggers onCurrentPlayTime, markPlayerPlaybackHealthy will fire and
+    // stopSilentRetry() cancels the rest. Build the schedule dynamically
+    // so it stays inside PLAYER_SILENT_RETRY_MAX_MS even when that constant
+    // is tuned tighter.
+    _silentRetryAttemptTimers = [];
+    var stops = [];
+    for (var sd = PLAYER_SILENT_RETRY_INTERVAL_MS; sd < PLAYER_SILENT_RETRY_MAX_MS; sd += PLAYER_SILENT_RETRY_INTERVAL_MS) {
+        stops.push(sd);
+    }
+    for (var s = 0; s < stops.length; s++) {
+        (function (delay) {
+            var t = setTimeout(function () {
+                if (!_silentRetryActive) return;
+                if (!_lastAttemptedChannel) return;
+                try {
+                    if (typeof retryLastAttemptedChannel === 'function') {
+                        retryLastAttemptedChannel();
+                    }
+                } catch (eRetry) {}
+            }, delay);
+            _silentRetryAttemptTimers.push(t);
+        })(stops[s]);
+    }
+
+    // Final cutoff: if the silent window expires without onCurrentPlayTime
+    // firing, escalate to the visible error popup. Always use the
+    // 'playback-stall' source which handlePlaybackFailure routes through the
+    // 'network' reason — that gives the right popup copy AND lets
+    // markPlayerPlaybackHealthy() auto-hide it when stream recovers.
+    _silentRetryTimer = setTimeout(function () {
+        if (!_silentRetryActive) return;
+        stopSilentRetry();
+        try {
+            handlePlaybackFailure({
+                source: 'playback-stall',
+                channel: _lastAttemptedChannel,
+                detail: 'silent retry exhausted (' + (_silentRetryReason || 'unknown') + ') after ' + PLAYER_SILENT_RETRY_MAX_MS + 'ms'
+            });
+        } catch (eFail) {}
+        // Stall-driven escalation reaches a popup — start the dedicated
+        // resume poller so we keep probing for network return regardless
+        // of whether the network event listener fires reliably.
+        try { startPausedByNetworkResumePoller(); } catch (ePoll) {}
+    }, PLAYER_SILENT_RETRY_MAX_MS);
 }
 
 function attemptPlayerAutoResumeRetry(sourceTag) {
@@ -678,10 +1037,217 @@ function enforceSidebarPlaybackFocusOncePerOpen() {
     return true;
 }
 
+// =====================================================================
+// SIMPLE BULLETPROOF AUTO-RESUME WATCHER
+// ---------------------------------------------------------------------
+// Brutally simple state machine that overrides any subtle bug in the
+// complex layers above. Polls every 1 second:
+//   - On WAS_ONLINE -> NOW_OFFLINE: save the playing channel, show popup
+//     (gives ~5-8s total visible delay accounting for Tizen API lag)
+//   - On WAS_OFFLINE -> NOW_ONLINE: wait 2s for network to settle, then
+//     call setupPlayer(savedChannel) and force-hide the popup
+// This watcher does not care about flags, categories, retry caps, silent
+// retry, or any other state — it just resumes the channel when the
+// network comes back.
+// =====================================================================
+var _simpleWatcherInterval = null;
+var _simpleWatcherWasOffline = false;
+var _simpleWatcherSavedChannel = null;
+var _simpleWatcherResumeTimer = null;
+
+function _simpleWatcherCheckOffline() {
+    // Use webapis.network as primary signal; navigator.onLine as backup.
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.getActiveConnectionType === 'function') {
+            var t = webapis.network.getActiveConnectionType();
+            if (t === 0) return true;
+        }
+    } catch (e) {}
+    try {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    } catch (e2) {}
+    return false;
+}
+
+function startSimpleAutoResumeWatcher() {
+    if (_simpleWatcherInterval) return;
+    _simpleWatcherInterval = setInterval(function () {
+        // Skip when current channel doesn't need internet (DVB) or no
+        // channel is set yet.
+        if (!_lastAttemptedChannel) return;
+        if (typeof currentChannelNeedsInternet === 'function' && !currentChannelNeedsInternet()) return;
+
+        var nowOffline = _simpleWatcherCheckOffline();
+
+        if (nowOffline && !_simpleWatcherWasOffline) {
+            // ONLINE -> OFFLINE TRANSITION
+            _simpleWatcherWasOffline = true;
+            _simpleWatcherSavedChannel = _lastAttemptedChannel;
+            // Cancel any pending resume timer from a quick blip earlier.
+            if (_simpleWatcherResumeTimer) {
+                clearTimeout(_simpleWatcherResumeTimer);
+                _simpleWatcherResumeTimer = null;
+            }
+            // Show popup if not already shown by some other path.
+            if (!playerErrorPopupOpen) {
+                try {
+                    showPlayerErrorPopup(
+                        'Playback Error',
+                        'Network disconnected. Please check your connection and try again.'
+                    );
+                } catch (eShow) {}
+            }
+            return;
+        }
+
+        if (!nowOffline && _simpleWatcherWasOffline) {
+            // OFFLINE -> ONLINE TRANSITION
+            _simpleWatcherWasOffline = false;
+            var channelToResume = _simpleWatcherSavedChannel || _lastAttemptedChannel;
+            _simpleWatcherSavedChannel = null;
+
+            // Wait 2 seconds for the network to actually be usable
+            // (Tizen reports cable attached the instant the link is up,
+            // but DHCP/DNS/gateway may still be settling).
+            if (_simpleWatcherResumeTimer) {
+                clearTimeout(_simpleWatcherResumeTimer);
+            }
+            _simpleWatcherResumeTimer = setTimeout(function () {
+                _simpleWatcherResumeTimer = null;
+                // Re-verify online before attempting.
+                if (_simpleWatcherCheckOffline()) {
+                    // Network dropped again during settle — restart cycle.
+                    _simpleWatcherWasOffline = true;
+                    _simpleWatcherSavedChannel = channelToResume;
+                    return;
+                }
+                if (!channelToResume) return;
+                // Force a clean avplay state in case it is stuck.
+                try {
+                    if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop();
+                } catch (eStop) {}
+                // Restart playback with the saved channel.
+                try {
+                    setupPlayer(channelToResume);
+                } catch (eSetup) {}
+                // Hide the popup unconditionally (we are resuming now).
+                try {
+                    if (playerErrorPopupOpen) hidePlayerErrorPopup();
+                } catch (eHide) {}
+                try {
+                    if (typeof showResumeToast === 'function') showResumeToast();
+                } catch (eToast) {}
+            }, 2000);
+        }
+    }, 1000);
+}
+
+function stopSimpleAutoResumeWatcher() {
+    if (_simpleWatcherInterval) {
+        clearInterval(_simpleWatcherInterval);
+        _simpleWatcherInterval = null;
+    }
+    if (_simpleWatcherResumeTimer) {
+        clearTimeout(_simpleWatcherResumeTimer);
+        _simpleWatcherResumeTimer = null;
+    }
+    _simpleWatcherWasOffline = false;
+    _simpleWatcherSavedChannel = null;
+}
+
 function startPlayerNetworkWatchdog() {
     if (playerNetworkWatchInterval) clearInterval(playerNetworkWatchInterval);
     playerNetworkDisconnectSince = 0;
     _lastNetworkOnline = true;
+
+    // Event-driven network detection. Tizen fires this listener the moment
+    // the LAN cable is plugged/unplugged or gateway state changes — much
+    // faster than waiting for the 2s polling tick or for the avplay buffer
+    // to drain. This is how other apps respond instantly to network events.
+    //
+    // Tizen NetworkState codes (per Samsung docs):
+    //   1 = LAN_CABLE_ATTACHED      (connected)
+    //   2 = LAN_CABLE_DETACHED      (disconnected)
+    //   3 = LAN_CABLE_STATE_CHANGED (state-only event)
+    //   4 = WIFI_MODULE_STATE_CHANGED
+    //   5 = GATEWAY_CONNECTED       (connected)
+    //   6 = GATEWAY_DISCONNECTED    (disconnected)
+    if (!window._playerNetEventListenerAttached) {
+        try {
+            if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
+                webapis.network.addNetworkStateChangeListener(function (networkState) {
+                    var s = Number(networkState);
+                    var isDisconnectByCode = (s === 2 || s === 6);
+                    var isConnectByCode = (s === 1 || s === 5);
+
+                    // Some Samsung models fire generic state codes (e.g. 3
+                    // = LAN_CABLE_STATE_CHANGED, 4 = WIFI_MODULE_STATE_CHANGED)
+                    // without specifying attached/detached. Re-query the
+                    // actual connection type so we ALWAYS detect the
+                    // transition correctly, regardless of which code fired.
+                    var actuallyDisconnected = false;
+                    try {
+                        actuallyDisconnected = (typeof isNetworkDisconnected === 'function')
+                            ? isNetworkDisconnected()
+                            : false;
+                    } catch (eIs) {}
+
+                    var isDisconnect = isDisconnectByCode || (actuallyDisconnected && _lastNetworkOnline === true);
+                    var isConnect = isConnectByCode || (!actuallyDisconnected && _lastNetworkOnline === false);
+
+                    if (isDisconnect) {
+                        if (!currentChannelNeedsInternet()) return;
+                        _lastNetworkErrorTime = Date.now();
+                        _lastNetworkOnline = false;
+                        playerNetworkReconnectSince = 0;
+                        // Change C: paused-by-network flag for auto-resume gate.
+                        _pausedByNetwork = true;
+                        // Cancel silent retry — we know it is hard offline,
+                        // no point pretending it might recover invisibly.
+                        try { stopSilentRetry(); } catch (eStop) {}
+                        try { hideBufferingIndicator(); } catch (eHide) {}
+                        if (!playerErrorPopupOpen) {
+                            try {
+                                showPlayerErrorPopup(
+                                    'Playback Error',
+                                    'Network disconnected. Please check your connection and try again.'
+                                );
+                            } catch (eShow) {}
+                        }
+                        // Start dedicated paused-by-network resume poller as
+                        // a safety net in case the connect-side network
+                        // event listener does not fire on this device.
+                        try { startPausedByNetworkResumePoller(); } catch (ePoll) {}
+                        return;
+                    }
+
+                    if (isConnect) {
+                        // Network is back. Auto-resume gate (Change C):
+                        // only proceed when the player was actually paused
+                        // by a network event. This guarantees we do not
+                        // resume after the user dismissed a non-network
+                        // popup or made some other manual action.
+                        var hasRecentNetErr = (_lastNetworkErrorTime > 0) && ((Date.now() - _lastNetworkErrorTime) < _NETWORK_ERROR_WINDOW_MS);
+                        var shouldResume = _pausedByNetwork && (hasRecentNetErr ||
+                            (playerErrorPopupOpen && playerLastErrorCategory === 'network'));
+                        if (!shouldResume) return;
+                        if (!currentChannelNeedsInternet()) return;
+                        _lastNetworkOnline = true;
+                        playerNetworkReconnectSince = Date.now();
+                        // Change A: webapis.network can lie — Tizen reports
+                        // cable attached the instant the link is up but
+                        // before DHCP/DNS/gateway are actually usable.
+                        // Verify CDN reachability via a quick HEAD probe
+                        // before triggering the retry. Only retry on
+                        // successful reachability check, otherwise wait
+                        // and probe again.
+                        triggerVerifiedAutoResume('net-event-online');
+                    }
+                });
+                window._playerNetEventListenerAttached = true;
+            }
+        } catch (eAttach) {}
+    }
 
     playerNetworkWatchInterval = setInterval(function () {
         if (!currentChannelNeedsInternet()) {
@@ -689,6 +1255,35 @@ function startPlayerNetworkWatchdog() {
             playerNetworkReconnectSince = 0;
             playerAutoResumeInProgress = false;
             _lastNetworkOnline = true;
+            return;
+        }
+
+        // Mid-playback stall detector. When avplay was healthy but onCurrentPlayTime
+        // has not advanced for PLAYER_PLAYBACK_STALL_THRESHOLD_MS, surface the
+        // error immediately instead of waiting 60-90s for avplay to give up.
+        // Catches "modem on but no internet / very slow internet" cases that
+        // the Tizen network API does not report as disconnected.
+        if (
+            hasHiddenLoadingIndicator &&
+            !_playbackStallNotified &&
+            !playerErrorPopupOpen &&
+            !playerAutoResumeInProgress &&
+            !_silentRetryActive &&
+            _lastPlaybackProgressAt > 0 &&
+            (Date.now() - _lastPlaybackProgressAt) >= PLAYER_PLAYBACK_STALL_THRESHOLD_MS
+        ) {
+            _playbackStallNotified = true;
+            _lastNetworkErrorTime = Date.now();
+            // Mark presumed-offline so the reconnect branch in this same
+            // watchdog becomes reachable when the stream eventually recovers.
+            _lastNetworkOnline = false;
+            playerNetworkReconnectSince = 0;
+            // Change C: explicit paused-by-network flag — auto-resume gate.
+            _pausedByNetwork = true;
+            // Hand off to silent retry: keep buffering indicator visible,
+            // attempt recovery for up to PLAYER_SILENT_RETRY_MAX_MS, only
+            // show the error popup if recovery does not happen in time.
+            startSilentRetry('playback-stall');
             return;
         }
 
@@ -952,35 +1547,42 @@ function retryLastAttemptedChannel() {
     var channelToRetry = _lastAttemptedChannel;
     var chId = channelToRetry.channelno || channelToRetry.urno || channelToRetry.chid || "";
 
-    // Refresh channel data to get updated info, then retry same channel
+    // DEFENSIVE FIX 2: hard avplay reset after repeated failures. Once we
+    // have failed 2+ retries in the current window, the next retry forces
+    // a full AVPlayer.stop() before setupPlayer. This catches the case
+    // where avplay has entered an internal stuck state that changeStream
+    // alone cannot recover from. Cheap on first retry, more aggressive
+    // only after we have evidence retries are not working.
+    if (playerAutoResumeRetryCount >= 2) {
+        try {
+            if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) {
+                AVPlayer.stop();
+            }
+        } catch (eHardReset) {}
+    }
+
+    // Start playback IMMEDIATELY with the channel object we already have.
+    // Previously this waited 1-3s for getChannelData() to complete before
+    // calling setupPlayer, which was the visible source of the "auto-resume
+    // is slow" complaint during network recovery.
+    setupPlayer(channelToRetry);
+
+    // Refresh channel data in the background to keep allChannels and the
+    // sidebar in sync. If the same channel comes back updated we do NOT
+    // call setupPlayer a second time because that would interrupt the
+    // stream we just started; the next channel switch will pick up the
+    // refreshed data automatically.
     if (typeof BBNL_API !== 'undefined' && BBNL_API.getChannelData) {
         BBNL_API.getChannelData().then(function (channels) {
             if (channels && channels.length > 0) {
-                // Update ALL channels for navigation and sidebar
                 allChannels = channels.slice().sort(function (a, b) {
                     var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10);
                     var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10);
                     return aNo - bNo;
                 });
-                _allChannelsUnfiltered = allChannels.slice(); // Keep sidebar cache isolated from player-list mutations
-                // Find the same channel in refreshed list by ID
-                if (chId) {
-                    var updated = channels.find(function (ch) {
-                        return (ch.channelno || ch.urno || ch.chid || "") === chId;
-                    });
-                    if (updated) {
-                        setupPlayer(updated);
-                        return;
-                    }
-                }
+                _allChannelsUnfiltered = allChannels.slice();
             }
-            // Fallback: retry with the stored channel object
-            setupPlayer(channelToRetry);
-        }).catch(function () {
-            setupPlayer(channelToRetry);
-        });
-    } else {
-        setupPlayer(channelToRetry);
+        }).catch(function () {});
     }
 }
 
@@ -1041,6 +1643,42 @@ function hideRenewalQRCode() {
 
 window.onload = function () {
 
+    // Issue 1 (cold launch subscription refresh): when the player page loads
+    // (relaunch, BFCache restore, or direct deep link), make sure the cached
+    // channel list is not stale. Clear the home/sessionStorage handoff caches
+    // and trigger a force-refresh so the user's latest subscription state is
+    // reflected as soon as possible. Fire-and-forget — the page renders from
+    // existing cache while the network call updates state in the background.
+    try {
+        sessionStorage.removeItem('home_channels_cache');
+        sessionStorage.removeItem('master_channel_list_cache');
+    } catch (eClearCache) {}
+    try {
+        if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.forceSubscriptionRefresh) {
+            // After the refresh completes, rebuild the in-memory channel
+            // lists and the sidebar so the menubar reflects the latest
+            // subscription state without needing another relaunch.
+            ChannelsAPI.forceSubscriptionRefresh().then(function () {
+                if (typeof loadChannelList === 'function') {
+                    return loadChannelList();
+                }
+            }).then(function () {
+                if (sidebarState) {
+                    sidebarState.allChannelsCache = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0)
+                        ? _allChannelsUnfiltered.slice()
+                        : [];
+                    sidebarState.languageCategoriesCache = {};
+                    if (typeof buildCategoriesForLanguage === 'function') {
+                        try { buildCategoriesForLanguage(); } catch (eBuild) {}
+                    }
+                    if (typeof syncSidebarWithCurrentPlayback === 'function') {
+                        try { syncSidebarWithCurrentPlayback(true); } catch (eSync) {}
+                    }
+                }
+            }).catch(function () {});
+        }
+    } catch (eFsr) {}
+
     // Initialize AVPlayer
     if (typeof AVPlayer !== 'undefined') {
         AVPlayer.init({
@@ -1089,6 +1727,37 @@ window.onload = function () {
                     // Update timeline with current playback position (in milliseconds)
                     updateTimeline(time);
 
+                    // Stamp progress timestamp every tick so the stall watchdog
+                    // can detect a mid-playback freeze within the threshold.
+                    _lastPlaybackProgressAt = Date.now();
+                    _playbackStallNotified = false;
+
+                    // If silent retry is in flight, any play-time tick proves
+                    // the stream recovered — cancel retry so popup never shows.
+                    if (_silentRetryActive) {
+                        try { stopSilentRetry(); } catch (eStopSr) {}
+                        try { hideBufferingIndicator(); } catch (eHideBi) {}
+                    }
+
+                    // DEFENSIVE FIX 1: ground-truth popup dismiss. If the
+                    // stream is actually advancing AND a popup is showing,
+                    // the popup is wrong by definition — playback is healthy
+                    // right now. Force-hide it regardless of category, flag,
+                    // or any other state. Catches every edge case where the
+                    // bookkeeping (category, _pausedByNetwork, etc.) is out
+                    // of sync but the actual stream is fine.
+                    if (time > 0 && playerErrorPopupOpen && playerLastErrorCategory !== 'subscription') {
+                        try { markPlayerPlaybackHealthy(); } catch (eMph) {}
+                        // markPlayerPlaybackHealthy may not hide if the OR
+                        // condition does not match — force-hide here as a
+                        // last-resort safety net. Subscription popups are
+                        // exempt because they require explicit user action.
+                        if (playerErrorPopupOpen && playerLastErrorCategory !== 'subscription') {
+                            try { hidePlayerErrorPopup(); } catch (eHpep) {}
+                            try { if (typeof showResumeToast === 'function') showResumeToast(); } catch (eToast) {}
+                        }
+                    }
+
                     // CRITICAL: Hide loading indicator once playback starts
                     if (!hasHiddenLoadingIndicator && time > 0) {
                         hideBufferingIndicator();
@@ -1109,6 +1778,7 @@ window.onload = function () {
     }
 
     startPlayerNetworkWatchdog();
+    startSimpleAutoResumeWatcher();
 
     // ✅ Make player container focusable so sidebar focus can be moved to it
     // This is critical for proper focus management when closing sidebar
@@ -1155,6 +1825,17 @@ window.onload = function () {
                 sessionStorage.removeItem('bbnl_player_channel');
                 setupPlayer(JSON.parse(fastChannelData));
                 launchedWithDirectChannel = true;
+                // Defer one sidebar sync past initializeSidebar() so the menubar
+                // reflects the just-played channel even if the user opens it
+                // very quickly. Multiple sync attempts at staggered delays are
+                // a cheap safety net — each one is a no-op if state is already
+                // aligned, but the late one catches the post-init window.
+                setTimeout(function () {
+                    try { if (typeof syncSidebarWithCurrentPlayback === 'function') syncSidebarWithCurrentPlayback(true); } catch (eS1) {}
+                }, 800);
+                setTimeout(function () {
+                    try { if (typeof syncSidebarWithCurrentPlayback === 'function') syncSidebarWithCurrentPlayback(true); } catch (eS2) {}
+                }, 2500);
             }
         } catch (eFastRead) {
         }
@@ -1218,6 +1899,13 @@ window.onload = function () {
             const channel = JSON.parse(decodeURIComponent(channelDataStr));
             setupPlayer(channel);
             launchedWithDirectChannel = true;
+            // Same deferred sidebar sync safety net as the fast-handoff path.
+            setTimeout(function () {
+                try { if (typeof syncSidebarWithCurrentPlayback === 'function') syncSidebarWithCurrentPlayback(true); } catch (eS3) {}
+            }, 800);
+            setTimeout(function () {
+                try { if (typeof syncSidebarWithCurrentPlayback === 'function') syncSidebarWithCurrentPlayback(true); } catch (eS4) {}
+            }, 2500);
         } catch (e) {
             console.error("Failed to parse channel data", e);
         }
@@ -1241,7 +1929,10 @@ window.onload = function () {
     // Start sidebar hydration immediately so menu/category state is ready on first open.
     var hydrateDelayMs = 0;
     setTimeout(function () {
-        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.consumeRecent && BBNLSubscriptionSync.consumeRecent()) {
+        // Non-consuming isRecent: keep the flag alive for other pages within
+        // the 10-minute window so a subsequent navigation (player -> channels)
+        // also picks up the fresh subscription state.
+        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.isRecent && BBNLSubscriptionSync.isRecent()) {
             try {
                 if (typeof CacheManager !== 'undefined' && CacheManager.remove) {
                     CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST);
@@ -1315,6 +2006,17 @@ window.onload = function () {
                 this.readOnly = false;
                 return;
             }
+        });
+        // Some Samsung firmwares fire 'change' (and not keydown 13) when the
+        // native numeric keypad DONE button is pressed. Treat 'change' with
+        // digits as DONE → search immediately.
+        _chNumField.addEventListener('change', function () {
+            var digits = String(this.value || '').replace(/\D/g, '').slice(0, 4);
+            if (digits.length === 0) return;
+            channelNumberBuffer = digits;
+            if (channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
+            if (playerChannelSearchTimeout) { clearTimeout(playerChannelSearchTimeout); playerChannelSearchTimeout = null; }
+            playChannelByLCNFromPlayer(parseInt(digits, 10));
         });
     }
 
@@ -1878,6 +2580,10 @@ function setupPlayer(channel) {
     }
 
     hasHiddenLoadingIndicator = false;
+    // Reset stall watchdog state for the new stream so the previous stream's
+    // healthy timestamp does not trigger a false stall during channel switch.
+    _lastPlaybackProgressAt = 0;
+    _playbackStallNotified = false;
     _lastAttemptedChannel = channel;
     _keepChromeAfterErrorBack = false;
 
@@ -2074,12 +2780,13 @@ function setupPlayer(channel) {
         window._streamTimeoutTimer = setTimeout(function () {
             if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
-                handlePlaybackFailure({
-                    source: 'stream-timeout',
-                    channel: _lastAttemptedChannel,
-                    streamUrl: fixedStreamUrl,
-                    detail: 'stream did not reach onCurrentPlayTime before timeout'
-                });
+                // Silent retry already in flight — let it finish. The retry
+                // ticks will keep nudging the stream and the silent-retry
+                // cutoff will surface the popup if recovery never happens.
+                if (_silentRetryActive) return;
+                // Hand off to silent retry instead of showing the popup
+                // immediately. Popup shows only if the silent window expires.
+                startSilentRetry('stream-timeout');
             }
         }, PLAYER_STREAM_START_TIMEOUT_MS);
 
@@ -2307,12 +3014,12 @@ function syncSidebarWithCurrentPlayback(ensureCache) {
     // restoreCurrentLanguageUiState() which would otherwise overwrite the
     // in-memory updates with the pre-CH+ snapshot.
     if (!sidebarState.isOpen) {
-        // Flat-list mode (All Channels / Subscribed): no categories — channels
-        // is the language-filtered flat list. The category-grouped path below
-        // would skip this case (categories.length === 0), so handle it here.
+        // Flat-list mode (All Channels only): no categories — channels is the
+        // language-filtered flat list. Subscribed Channels now uses category
+        // grouping so it is handled by the category-grouped path below.
         var _curLang = sidebarState.languages[sidebarState.languageIndex] || {};
         var _curLangCode = String(_curLang.code || '').toLowerCase();
-        var _isFlatList = (_curLangCode === 'all' || _curLangCode === 'subscribed');
+        var _isFlatList = (_curLangCode === 'all');
 
         if (_isFlatList) {
             if (typeof getFilteredChannelsByLanguage === 'function') {
@@ -2705,8 +3412,42 @@ function applyPreferredSidebarLanguage() {
     } catch (e) { }
 
     if (!preferredLangId && !preferredLangName) {
-        // No language selected (home page launch) — default to Subscribed Channels
-        sidebarState.languageIndex = 1; // index 1 = "Subscribed Channels"
+        // No language selected (home page launch) — default depends on operator.
+        // Some operator IDs prefer Subscribed Channels by default, others All Channels.
+        // The flag is delivered as yes/no on the user record from the auth API.
+        // Defensive: check several candidate field names and accept yes/true/1.
+        var defaultToSubscribed = true; // preserve historical behaviour as fallback
+        try {
+            var userRec = (typeof AuthAPI !== 'undefined' && AuthAPI.getUserData) ? AuthAPI.getUserData() : null;
+            if (userRec) {
+                var flagCandidates = [
+                    userRec.default_subscribed,
+                    userRec.show_subscribed,
+                    userRec.subs_default,
+                    userRec.subscribed_default,
+                    userRec.op_default_subs,
+                    userRec.op_show_subs,
+                    userRec.op_subscribed_default,
+                    userRec.show_subs_default,
+                    userRec.is_default_subscribed
+                ];
+                for (var fcI = 0; fcI < flagCandidates.length; fcI++) {
+                    var fcVal = flagCandidates[fcI];
+                    if (fcVal === undefined || fcVal === null) continue;
+                    var fcStr = String(fcVal).toLowerCase().trim();
+                    if (fcStr === 'yes' || fcStr === 'true' || fcStr === '1' || fcStr === 'y') {
+                        defaultToSubscribed = true;
+                        break;
+                    }
+                    if (fcStr === 'no' || fcStr === 'false' || fcStr === '0' || fcStr === 'n') {
+                        defaultToSubscribed = false;
+                        break;
+                    }
+                }
+            }
+        } catch (eOpDefault) { }
+        // index 0 = "All Channels", index 1 = "Subscribed Channels"
+        sidebarState.languageIndex = defaultToSubscribed ? 1 : 0;
         updateLanguageDisplay();
         return;
     }
@@ -2831,6 +3572,7 @@ async function initializeSidebar() {
 }
 
 async function loadSidebarCategoriesFromApi() {
+    var hadApiCategoriesBefore = Array.isArray(sidebarState.apiCategories) && sidebarState.apiCategories.length > 0;
     sidebarState.apiCategories = [];
     try {
         if (typeof BBNL_API !== 'undefined' && BBNL_API.getCategories) {
@@ -2840,6 +3582,23 @@ async function loadSidebarCategoriesFromApi() {
             }
         }
     } catch (e) { }
+
+    // If apiCategories transitioned from empty to populated AND the
+    // sidebar is currently open AND we are in a category-grouped tab,
+    // rebuild the categories so the user no longer sees the partial-state
+    // bucket (e.g. lone "Miscellaneous" from before apiCategories loaded).
+    var hasApiCategoriesNow = sidebarState.apiCategories.length > 0;
+    if (hasApiCategoriesNow && !hadApiCategoriesBefore && sidebarState && sidebarState.isOpen) {
+        try {
+            // Invalidate the per-language built-categories cache so the
+            // next build does not return the stale partial-state result.
+            _sidebarBuiltCategoriesCache = {};
+            var curLang = sidebarState.languages[sidebarState.languageIndex] || {};
+            if (curLang.code !== 'all' && typeof buildCategoriesForLanguage === 'function') {
+                buildCategoriesForLanguage();
+            }
+        } catch (eRebuild) {}
+    }
 }
 
 /**
@@ -3075,11 +3834,10 @@ function buildCategoriesForLanguage() {
     var categoriesSection = document.getElementById('sidebarCategoriesSection');
     var channelsSection = document.getElementById('sidebarChannelsSection');
 
-    // "All Channels" and "Subscribed Channels" are sticky tabs that show a flat
-    // channel list — no category grouping. Subscribed Channels in particular must
-    // not re-render category buckets like "Infotainment", since that duplicates
-    // category labels that already exist as their own tabs.
-    if (currentLang && (currentLang.code === 'all' || currentLang.code === 'subscribed')) {
+    // "All Channels" stays as a flat list (no category grouping). Subscribed
+    // Channels now groups its subscribed-only channel list into categories so
+    // the tab visually matches how language tabs render — explicit user request.
+    if (currentLang && currentLang.code === 'all') {
         sidebarState.categories = [];
         sidebarState.categoryIndex = 0;
         clearSidebarExpandedCategories();
@@ -3135,15 +3893,28 @@ function buildCategoriesForLanguage() {
     } else {
         builtCategories = [];
 
+        // Track category names that came from REAL channel metadata (a
+        // grtitle/category/genre field actually set on the channel) vs
+        // the default 'Miscellaneous' fallback used when no metadata
+        // exists. The fallback-only category must NOT appear in the
+        // sidebar — it is the artifact of an incomplete data state and
+        // is the source of the "Miscellaneous showing under all
+        // languages on first launch" bug.
         var countByGrid = {};
         var countByName = {};
+        var explicitCatNames = {};
         filteredChannels.forEach(function (ch) {
             var chGrid = String(ch.grid || ch.gridid || '').trim();
-            var chCat = String(ch.grtitle || ch.category || ch.genre || 'Miscellaneous');
+            var rawCat = ch.grtitle || ch.category || ch.genre || '';
+            var hasExplicitCategory = !!String(rawCat).trim();
+            var chCat = hasExplicitCategory ? String(rawCat) : 'Miscellaneous';
             if (chGrid) {
                 countByGrid[chGrid] = (countByGrid[chGrid] || 0) + 1;
             }
             countByName[chCat] = (countByName[chCat] || 0) + 1;
+            if (hasExplicitCategory) {
+                explicitCatNames[chCat] = true;
+            }
         });
 
         if (Array.isArray(sidebarState.apiCategories) && sidebarState.apiCategories.length > 0) {
@@ -3167,11 +3938,15 @@ function buildCategoriesForLanguage() {
         }
 
         if (builtCategories.length === 0) {
-            // Fallback: derive categories from channel list.
-            builtCategories = Object.keys(countByName)
+            // Fallback: derive categories from channel list. Prefer ONLY
+            // categories backed by explicit channel metadata to suppress
+            // the bogus default-fallback 'Miscellaneous' bucket while
+            // apiCategories is still loading.
+            var explicitOnly = Object.keys(countByName)
                 .filter(function (catName) {
                     var lowerCat = catName.toLowerCase();
-                    return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
+                    if (lowerCat === 'subscribed' || lowerCat === 'all channels' || lowerCat === 'subscribed channels') return false;
+                    return !!explicitCatNames[catName];
                 })
                 .map(function (catName) {
                     return {
@@ -3180,9 +3955,41 @@ function buildCategoriesForLanguage() {
                         grid: ''
                     };
                 });
+
+            if (explicitOnly.length > 0) {
+                builtCategories = explicitOnly;
+            } else {
+                // Defensive fallback: if filtering removed every bucket
+                // (e.g. this language tab's channels all lack category
+                // metadata), fall back to the unfiltered list so the
+                // menubar still shows SOMETHING. The loadSidebarCategoriesFromApi
+                // rebuild path will replace this with proper categories
+                // the moment apiCategories arrives from the API.
+                builtCategories = Object.keys(countByName)
+                    .filter(function (catName) {
+                        var lowerCat = catName.toLowerCase();
+                        return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
+                    })
+                    .map(function (catName) {
+                        return {
+                            name: catName,
+                            count: countByName[catName],
+                            grid: ''
+                        };
+                    });
+            }
         }
 
-        _sidebarBuiltCategoriesCache[categoriesCacheKey] = builtCategories.slice();
+        // Only cache the result when apiCategories has fully loaded.
+        // Caching partial-state results (apiCategories empty) is what
+        // froze the bogus "Miscellaneous" bucket on first launch — once
+        // the real categories arrived, the cache key changed but a stale
+        // entry could still be served briefly. Skipping the cache while
+        // apiCategories is empty forces a fresh build on next call.
+        var apiCategoriesReady = Array.isArray(sidebarState.apiCategories) && sidebarState.apiCategories.length > 0;
+        if (apiCategoriesReady) {
+            _sidebarBuiltCategoriesCache[categoriesCacheKey] = builtCategories.slice();
+        }
     }
 
     sidebarState.categories = builtCategories;
@@ -4139,12 +4946,25 @@ function openSidebar() {
     saveCurrentLanguageUiState();
 
     // Keep focused row aligned to currently playing channel even when last-saved state was category-level.
+    // Issue 3 fix: also expand the playing channel's category and refresh the channels list so the
+    // subsequent focus calls below land on the playing row. Without this expansion, the saved state
+    // may have a different category open, sidebarState.channels does not contain the current channel,
+    // and findCurrentChannelInSidebar returns -1 for the early focus pass.
     var syncedCatIdx = getCurrentPlayingCategoryIndex();
     if (syncedCatIdx >= 0 && sidebarState.categories && sidebarState.categories.length > 0) {
+        var clampedSyncedCatIdx = Math.max(0, Math.min(syncedCatIdx, sidebarState.categories.length - 1));
+        if (typeof setSidebarCategoryExpanded === 'function' && !isSidebarCategoryExpanded(clampedSyncedCatIdx)) {
+            setSidebarCategoryExpanded(clampedSyncedCatIdx, true);
+            if (typeof renderCategoriesList === 'function') renderCategoriesList();
+            if (typeof getChannelsForCategoryAtIndex === 'function') {
+                sidebarState.channels = getChannelsForCategoryAtIndex(clampedSyncedCatIdx) || sidebarState.channels;
+            }
+            if (typeof renderChannelsList === 'function') renderChannelsList();
+        }
         var syncedChIdx = findCurrentChannelInSidebar();
         if (syncedChIdx >= 0) {
             sidebarState.currentLevel = 'channels';
-            sidebarState.categoryIndex = Math.max(0, Math.min(syncedCatIdx, sidebarState.categories.length - 1));
+            sidebarState.categoryIndex = clampedSyncedCatIdx;
             sidebarState.channelIndex = Math.max(0, Math.min(syncedChIdx, sidebarState.channels.length - 1));
         }
     }
@@ -4524,17 +5344,12 @@ function focusCategoryItem(index) {
     items.forEach(function (item, i) {
         if (i === index) {
             item.classList.add('active');
-            // CRITICAL: Call .focus() to update document.activeElement
-            item.focus();
-
-            // Ensure item is fully visible
-            requestAnimationFrame(function () {
-                item.scrollIntoView({
-                    behavior: 'auto',
-                    block: 'nearest',
-                    inline: 'nearest'
-                });
-            });
+            // CRITICAL: Call .focus() to update document.activeElement.
+            // preventScroll=true suppresses Tizen WebKit's default
+            // auto-scroll-on-focus, which otherwise centers the focused
+            // element and produces the "focus jumps to middle" bug.
+            focusElementNoScroll(item);
+            scrollSidebarItemMinimal(item);
         } else {
             item.classList.remove('active');
         }
@@ -4595,7 +5410,10 @@ function focusChannelItem(index, optSidebarCategoryIndex) {
     });
 
     target.classList.add('active');
-    target.focus();
+    // preventScroll=true suppresses Tizen WebKit's default auto-scroll-on-
+    // focus (which otherwise centers the focused row mid-viewport). Manual
+    // scroll happens at the end of this function via scrollSidebarItemMinimal.
+    focusElementNoScroll(target);
 
     // Load deferred logo when the row becomes active.
     if (target && target.dataset && target.dataset.deferredLogoUrl) {
@@ -4635,14 +5453,106 @@ function focusChannelItem(index, optSidebarCategoryIndex) {
         }
     }
 
-    requestAnimationFrame(function () {
-        target.scrollIntoView({
-            behavior: 'auto',
-            block: 'nearest',
-            inline: 'nearest'
-        });
-    });
+    // Scroll synchronously so we are not racing the browser's own auto-scroll
+    // pass that fires inside requestAnimationFrame on Tizen WebKit.
+    scrollSidebarItemMinimal(target);
 
+}
+
+/**
+ * Focus an element while suppressing the browser's default scroll-into-view
+ * behavior. Tizen WebKit centers the focused row when focus() is called
+ * unless we explicitly opt out, which fights with our manual minimal-scroll
+ * helper and produces the "focus jumps to middle of viewport" symptom.
+ *
+ * Defensive: some older WebKit builds ignore the FocusOptions argument.
+ * In that case we snapshot scrollTop before focus() and restore it after,
+ * so any auto-scroll the browser performed gets undone before our manual
+ * helper places the row at the correct edge.
+ */
+function focusElementNoScroll(el) {
+    if (!el) return;
+
+    // Find the first scrollable ancestor so we can snapshot its scrollTop.
+    var scrollAncestor = null;
+    var node = el.parentNode;
+    while (node && node !== document) {
+        var s;
+        try { s = window.getComputedStyle(node); } catch (eGc) { s = null; }
+        var oy = s && s.overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) {
+            scrollAncestor = node;
+            break;
+        }
+        node = node.parentNode;
+    }
+    var savedScrollTop = scrollAncestor ? scrollAncestor.scrollTop : null;
+
+    var optionsAccepted = false;
+    try {
+        el.focus({
+            // Spec-defined preventScroll, supported by modern WebKit.
+            preventScroll: true
+        });
+        optionsAccepted = true;
+    } catch (eOpt) {
+        // Older runtime that throws on FocusOptions — fall back to plain focus.
+    }
+    if (!optionsAccepted) {
+        try { el.focus(); } catch (ePlain) {}
+    }
+
+    // Whether or not preventScroll was honored, undo any scroll the browser
+    // performed during focus(). Our manual scroll helper then places the
+    // row at the correct edge from a known-clean position.
+    if (scrollAncestor && savedScrollTop !== null && scrollAncestor.scrollTop !== savedScrollTop) {
+        scrollAncestor.scrollTop = savedScrollTop;
+    }
+}
+
+/**
+ * Minimal-scroll helper for sidebar list items.
+ * Scrolls the nearest scrollable ancestor by exactly the amount needed to
+ * make `item` fully visible, no centering. So DOWN at the last visible row
+ * scrolls by ONE row to reveal one new row at the bottom, instead of
+ * jumping the focus to the middle of the viewport (which scrollIntoView
+ * with block:'nearest' inconsistently does on Tizen WebKit when chunked
+ * row appends are in flight).
+ */
+function scrollSidebarItemMinimal(item) {
+    if (!item) return;
+    var container = null;
+    var node = item.parentNode;
+    while (node && node !== document) {
+        if (node.classList && (
+            node.classList.contains('inline-channels-wrap') ||
+            node.classList.contains('subcategory-list') ||
+            node.classList.contains('channels-list') ||
+            node.classList.contains('sidebar-scroll-content')
+        )) {
+            // Pick the first ancestor that actually has overflow scrolling.
+            var style = window.getComputedStyle(node);
+            var oy = style && style.overflowY;
+            if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) {
+                container = node;
+                break;
+            }
+        }
+        node = node.parentNode;
+    }
+    if (!container) return;
+
+    var itemRect = item.getBoundingClientRect();
+    var containerRect = container.getBoundingClientRect();
+
+    if (itemRect.top < containerRect.top) {
+        // Above viewport — scroll up so item top aligns with container top.
+        container.scrollTop -= (containerRect.top - itemRect.top);
+    } else if (itemRect.bottom > containerRect.bottom) {
+        // Below viewport — scroll down so item bottom aligns with container bottom.
+        container.scrollTop += (itemRect.bottom - containerRect.bottom);
+    }
+    // Else: already fully visible — no scroll.
 }
 
 /**
@@ -4955,6 +5865,29 @@ function handleSidebarKeydown(e) {
                         // No previous category: fall through to global behavior
                     }
                 }
+                // Issue 1 fix (mirror): when UP is pressed at the first channel
+                // of the first category, explicitly wrap to the LAST category's
+                // last channel (or its header when collapsed).
+                if (
+                    rowCat === 0 &&
+                    Array.isArray(sidebarState.categories) &&
+                    sidebarState.categories.length > 0
+                ) {
+                    var lastCatIdxUp = sidebarState.categories.length - 1;
+                    var lastCatChannelsUp = (typeof getChannelsForCategoryAtIndex === 'function')
+                        ? (getChannelsForCategoryAtIndex(lastCatIdxUp) || [])
+                        : [];
+                    if (typeof isSidebarCategoryExpanded === 'function' && isSidebarCategoryExpanded(lastCatIdxUp) && lastCatChannelsUp.length > 0) {
+                        focusChannelItem(lastCatChannelsUp.length - 1, lastCatIdxUp);
+                    } else {
+                        sidebarState.currentLevel = 'categories';
+                        sidebarState.categoryIndex = lastCatIdxUp;
+                        focusCategoryItem(lastCatIdxUp);
+                    }
+                    e.preventDefault();
+                    handled = true;
+                    break;
+                }
                 if (channels.length > 0) {
                     var prevFlatPos = flatPos > 0 ? flatPos - 1 : channels.length - 1;
                     var prevEl = channels[prevFlatPos];
@@ -5037,6 +5970,31 @@ function handleSidebarKeydown(e) {
                         }
                         // No next category: fall through to global behavior
                     }
+                }
+                // Issue 1 fix: when DOWN is pressed at the last channel of the
+                // last category and the wrap path is hit, explicitly land on the
+                // FIRST category's first channel (or its header when collapsed)
+                // instead of relying on the DOM's first channel-row, which in
+                // single-expanded mode points to the currently focused category.
+                if (
+                    rowCat >= 0 &&
+                    rowCat === sidebarState.categories.length - 1 &&
+                    Array.isArray(sidebarState.categories) &&
+                    sidebarState.categories.length > 0
+                ) {
+                    var firstCatChannelsDown = (typeof getChannelsForCategoryAtIndex === 'function')
+                        ? (getChannelsForCategoryAtIndex(0) || [])
+                        : [];
+                    if (typeof isSidebarCategoryExpanded === 'function' && isSidebarCategoryExpanded(0) && firstCatChannelsDown.length > 0) {
+                        focusChannelItem(0, 0);
+                    } else {
+                        sidebarState.currentLevel = 'categories';
+                        sidebarState.categoryIndex = 0;
+                        focusCategoryItem(0);
+                    }
+                    e.preventDefault();
+                    handled = true;
+                    break;
                 }
                 if (channels.length > 0) {
                     var nextFlatPos = flatPos < channels.length - 1 ? flatPos + 1 : 0;
@@ -5799,6 +6757,98 @@ function playChannelByLCNFromPlayer(lcn) {
         channelNumberBuffer = '';
         hideChannelNumberInput();
         setupPlayer(channel);
+
+        // BUG-2 fix: rebuild allChannels to the unfiltered LCN-sorted list so
+        // CH+/CH- after number-entry works sequentially. Otherwise, when the
+        // user is on (e.g.) the Hindi tab and types a Kannada channel number,
+        // the previously-filtered allChannels does not include the new
+        // channel, currentIndex falls back to -1, and CH+ snaps to the first
+        // Hindi channel instead of the next sequential LCN.
+        try {
+            if (Array.isArray(_allChannelsUnfiltered) && _allChannelsUnfiltered.length > 0) {
+                allChannels = _allChannelsUnfiltered.slice();
+            }
+        } catch (eRebuild) {}
+
+        // Sync the menubar with the channel that just started playing.
+        // Without this, the sidebar still highlights the previous channel
+        // because the number-entry path does not run the changeChannel logic
+        // that normally syncs currentIndex and aligns the sidebar.
+        try {
+            if (Array.isArray(allChannels) && allChannels.length > 0) {
+                var newIdx = allChannels.findIndex(function (c) {
+                    return areSameChannel(c, channel);
+                });
+                if (newIdx >= 0) currentIndex = newIdx;
+            }
+        } catch (eIdx) {}
+
+        // BUG-1 fix: switch the menubar language tab to the new channel's
+        // language. If the user was on Hindi and typed a Kannada channel,
+        // the sidebar must reopen on the Kannada tab so the channel can be
+        // found in the filter and highlighted. We persist the choice to
+        // sessionStorage so applyPreferredSidebarLanguage picks it up on
+        // the next open. We do NOT switch when the current tab is sticky
+        // (All Channels / Subscribed Channels) — those tabs already
+        // contain the channel and switching would be wrong.
+        try {
+            if (sidebarState && Array.isArray(sidebarState.languages) && sidebarState.languages.length > 0) {
+                var curLang = sidebarState.languages[sidebarState.languageIndex] || {};
+                var curCode = String(curLang.code || '').toLowerCase();
+                var isStickyTab = (curCode === 'all' || curCode === 'subscribed');
+                if (!isStickyTab) {
+                    var chLangId = String(channel.langid || channel.lang_id || '').trim();
+                    var chLangName = String(channel.lalng || channel.langtitle || channel.langname || channel.language || channel.lang || '').trim().toLowerCase();
+                    var matchedLangIdx = -1;
+                    for (var li = 0; li < sidebarState.languages.length; li++) {
+                        var lObj = sidebarState.languages[li];
+                        if (!lObj) continue;
+                        var lCode = String(lObj.code || '').toLowerCase();
+                        if (lCode === 'all' || lCode === 'subscribed') continue;
+                        var lLangId = String(lObj.langid || '').trim();
+                        var lName = String(lObj.name || '').trim().toLowerCase();
+                        if (chLangId && lLangId && chLangId === lLangId) { matchedLangIdx = li; break; }
+                        if (chLangName && lName && chLangName === lName) { matchedLangIdx = li; break; }
+                    }
+                    if (matchedLangIdx >= 0 && matchedLangIdx !== sidebarState.languageIndex) {
+                        sidebarState.languageIndex = matchedLangIdx;
+                        var newLang = sidebarState.languages[matchedLangIdx] || {};
+                        try {
+                            sessionStorage.setItem('selectedLanguageId', String(newLang.langid || newLang.code || ''));
+                            sessionStorage.setItem('selectedLanguageName', String(newLang.name || ''));
+                        } catch (eSs) {}
+                        // Invalidate per-language built caches so the next open
+                        // builds categories for the new language using fresh data.
+                        try {
+                            if (typeof updateLanguageDisplay === 'function') updateLanguageDisplay();
+                        } catch (eUpd) {}
+                    }
+                }
+            }
+        } catch (eLangSwitch) {}
+
+        try {
+            if (typeof syncSidebarWithCurrentPlayback === 'function') {
+                syncSidebarWithCurrentPlayback(true);
+            }
+        } catch (eSync) {}
+        // If the sidebar is currently open, force the focus/highlight to
+        // re-align to the new channel right now. syncSidebarWithCurrentPlayback
+        // already does this, but the focus cycle guard can suppress the visual
+        // update when the cycle has already been consumed by an earlier event.
+        // Reset the cycle and run the explicit alignment so the .active highlight
+        // moves to the just-played channel without waiting for any user input.
+        try {
+            if (sidebarState && sidebarState.isOpen) {
+                _sidebarPlaybackFocusCycle = 0;
+                if (typeof alignSidebarToCurrentPlayback === 'function') {
+                    alignSidebarToCurrentPlayback();
+                }
+                if (typeof enforceSidebarPlaybackFocusOncePerOpen === 'function') {
+                    enforceSidebarPlaybackFocusOncePerOpen();
+                }
+            }
+        } catch (eFocusForce) {}
     } else {
         // Not found in any category - show error toast
         // User can try another channel number

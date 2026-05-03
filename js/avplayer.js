@@ -220,8 +220,15 @@ var AVPlayer = (function () {
 
                 try {
                     avplay.setTimeoutForBuffering(4);
-                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 1);
-                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
+                    // Buffer headroom (per YouTube architecture analysis):
+                    // 3s before play starts (was 1s) and 8s of look-ahead
+                    // during steady-state playback (was 3s). Brief network
+                    // blips under ~8s become invisible because the player
+                    // keeps playing from RAM while silent-retry runs.
+                    // Channel switching pays a ~2s startup cost; the
+                    // resilience win is much larger.
+                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_PLAY", "PLAYER_BUFFER_SIZE_IN_SECOND", 3);
+                    avplay.setBufferingParam("PLAYER_BUFFER_FOR_RESUME", "PLAYER_BUFFER_SIZE_IN_SECOND", 8);
                 } catch (e) {}
 
                 try {

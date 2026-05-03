@@ -436,7 +436,9 @@ async function initPage() {
     }
 
     try {
-        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.consumeRecent && BBNLSubscriptionSync.consumeRecent()) {
+        // Non-consuming isRecent: keep the flag alive so other pages within
+        // the 10-minute window also see the fresh subscription state.
+        if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.isRecent && BBNLSubscriptionSync.isRecent()) {
             if (typeof BBNLSubscriptionSync.clearChannelDerivedCaches === 'function') {
                 BBNLSubscriptionSync.clearChannelDerivedCaches();
             }
@@ -988,12 +990,14 @@ function initSearchFunctionality() {
         searchInput.setAttribute('inputmode', 'numeric'); // Samsung native numeric keypad (same as login page)
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
-        searchInput.readOnly = false; // Allow Samsung native keypad to open on focus/OK
+        // Read-only by default so Samsung native keypad does NOT auto-open on focus.
+        // Flipped to writable only when user explicitly presses OK on the input.
+        searchInput.readOnly = true;
         searchInput.value = '';
 
-        // Re-ensure readOnly=false on focus (same pattern as login page phone input)
+        // Keep read-only on focus (prevent Samsung auto-open of numeric keypad).
         searchInput.addEventListener('focus', function () {
-            searchInput.readOnly = false;
+            searchInput.readOnly = true;
         });
 
         // Prevent wheel/trackpad value scroll behavior while focused.
@@ -1003,11 +1007,15 @@ function initSearchFunctionality() {
 
         searchInput.addEventListener('click', function () {
             channelsSearchActivated = true;
+            // Explicit user action (OK press fires click on Samsung) → open keypad.
+            searchInput.readOnly = false;
             searchInput.focus();
         });
 
         searchInput.addEventListener('blur', function () {
             channelsSearchActivated = false;
+            // Re-lock so re-focus via D-pad does not auto-open keypad.
+            searchInput.readOnly = true;
         });
 
         searchInput.addEventListener('input', function () {
@@ -1022,12 +1030,31 @@ function initSearchFunctionality() {
         });
 
         searchInput.addEventListener('keydown', function (e) {
-            if (e.keyCode === 13 && searchInput.value.replace(/[^0-9]/g, '').trim().length > 0) {
-                e.preventDefault();
-                clearTimeout(searchTimeout);
-                playChannelByLCN(parseInt(searchInput.value, 10));
+            // OK press: if no digits, open Samsung keypad explicitly (one-shot writable).
+            // If digits already entered, treat as DONE → search immediately.
+            if (e.keyCode === 13) {
+                var digits = searchInput.value.replace(/[^0-9]/g, '').trim();
+                if (digits.length > 0) {
+                    e.preventDefault();
+                    clearTimeout(searchTimeout);
+                    searchInput.readOnly = true;
+                    playChannelByLCN(parseInt(digits, 10));
+                } else {
+                    e.preventDefault();
+                    searchInput.readOnly = false;
+                    searchInput.focus();
+                }
             }
         });
+        // Samsung native keypad DONE may fire 'change' instead of keydown 13.
+        searchInput.addEventListener('change', function () {
+            var digits = String(searchInput.value || '').replace(/\D/g, '').slice(0, 4);
+            if (digits.length === 0) return;
+            clearTimeout(searchTimeout);
+            searchInput.readOnly = true;
+            playChannelByLCN(parseInt(digits, 10));
+        });
+
     }
 }
 

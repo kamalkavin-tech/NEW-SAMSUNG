@@ -453,7 +453,11 @@ window.onload = function () {
             sessionStorage.removeItem('paymentJustCompleted');
             checkPaymentFlag = true;
         }
-        if (!checkPaymentFlag && typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.consumeRecent && BBNLSubscriptionSync.consumeRecent()) {
+        // Non-consuming check (isRecent): leave the BBNLSubscriptionSync flag
+        // intact so channels.js and player.js can also detect the recent
+        // subscription change within the 10-minute window. The flag
+        // expires naturally after 10 minutes — no manual cleanup needed.
+        if (!checkPaymentFlag && typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.isRecent && BBNLSubscriptionSync.isRecent()) {
             checkPaymentFlag = true;
         }
     } catch (e) {}
@@ -482,8 +486,26 @@ function runInitializeHomePage() {
     }
     // Also trigger one immediate safe refresh on app launch so relaunch picks up
     // subscription/category updates without waiting for the interval tick.
+    // After fresh data lands, invalidate the derived sessionStorage caches
+    // and re-render the home channel grid + language tiles so the new
+    // subscription state is visible without needing another relaunch.
     if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.forceSubscriptionRefresh) {
-        ChannelsAPI.forceSubscriptionRefresh().catch(function() {});
+        ChannelsAPI.forceSubscriptionRefresh().then(function () {
+            try {
+                if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.clearChannelDerivedCaches) {
+                    BBNLSubscriptionSync.clearChannelDerivedCaches();
+                } else {
+                    sessionStorage.removeItem('home_channels_cache');
+                    sessionStorage.removeItem('home_languages_cache');
+                }
+            } catch (eClr) {}
+            if (typeof loadHomeChannels === 'function') {
+                try { loadHomeChannels(); } catch (eLh) {}
+            }
+            if (typeof loadHomeLanguages === 'function') {
+                try { loadHomeLanguages(); } catch (eLl) {}
+            }
+        }).catch(function () {});
     }
 
     // Get all focusable elements
@@ -582,18 +604,21 @@ function runInitializeHomePage() {
         searchInput.setAttribute('pattern', '[0-9]*');
         searchInput.setAttribute('autocomplete', 'off');
 
-        // Keep editable so Samsung native numeric keypad can appear.
-        searchInput.readOnly = false;
+        // Read-only by default so D-pad focus does NOT auto-open Samsung keypad.
+        // Flipped to writable only when user explicitly presses OK / clicks the input.
+        searchInput.readOnly = true;
 
         searchInput.addEventListener('click', function () {
             homeSearchActivated = true;
+            // Explicit OK press → open keypad.
             searchInput.readOnly = false;
             searchInput.focus();
         });
 
         searchInput.addEventListener('blur', function () {
             homeSearchActivated = false;
-            searchInput.readOnly = false;
+            // Re-lock so subsequent focus via D-pad does not auto-open keypad.
+            searchInput.readOnly = true;
         });
 
         searchInput.addEventListener('input', function () {
@@ -608,11 +633,29 @@ function runInitializeHomePage() {
         });
 
         searchInput.addEventListener('keydown', function (e) {
-            if (e.keyCode === 13 && searchInput.value.replace(/[^0-9]/g, '').trim().length > 0) {
-                e.preventDefault();
-                clearTimeout(homeSearchTimeout);
-                playChannelByLCNFromHome(parseInt(searchInput.value, 10));
+            if (e.keyCode === 13) {
+                var digits = searchInput.value.replace(/[^0-9]/g, '').trim();
+                if (digits.length > 0) {
+                    // DONE / OK with digits → search immediately.
+                    e.preventDefault();
+                    clearTimeout(homeSearchTimeout);
+                    searchInput.readOnly = true;
+                    playChannelByLCNFromHome(parseInt(digits, 10));
+                } else {
+                    // OK on empty input → open Samsung keypad on demand.
+                    e.preventDefault();
+                    searchInput.readOnly = false;
+                    searchInput.focus();
+                }
             }
+        });
+        // Samsung native keypad DONE may fire 'change' instead of keydown 13.
+        searchInput.addEventListener('change', function () {
+            var digits = String(searchInput.value || '').replace(/\D/g, '').slice(0, 4);
+            if (digits.length === 0) return;
+            clearTimeout(homeSearchTimeout);
+            searchInput.readOnly = true;
+            playChannelByLCNFromHome(parseInt(digits, 10));
         });
     }
 

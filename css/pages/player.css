@@ -100,7 +100,7 @@ video {
     width: calc(100% - 140px);
     max-width: 1720px;
     height: 120px;
-    background: rgba(10, 10, 18, 0.96);
+    background: rgba(10, 10, 18, 0.82);
     border-radius: 14px;
     padding: 0 28px;
     box-sizing: border-box;
@@ -119,6 +119,32 @@ video {
 }
 
 /* infoBarFadeIn animation removed for TV performance */
+
+/* Auto-resume confirmation pill (shown for ~1.5s when network recovers
+   and playback resumes automatically). Sits just above the info bar. */
+.player-resume-toast {
+    position: fixed;
+    bottom: 180px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 10px 26px;
+    border-radius: 22px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s ease-out;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.player-resume-toast.show {
+    opacity: 1;
+}
+.player-resume-toast.hide {
+    opacity: 0;
+}
 
 /* Info bar position adjustment when sidebar is open */
 .info-bar-premium.sidebar-active {
@@ -495,7 +521,7 @@ video {
     top: 0;
     width: 420px;
     height: 100%;
-    background: rgba(6, 6, 14, 0.96);
+    background: rgba(6, 6, 14, 0.82);
     border-right: none;
     contain: layout style paint;
     z-index: 2100; /* Above error popup (2000) so sidebar overrides it */
