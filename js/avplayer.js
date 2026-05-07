@@ -7,7 +7,9 @@
 
 var AVPlayer = (function () {
     // Production mode: suppress verbose logging for performance on Samsung TV hardware
-    var _VERBOSE = false;
+        // Temporary debug: enable verbose logging to diagnose playback startup issues
+        // Set to false again after debugging on real device
+        var _VERBOSE = true;
     function _log() { if (_VERBOSE) console.log.apply(console, arguments); }
 
     var playerState = "NONE";
@@ -128,8 +130,8 @@ var AVPlayer = (function () {
         return url;
     }
 
-    // Track if we should try HTTP fallback
-    var httpsFailedUrls = {};
+    // Track if we should try HTTP fallback (shared globally so player can read/write)
+    var httpsFailedUrls = window._httpsFailedUrls = (window._httpsFailedUrls || {});
 
     // Timeout IDs for cancellation on new changeStream calls
     var _setUrlTimer = null;
@@ -144,6 +146,13 @@ var AVPlayer = (function () {
         init: function (options) {
             _log("[AVPlayer] Init called");
             checkEnv();
+            _log("[AVPlayer] Init called");
+            // Report environment detection for debugging
+            if (!checkEnv()) {
+                console.error('[AVPlayer] webapis.avplay not detected - running in emulator/browser or missing Tizen APIs');
+            } else {
+                console.log('[AVPlayer] webapis.avplay detected - Tizen AVPlay available');
+            }
             checkTVWindowEnv(); // Check for FTA/DVB support
             if (options && options.callbacks) {
                 this.setCallbacks(options.callbacks);
@@ -262,6 +271,38 @@ var AVPlayer = (function () {
                         },
                         function (prepareError) {
                             if (playGeneration !== _streamGeneration) return;
+                            // Attempt one HTTP fallback when prepare fails on HTTPS URLs
+                            try {
+                                var lastUrl = currentStreamUrl || '';
+                                if (lastUrl && lastUrl.indexOf('https://') === 0 && !httpsFailedUrls[lastUrl]) {
+                                    httpsFailedUrls[lastUrl] = true;
+                                    var httpUrl = tryHttpFallback(lastUrl);
+                                    _log('[AVPlayer] Prepare failed; attempting HTTP fallback ->', httpUrl);
+                                    // Try re-opening the fallback URL immediately
+                                    try {
+                                        if (myGeneration === _streamGeneration) {
+                                            // Destroy previous state and retry
+                                            try { avplay.stop(); } catch (e) {}
+                                            try { avplay.close(); } catch (e) {}
+                                            currentStreamUrl = httpUrl;
+                                            avplay.open(httpUrl);
+                                            playerState = 'IDLE';
+                                            // re-run prepareAsync to attempt playback
+                                            avplay.prepareAsync(function() {
+                                                if (playGeneration !== _streamGeneration) return;
+                                                playerState = 'READY';
+                                                try { avplay.play(); playerState = 'PLAYING'; } catch (playError) { if (eventCallbacks.onError) eventCallbacks.onError('Play failed after HTTP fallback: ' + playError.message); }
+                                            }, function(prepareErr2) {
+                                                if (playGeneration !== _streamGeneration) return;
+                                                if (eventCallbacks.onError) eventCallbacks.onError('Prepare failed after HTTP fallback: ' + prepareErr2);
+                                            });
+                                            return;
+                                        }
+                                    } catch (eRetry) {
+                                        // fall through to original error handler below
+                                    }
+                                }
+                            } catch (eEx) {}
                             if (eventCallbacks.onError) eventCallbacks.onError("Prepare failed: " + prepareError);
                         }
                     );

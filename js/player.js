@@ -72,11 +72,13 @@
 // Prevents app from being stuck on "Loading Channel..." screen
 // ==========================================
 (function playerInitializationRecovery() {
-    // Force remove loading screen after 15 seconds max
+    // Force remove loading screen after 8 seconds max
     // If player initialization completes before timeout, this will be cleared
-    var RECOVERY_TIMEOUT_MS = 15000;
+    // Reduced from 15s → 8s: 15s is too long for users to wait on a black screen
+    var RECOVERY_TIMEOUT_MS = 8000;
     var recoveryTimer = setTimeout(function() {
         console.warn('[PLAYER] Initialization timeout at ' + RECOVERY_TIMEOUT_MS + 'ms - forcing recovery');
+        console.error('PLAYER');
         
         // Force hide loading screen completely
         var loadingOverlay = document.getElementById('page-loading');
@@ -93,30 +95,20 @@
         if (typeof handleKeydown === 'function') {
             try {
                 document.removeEventListener("keydown", handleKeydown);
-                document.addEventListener("keydown", handleKeydown, true);
+                document.addEventListener("keydown", handleKeydown);
+                
+                if (typeof RemoteKeys !== 'undefined') {
+                    RemoteKeys.registerAllKeys();
+                } else if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
+                    try { tizen.tvinputdevice.registerKeyBatch(["Return", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]); } catch(e){}
+                }
+
                 console.log('[PLAYER] Keyboard handler re-registered in recovery mode');
             } catch (e) {
                 console.error('[PLAYER] Recovery: Failed to register keys:', e);
             }
         }
-        
-        // Show recovery error message to user
-        try {
-            var playerContainer = document.getElementById('player-container');
-            if (playerContainer) {
-                var existingError = document.getElementById('player-error-recovery-msg');
-                if (!existingError) {
-                    var errorMsg = document.createElement('div');
-                    errorMsg.id = 'player-error-recovery-msg';
-                    errorMsg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;color:#fff;padding:40px;border:3px solid #ef4444;z-index:99998;text-align:center;font-size:18px;font-family:Arial,sans-serif;max-width:600px;line-height:1.6;border-radius:10px;';
-                    errorMsg.innerHTML = '<strong style="color:#ef4444;">Player Loading Timeout</strong><br><br>The player is taking longer than expected to load.<br><br>Try:<br>• Press <strong>BACK</strong> to return<br>• Press <strong>HOME</strong> to go home<br>• Select a different channel';
-                    document.body.appendChild(errorMsg);
-                    console.log('[PLAYER] Recovery message displayed to user');
-                }
-            }
-        } catch (e) {
-            console.error('[PLAYER] Failed to show recovery message:', e);
-        }
+        // The error popup has been removed as per user request to prevent unwanted UI errors.
     }, RECOVERY_TIMEOUT_MS);
     
     // Store timer globally so setupPlayer() can clear it on success
@@ -134,8 +126,21 @@
     var attemptRegister = function() {
         if (typeof handleKeydown === 'function') {
             try {
-                // Use capture phase to ensure we intercept keys early
-                document.addEventListener("keydown", handleKeydown, true);
+                // Ensure we intercept keys early, but use bubble phase to avoid breaking sidebar focus
+                document.addEventListener("keydown", handleKeydown);
+                
+                // Force early registration of TV keys so Back button works during loading
+                if (typeof RemoteKeys !== 'undefined') {
+                    RemoteKeys.registerAllKeys();
+                } else if (typeof tizen !== 'undefined' && tizen.tvinputdevice) {
+                    try { 
+                        var keys = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+                                "Enter", "Return", "MediaPlay", "MediaPause", "MediaStop", "ChannelUp", "ChannelDown"];
+                        tizen.tvinputdevice.registerKeyBatch(keys); 
+                    } catch(e){}
+                }
+
                 console.log('[PLAYER] Early key handler registered (capture phase)');
                 clearInterval(checkInterval);
             } catch (e) {
@@ -184,8 +189,12 @@ function clearTimer(id) {
     }
 }
 
-function clearInterval(id) {
-    if (id) {
+// NOTE: Named _clearManagedInterval to avoid shadowing window.clearInterval.
+// The previous name "clearInterval" was a global function declaration that hoisted
+// and overrode window.clearInterval everywhere in the file, breaking setInterval/
+// clearInterval pairs in registerKeysEarly() and other code.
+function _clearManagedInterval(id) {
+    if (id != null) {
         window.clearInterval(id);
         _activeIntervals.delete(id);
     }
@@ -193,7 +202,7 @@ function clearInterval(id) {
 
 function cleanupAllTimers() {
     _activeTimers.forEach(clearTimer);
-    _activeIntervals.forEach(clearInterval);
+    _activeIntervals.forEach(_clearManagedInterval);
     _activeTimers.clear();
     _activeIntervals.clear();
 }
@@ -857,6 +866,47 @@ function showResumeToast() {
     }, 1500);
 }
 
+// ===== Debug overlay (runtime) =====
+window.DEBUG_PLAYER = true; // set to false to hide overlay
+function ensureDebugOverlay() {
+    if (!window.DEBUG_PLAYER) return null;
+    var existing = document.getElementById('player-debug-overlay');
+    if (existing) return existing;
+    var d = document.createElement('div');
+    d.id = 'player-debug-overlay';
+    d.style.position = 'fixed';
+    d.style.right = '10px';
+    d.style.bottom = '10px';
+    d.style.zIndex = '999999';
+    d.style.background = 'rgba(0,0,0,0.6)';
+    d.style.color = '#fff';
+    d.style.fontSize = '12px';
+    d.style.padding = '8px';
+    d.style.borderRadius = '6px';
+    d.style.maxWidth = '420px';
+    d.style.pointerEvents = 'none';
+    d.innerHTML = '<b>Player Debug</b><br><div id="player-debug-content">init</div>';
+    document.body.appendChild(d);
+    return d;
+}
+
+function updateDebugOverlay(obj) {
+    if (!window.DEBUG_PLAYER) return;
+    try {
+        var root = ensureDebugOverlay();
+        if (!root) return;
+        var c = document.getElementById('player-debug-content');
+        if (!c) return;
+        var lines = [];
+        if (obj.lastUrl) lines.push('url: ' + obj.lastUrl);
+        if (obj.avState) lines.push('av: ' + obj.avState);
+        if (obj.lastError) lines.push('err: ' + obj.lastError);
+        if (typeof obj.online !== 'undefined') lines.push('online: ' + (obj.online ? 'yes' : 'no'));
+        if (typeof obj.time !== 'undefined') lines.push('t: ' + new Date(obj.time).toISOString());
+        c.innerHTML = lines.join('<br>');
+    } catch (e) {}
+}
+
 /**
  * Change A: verify the stream URL is actually reachable before triggering
  * auto-resume. webapis.network reports "connected" the instant the LAN
@@ -1366,25 +1416,9 @@ function stopSimpleAutoResumeWatcher() {
     }
 }
 
-var chIdx = findCurrentChannelInSidebar();
-if (chIdx < 0) {
-    chIdx = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
-    try {
-        console.debug('[Focus] Fallback channel index:', chIdx);
-    } catch (e) {}
-} else {
-    try {
-        console.debug('[Focus] Found current channel at index:', chIdx);
-    } catch (e) {}
-    // to drain. This is how other apps respond instantly to network events.
-    //
-    // Tizen NetworkState codes (per Samsung docs):
-    //   1 = LAN_CABLE_ATTACHED      (connected)
-    //   2 = LAN_CABLE_DETACHED      (disconnected)
-    //   3 = LAN_CABLE_STATE_CHANGED (state-only event)
-    //   4 = WIFI_MODULE_STATE_CHANGED
-    //   5 = GATEWAY_CONNECTED       (connected)
-    //   6 = GATEWAY_DISCONNECTED    (disconnected)
+// The canonical implementation of startPlayerNetworkWatchdog
+function startPlayerNetworkWatchdog() {
+    // Attach Tizen network listener once.
     if (!window._playerNetEventListenerAttached) {
         try {
             if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
@@ -1392,17 +1426,9 @@ if (chIdx < 0) {
                     var s = Number(networkState);
                     var isDisconnectByCode = (s === 2 || s === 6);
                     var isConnectByCode = (s === 1 || s === 5);
-
-                    // Some Samsung models fire generic state codes (e.g. 3
-                    // = LAN_CABLE_STATE_CHANGED, 4 = WIFI_MODULE_STATE_CHANGED)
-                    // without specifying attached/detached. Re-query the
-                    // actual connection type so we ALWAYS detect the
-                    // transition correctly, regardless of which code fired.
                     var actuallyDisconnected = false;
                     try {
-                        actuallyDisconnected = (typeof isNetworkDisconnected === 'function')
-                            ? isNetworkDisconnected()
-                            : false;
+                        actuallyDisconnected = (typeof isNetworkDisconnected === 'function') ? isNetworkDisconnected() : false;
                     } catch (eIs) {}
 
                     var isDisconnect = isDisconnectByCode || (actuallyDisconnected && _lastNetworkOnline === true);
@@ -1413,53 +1439,26 @@ if (chIdx < 0) {
                         _lastNetworkErrorTime = Date.now();
                         _lastNetworkOnline = false;
                         playerNetworkReconnectSince = 0;
-                        // Change C: paused-by-network flag for auto-resume gate.
                         _pausedByNetwork = true;
-                        // Cancel silent retry — we know it is hard offline,
-                        // no point pretending it might recover invisibly.
                         try { stopSilentRetry(); } catch (eStop) {}
                         try { hideBufferingIndicator(); } catch (eHide) {}
-                        // Stop avplay BEFORE showing the popup so leftover
-                        // buffered video is not playing behind it. Resume
-                        // path uses setupPlayer (full re-init) anyway.
-                        try {
-                            if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop();
-                        } catch (eStopAvp2) {}
+                        try { if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop(); } catch (eStopAvp2) {}
                         if (!playerErrorPopupOpen) {
                             try {
-                                showPlayerErrorPopup(
-                                    'Playback Error',
-                                    'Network disconnected. Please check your connection and try again.'
-                                );
+                                showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
                             } catch (eShow) {}
                         }
-                        // Start dedicated paused-by-network resume poller as
-                        // a safety net in case the connect-side network
-                        // event listener does not fire on this device.
                         try { startPausedByNetworkResumePoller(); } catch (ePoll) {}
                         return;
                     }
 
                     if (isConnect) {
-                        // Network is back. Auto-resume gate (Change C):
-                        // only proceed when the player was actually paused
-                        // by a network event. This guarantees we do not
-                        // resume after the user dismissed a non-network
-                        // popup or made some other manual action.
                         var hasRecentNetErr = (_lastNetworkErrorTime > 0) && ((Date.now() - _lastNetworkErrorTime) < _NETWORK_ERROR_WINDOW_MS);
-                        var shouldResume = _pausedByNetwork && (hasRecentNetErr ||
-                            (playerErrorPopupOpen && playerLastErrorCategory === 'network'));
+                        var shouldResume = _pausedByNetwork && (hasRecentNetErr || (playerErrorPopupOpen && playerLastErrorCategory === 'network'));
                         if (!shouldResume) return;
                         if (!currentChannelNeedsInternet()) return;
                         _lastNetworkOnline = true;
                         playerNetworkReconnectSince = Date.now();
-                        // Change A: webapis.network can lie — Tizen reports
-                        // cable attached the instant the link is up but
-                        // before DHCP/DNS/gateway are actually usable.
-                        // Verify CDN reachability via a quick HEAD probe
-                        // before triggering the retry. Only retry on
-                        // successful reachability check, otherwise wait
-                        // and probe again.
                         triggerVerifiedAutoResume('net-event-online');
                     }
                 });
@@ -1468,7 +1467,8 @@ if (chIdx < 0) {
         } catch (eAttach) {}
     }
 
-    playerNetwork_simpleWatcherInterval = registerInterval(setInterval(function () {
+    if (window.playerNetworkWatchInterval) return;
+    window.playerNetworkWatchInterval = registerInterval(setInterval(function () {
         if (!currentChannelNeedsInternet()) {
             playerNetworkDisconnectSince = 0;
             playerNetworkReconnectSince = 0;
@@ -1477,11 +1477,6 @@ if (chIdx < 0) {
             return;
         }
 
-        // Mid-playback stall detector. When avplay was healthy but onCurrentPlayTime
-        // has not advanced for PLAYER_PLAYBACK_STALL_THRESHOLD_MS, surface the
-        // error immediately instead of waiting 60-90s for avplay to give up.
-        // Catches "modem on but no internet / very slow internet" cases that
-        // the Tizen network API does not report as disconnected.
         if (
             hasHiddenLoadingIndicator &&
             !_playbackStallNotified &&
@@ -1493,39 +1488,25 @@ if (chIdx < 0) {
         ) {
             _playbackStallNotified = true;
             _lastNetworkErrorTime = Date.now();
-            // Mark presumed-offline so the reconnect branch in this same
-            // watchdog becomes reachable when the stream eventually recovers.
             _lastNetworkOnline = false;
             playerNetworkReconnectSince = 0;
-            // Change C: explicit paused-by-network flag — auto-resume gate.
             _pausedByNetwork = true;
-            // Hand off to silent retry: keep buffering indicator visible,
-            // attempt recovery for up to PLAYER_SILENT_RETRY_MAX_MS, only
-            // show the error popup if recovery does not happen in time.
             startSilentRetry('playback-stall');
             return;
         }
 
-        var disconnected = isNetworkDisconnected() || hasRecentApiNetworkFailure(20000);
+        var disconnected = false;
+        try { disconnected = isNetworkDisconnected() || hasRecentApiNetworkFailure(20000); } catch(e) {}
         if (!disconnected) {
-            // ✅ FIX ISSUE #4: Auto-retry even if popup was hidden (check for recent network error)
             var hasRecentNetworkError = (_lastNetworkErrorTime > 0) && ((Date.now() - _lastNetworkErrorTime) < _NETWORK_ERROR_WINDOW_MS);
-
-            // Point 6B: track offline→online transition independently of
-            // playerNetworkDisconnectSince (which is reset to 0 once the popup shows).
             if (_lastNetworkOnline === false) {
-                if (playerNetworkReconnectSince === 0) {
-                    playerNetworkReconnectSince = Date.now();
-                }
+                if (playerNetworkReconnectSince === 0) playerNetworkReconnectSince = Date.now();
                 _lastNetworkOnline = true;
             } else if (playerNetworkDisconnectSince > 0 && playerNetworkReconnectSince === 0) {
-                // Legacy fallback for the case where _lastNetworkOnline is already true
-                // but disconnectSince is still pending — keep prior behaviour.
                 playerNetworkReconnectSince = Date.now();
             }
 
             var networkRecoveryReady = playerNetworkReconnectSince > 0 && (Date.now() - playerNetworkReconnectSince) >= PLAYER_NETWORK_RESUME_STABLE_MS;
-            // Issue 1 fix: Simplify auto-resume condition - trigger if network popup is open and network is back
             if (playerErrorPopupOpen && playerLastErrorCategory === 'network' && !playerAutoResumeInProgress && _pausedByNetwork) {
                 var retried = attemptPlayerAutoResumeRetry('watchdog-online');
                 if (retried) {
@@ -1533,28 +1514,25 @@ if (chIdx < 0) {
                     playerNetworkReconnectSince = 0;
                 }
             }
-            // Issue 1 fix: Add fallback recovery check every 3 seconds
             if (_pausedByNetwork && !playerAutoResumeInProgress) {
-                var isOnline = (webapis.network.getActiveConnectionType() !== 0);
+                var isOnline = true;
+                try { isOnline = (webapis.network.getActiveConnectionType() !== 0); } catch(e) {}
                 if (isOnline && _lastNetworkOnline === false) {
                     attemptPlayerAutoResumeRetry('fallback-recovery');
                     _lastNetworkOnline = true;
                 }
             }
             
-            // Clear network error flag on successful state
             if (playerErrorPopupOpen === false && playerLastErrorCategory !== 'network') {
                 _lastNetworkErrorTime = 0;
             }
             return;
         }
 
-        // Disconnected branch: mark state transition online→offline.
         _lastNetworkOnline = false;
         playerAutoResumeInProgress = false;
         clearPlayerAutoResumeRetryTimer();
         playerNetworkReconnectSince = 0;
-        // ✅ FIX ISSUE #4: Keep updating network error timestamp while disconnected
         _lastNetworkErrorTime = Date.now();
 
         if (!playerNetworkDisconnectSince) {
@@ -1870,7 +1848,12 @@ function hideRenewalQRCode() {
     }
 }
 
-window.onload = function () {
+var _playerAppInitialized = false;
+
+function initializePlayerApp() {
+    if (_playerAppInitialized) return;
+    _playerAppInitialized = true;
+    console.log('[PLAYER] Player initialization started');
 
     // Issue 1 (cold launch subscription refresh): when the player page loads
     // (relaunch, BFCache restore, or direct deep link), make sure the cached
@@ -1943,18 +1926,24 @@ window.onload = function () {
         }
     } catch (eFsr) {}
 
+    // FIX #4: Hide loading overlay IMMEDIATELY after AVPlayer module loads.
+    // Don't wait for stream playback to start — the buffering spinner handles that.
+    // This prevents the "Loading Channel..." overlay from blocking key events
+    // on Samsung firmware that routes keys to the topmost z-indexed element.
+    hidePageLoadingOverlay();
+
     // Initialize AVPlayer
     if (typeof AVPlayer !== 'undefined') {
         AVPlayer.init({
             callbacks: {
-                onBufferingStart: () => {
+                onBufferingStart: function() {
                     // Remove page-level loading screen (from player.html)
-                    var pl = document.getElementById('page-loading');
-                    if (pl) pl.remove();
+                    // Guard: hidePageLoadingOverlay() may have already hidden it
+                    hidePageLoadingOverlay();
                     showBufferingIndicator();
                     hasHiddenLoadingIndicator = false;
                 },
-                onBufferingComplete: () => {
+                onBufferingComplete: function() {
                     hideBufferingIndicator();
                     hasHiddenLoadingIndicator = true;
                     // Successful buffering completion confirms stream recovery.
@@ -1972,7 +1961,7 @@ window.onload = function () {
                         if (adChid) loadStreamAds(String(adChid));
                     }
                 },
-                onError: (e) => {
+                onError: function(e) {
                     console.error("Player Error:", e);
                     // Clear stream timeout to prevent double error popup
                     if (window._streamTimeoutTimer) {
@@ -1985,9 +1974,9 @@ window.onload = function () {
                         detail: (e && (e.message || e.name || e.code || String(e))) || ''
                     });
                 },
-                onStreamCompleted: () => {
+                onStreamCompleted: function() {
                 },
-                onCurrentPlayTime: (time) => {
+                onCurrentPlayTime: function(time) {
                     // Update timeline with current playback position (in milliseconds)
                     updateTimeline(time);
 
@@ -2236,6 +2225,10 @@ window.onload = function () {
     });
 
     // Events
+    // Remove any prior registrations (early/DOMContentLoaded) before adding
+    // the canonical bubble-phase listener to prevent handleKeydown firing twice.
+    document.removeEventListener("keydown", handleKeydown, true);
+    document.removeEventListener("keydown", handleKeydown);
     document.addEventListener("keydown", handleKeydown);
 
     // Channel number input: sync Samsung native keypad input → channelNumberBuffer
@@ -2295,7 +2288,7 @@ window.onload = function () {
 
     var backBtn = document.getElementById("back-btn");
     if (backBtn) {
-        backBtn.addEventListener("click", () => {
+        backBtn.addEventListener("click", function() {
             closePlayer();
             window.__BBNL_NAVIGATING = true;
             window.history.back();
@@ -2332,7 +2325,54 @@ window.onload = function () {
 
     // Note: Visibility change (HOME button) is handled by top-level handler
     // which STOPS video when minimized and redirects to home when resumed
+} // End of initializePlayerApp
+
+// ==========================================
+// HYBRID INITIALIZATION LAUNCHER
+// Solves Samsung Tizen window.onload hangs while preventing 
+// race conditions with the webapis.avplay plugin loading.
+// ==========================================
+
+function startHybridLauncher() {
+    console.log('[PLAYER] Starting Hybrid Launcher, waiting for webapis...');
+    var checkCount = 0;
+    var readyCheckTimer = setInterval(function() {
+        checkCount++;
+        
+        // Check if webapis.avplay is loaded, OR if we're not on a Tizen TV
+        var isAvplayReady = false;
+        try { isAvplayReady = (typeof webapis !== 'undefined' && webapis.avplay); } catch(e) {}
+        
+        var isEmulator = (typeof webapis === 'undefined');
+        var isTimeout = (checkCount >= 50); // 50 * 100ms = 5s
+        
+        if (isAvplayReady || isEmulator || isTimeout) {
+            clearInterval(readyCheckTimer);
+            if (isAvplayReady) {
+                console.log('[PLAYER] webapis.avplay is ready. Launching app.');
+            } else {
+                console.log('[PLAYER] webapis check timed out. Launching app anyway.');
+            }
+            initializePlayerApp();
+        }
+    }, 100);
+}
+
+// 1. Try standard window.onload as a fallback
+window.onload = function() {
+    console.log('[PLAYER] window.onload fired');
+    initializePlayerApp();
 };
+
+// 2. Safely trigger the launcher checking document.readyState
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    // The DOM is already loaded! Fire immediately!
+    console.log('[PLAYER] DOM already loaded at script execution time.');
+    startHybridLauncher();
+} else {
+    // Wait for the DOM to load
+    document.addEventListener('DOMContentLoaded', startHybridLauncher);
+}
 
 var allChannels = [];          // ALL channels — used for channel up/down navigation
 var _allChannelsUnfiltered = []; // ALL channels (subscribed + unsubscribed) — for sidebar display
@@ -2426,14 +2466,30 @@ async function loadChannelList(lookupName = null) {
 
             // IF lookupName is provided, find it and play
             if (lookupName) {
-                const found = allChannels.find(ch => {
-                    const cName = (ch.chtitle || ch.channel_name || "").toLowerCase();
-                    return cName.includes(lookupName.toLowerCase()); // Fuzzy match
+                var lookupLower = lookupName.toLowerCase();
+                // Try exact match first, then fuzzy match
+                var found = allChannels.find(function (ch) {
+                    var cName = (ch.chtitle || ch.channel_name || "").toLowerCase();
+                    return cName === lookupLower;
                 });
+                if (!found) {
+                    found = allChannels.find(function (ch) {
+                        var cName = (ch.chtitle || ch.channel_name || "").toLowerCase();
+                        return cName.includes(lookupLower);
+                    });
+                }
 
                 if (found) {
                     setupPlayer(found);
                     return; // setupPlayer handles index finding too
+                } else {
+                    // FIX #5: Channel name lookup failed — don't leave user stuck.
+                    // Fallback to first available channel so something always plays.
+                    console.warn('[PLAYER] Channel lookup failed for: ' + lookupName + '. Falling back to first channel.');
+                    if (allChannels.length > 0) {
+                        setupPlayer(allChannels[0]);
+                        return;
+                    }
                 }
             }
 
@@ -2807,6 +2863,11 @@ function setupPlayer(channel) {
     if (!channel) return;
 
     try {
+        console.log('[PLAYER] setupPlayer called for channel:', (channel && (channel.channelno || channel.chid || channel.chtitle)) || channel);
+        console.log('[PLAYER] stream candidate:', channel ? (channel.streamlink || channel.channel_url) : 'none');
+    } catch (e) { }
+
+    try {
         var enrichSrc = (_allChannelsUnfiltered && _allChannelsUnfiltered.length > 0)
             ? _allChannelsUnfiltered
             : (sidebarState && sidebarState.allChannelsCache && sidebarState.allChannelsCache.length > 0)
@@ -3110,7 +3171,7 @@ function setupPlayer(channel) {
     // ==========================================
     // START PLAYBACK IMMEDIATELY — UI updates happen after
     // ==========================================
-
+    // Start playback path
     if (typeof AVPlayer !== 'undefined' && AVPlayer.isTizen()) {
         // Buffering indicator already shown at top of setupPlayer
 
@@ -3118,28 +3179,47 @@ function setupPlayer(channel) {
         window._streamTimeoutTimer = setTimeout(function () {
             if (myGen !== _playerStreamGen) return;
             if (!hasHiddenLoadingIndicator) {
-                // Silent retry already in flight — let it finish. The retry
-                // ticks will keep nudging the stream and the silent-retry
-                // cutoff will surface the popup if recovery never happens.
                 if (_silentRetryActive) return;
-                // Hand off to silent retry instead of showing the popup
-                // immediately. Popup shows only if the silent window expires.
                 startSilentRetry('stream-timeout');
             }
         }, PLAYER_STREAM_START_TIMEOUT_MS);
 
-        try {
-            AVPlayer.changeStream(fixedStreamUrl);
-        } catch (error) {
-            console.error("Error calling AVPlayer.changeStream:", error);
-            if (window._streamTimeoutTimer) clearTimeout(window._streamTimeoutTimer);
-            handlePlaybackFailure({
-                source: 'change-stream-exception',
-                channel: channel,
-                streamUrl: fixedStreamUrl,
-                detail: (error && (error.message || error.name || String(error))) || 'changeStream failed'
-            });
-        }
+        // Attempt to start stream with pre-check and HTTP fallback logic
+        (function attemptStartStream(url) {
+            // If DVB, call directly
+            if (url && url.toLowerCase().indexOf('dvb://') === 0) {
+                try { AVPlayer.changeStream(url); } catch (e) { handlePlaybackFailure({ source: 'change-stream-exception', channel: channel, streamUrl: url, detail: String(e) }); }
+                return;
+            }
+
+            // For HTTP/HTTPS, probe reachability first
+            try {
+                verifyStreamReachable(url, 1500, function (reachable) {
+                    // If reachable, start AVPlayer
+                    if (reachable) {
+                        try { AVPlayer.changeStream(url); } catch (errCS) { console.error('Error calling AVPlayer.changeStream:', errCS); handlePlaybackFailure({ source: 'change-stream-exception', channel: channel, streamUrl: url, detail: String(errCS) }); }
+                        return;
+                    }
+
+                    // Not reachable: if HTTPS and HTTP fallback not tried, try HTTP
+                    try {
+                        var cur = String(url || '');
+                        if (cur.indexOf('https://') === 0 && !window._httpsFailedUrls[cur]) {
+                            window._httpsFailedUrls[cur] = true;
+                            var httpFallback = cur.replace(/^https:\/\//i, 'http://');
+                            console.log('[PLAYER] verifyStreamReachable failed for HTTPS; trying HTTP fallback ->', httpFallback);
+                            try { AVPlayer.changeStream(httpFallback); return; } catch (eFallback) { console.error('[PLAYER] HTTP fallback changeStream failed:', eFallback); }
+                        }
+                    } catch (e) {}
+
+                    // Final: mark as startup failure so silent retry / popup flow handles it
+                    handlePlaybackFailure({ source: 'stream-timeout', channel: channel, streamUrl: url, detail: 'verifyStreamReachable failed' });
+                });
+            } catch (eProbe) {
+                // If probe threw, fall back to direct changeStream attempt
+                try { AVPlayer.changeStream(url); } catch (errCS2) { handlePlaybackFailure({ source: 'change-stream-exception', channel: channel, streamUrl: url, detail: String(errCS2) }); }
+            }
+        })(fixedStreamUrl);
     } else {
         if (isDVBChannel) {
             showPlayerErrorPopup('FTA Not Available', 'FTA channels require Samsung TV with antenna connection.');
@@ -3147,7 +3227,44 @@ function setupPlayer(channel) {
         }
         const v = document.getElementById("video-player");
         if (v) {
+            v.style.display = 'block'; // CRITICAL: Make the video player visible!
+            try { v.crossOrigin = 'anonymous'; } catch (e) {}
             v.src = fixedStreamUrl;
+
+            // Attach robust event handlers to diagnose and recover from failures
+            v.removeAttribute('data-debug-attached');
+            if (!v.getAttribute('data-debug-attached')) {
+                v.addEventListener('error', function (ev) {
+                    console.error('[PLAYER][HTML5] video error event:', ev, 'currentSrc=', v.currentSrc);
+                    // Try HTTP fallback if HTTPS failed and not tried before
+                    try {
+                        var cur = v.currentSrc || v.src || '';
+                        if (cur.indexOf('https://') === 0 && !httpsFailedUrls[cur]) {
+                            httpsFailedUrls[cur] = true;
+                            var httpFallback = cur.replace(/^https:\/\//i, 'http://');
+                            console.log('[PLAYER][HTML5] attempting HTTP fallback =>', httpFallback);
+                            v.src = httpFallback;
+                            v.play().catch(function (err) {
+                                console.error('[PLAYER][HTML5] fallback play failed:', err);
+                            });
+                            return;
+                        }
+                    } catch (e) {}
+
+                    handlePlaybackFailure({
+                        source: 'html5-play-error',
+                        channel: channel,
+                        streamUrl: fixedStreamUrl,
+                        detail: 'HTML5 video error event'
+                    });
+                });
+
+                v.addEventListener('stalled', function () { console.warn('[PLAYER][HTML5] video stalled'); });
+                v.addEventListener('waiting', function () { console.log('[PLAYER][HTML5] video waiting for buffer'); });
+                v.addEventListener('playing', function () { console.log('[PLAYER][HTML5] video playing'); var plh = document.getElementById('page-loading'); if (plh) plh.style.display = 'none'; });
+                v.setAttribute('data-debug-attached', '1');
+            }
+
             v.play().then(function () {
                 var plh = document.getElementById('page-loading');
                 if (plh) plh.style.display = 'none';
@@ -4480,7 +4597,7 @@ function buildCategoriesForLanguage() {
  * Used so the sidebar opens with focus on the current channel, not the first one.
  */
 function findCurrentChannelInSidebar() {
-    if (sidebarState.channels.length === 0) return -1;
+    if (!sidebarState || !Array.isArray(sidebarState.channels) || sidebarState.channels.length === 0) return -1;
     var currentChannel = getCurrentPlayingChannelObject();
     if (!currentChannel) return -1;
     var idx = sidebarState.channels.findIndex(function (ch) {
@@ -7099,7 +7216,7 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
         if (typeof handleKeydown === 'function') {
             document.removeEventListener("keydown", handleKeydown);
-            document.addEventListener("keydown", handleKeydown, true);
+            document.addEventListener("keydown", handleKeydown);
             console.log('[PLAYER] Keyboard handler registered in DOMContentLoaded (fallback)');
         }
     } catch (e) {

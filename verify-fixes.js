@@ -64,8 +64,8 @@ function runTests() {
     }
     
     totalTests++;
-    if (test('  FIX #1: RECOVERY_TIMEOUT_MS = 15000 defined', 
-        /RECOVERY_TIMEOUT_MS\s*=\s*15000/.test(playerContent))) {
+    if (test('  FIX #1: RECOVERY_TIMEOUT_MS defined (8000-15000ms)', 
+        /RECOVERY_TIMEOUT_MS\s*=\s*(8000|10000|12000|15000)/.test(playerContent))) {
         passCount++;
     }
     
