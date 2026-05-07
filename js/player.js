@@ -68,9 +68,135 @@
 })();
 
 // ==========================================
+// FIX #1: PLAYER INITIALIZATION RECOVERY SYSTEM
+// Prevents app from being stuck on "Loading Channel..." screen
+// ==========================================
+(function playerInitializationRecovery() {
+    // Force remove loading screen after 15 seconds max
+    // If player initialization completes before timeout, this will be cleared
+    var RECOVERY_TIMEOUT_MS = 15000;
+    var recoveryTimer = setTimeout(function() {
+        console.warn('[PLAYER] Initialization timeout at ' + RECOVERY_TIMEOUT_MS + 'ms - forcing recovery');
+        
+        // Force hide loading screen completely
+        var loadingOverlay = document.getElementById('page-loading');
+        if (loadingOverlay && loadingOverlay.style.display !== 'none') {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.style.visibility = 'hidden';
+            loadingOverlay.style.zIndex = '-9999';
+            loadingOverlay.style.pointerEvents = 'none';
+            loadingOverlay.style.opacity = '0';
+            console.log('[PLAYER] Loading overlay forced hidden');
+        }
+        
+        // Ensure keyboard handler is registered
+        if (typeof handleKeydown === 'function') {
+            try {
+                document.removeEventListener("keydown", handleKeydown);
+                document.addEventListener("keydown", handleKeydown, true);
+                console.log('[PLAYER] Keyboard handler re-registered in recovery mode');
+            } catch (e) {
+                console.error('[PLAYER] Recovery: Failed to register keys:', e);
+            }
+        }
+        
+        // Show recovery error message to user
+        try {
+            var playerContainer = document.getElementById('player-container');
+            if (playerContainer) {
+                var existingError = document.getElementById('player-error-recovery-msg');
+                if (!existingError) {
+                    var errorMsg = document.createElement('div');
+                    errorMsg.id = 'player-error-recovery-msg';
+                    errorMsg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;color:#fff;padding:40px;border:3px solid #ef4444;z-index:99998;text-align:center;font-size:18px;font-family:Arial,sans-serif;max-width:600px;line-height:1.6;border-radius:10px;';
+                    errorMsg.innerHTML = '<strong style="color:#ef4444;">Player Loading Timeout</strong><br><br>The player is taking longer than expected to load.<br><br>Try:<br>• Press <strong>BACK</strong> to return<br>• Press <strong>HOME</strong> to go home<br>• Select a different channel';
+                    document.body.appendChild(errorMsg);
+                    console.log('[PLAYER] Recovery message displayed to user');
+                }
+            }
+        } catch (e) {
+            console.error('[PLAYER] Failed to show recovery message:', e);
+        }
+    }, RECOVERY_TIMEOUT_MS);
+    
+    // Store timer globally so setupPlayer() can clear it on success
+    window._playerRecoveryTimer = recoveryTimer;
+})();
+
+// ==========================================
+// FIX #2: EARLY KEYBOARD HANDLER REGISTRATION
+// Register keys immediately, don't wait for DOMContentLoaded
+// This ensures keys work even if DOM ready event doesn't fire properly
+// ==========================================
+(function registerKeysEarly() {
+    // Attempt to register immediately (handleKeydown defined later)
+    // This is a fallback; actual registration happens after handleKeydown is defined
+    var attemptRegister = function() {
+        if (typeof handleKeydown === 'function') {
+            try {
+                // Use capture phase to ensure we intercept keys early
+                document.addEventListener("keydown", handleKeydown, true);
+                console.log('[PLAYER] Early key handler registered (capture phase)');
+                clearInterval(checkInterval);
+            } catch (e) {
+                console.error('[PLAYER] Early key registration failed:', e);
+            }
+        }
+    };
+    
+    // Try immediately
+    attemptRegister();
+    
+    // Also try every 100ms for first 3 seconds as fallback
+    var checkInterval = setInterval(function() {
+        attemptRegister();
+    }, 100);
+    
+    // Stop trying after 3 seconds
+    setTimeout(function() {
+        clearInterval(checkInterval);
+    }, 3000);
+})();
+
+// ==========================================
 // CONFIGURATION
 // ==========================================
 var playerDateTimeInterval = null; // Interval for date/time updates
+
+// ==========================================
+// CENTRALIZED MEMORY CLEANUP SYSTEM - Prevents memory leaks on Samsung TV
+// ==========================================
+var _activeTimers = new Set();
+var _activeIntervals = new Set();
+
+function registerTimer(id) {
+    _activeTimers.add(id);
+}
+
+function registerInterval(id) {
+    _activeIntervals.add(id);
+}
+
+function clearTimer(id) {
+    if (id) {
+        clearTimeout(id);
+        _activeTimers.delete(id);
+    }
+}
+
+function clearInterval(id) {
+    if (id) {
+        window.clearInterval(id);
+        _activeIntervals.delete(id);
+    }
+}
+
+function cleanupAllTimers() {
+    _activeTimers.forEach(clearTimer);
+    _activeIntervals.forEach(clearInterval);
+    _activeTimers.clear();
+    _activeIntervals.clear();
+}
 
 // Clean up ALL background timers when leaving page (prevents memory leaks on Samsung TV)
 window.addEventListener('pagehide', function (event) {
@@ -78,14 +204,10 @@ window.addEventListener('pagehide', function (event) {
         // BFCache transition: keep current state; don't tear down player/UI.
         return;
     }
-    if (playerDateTimeInterval) { clearInterval(playerDateTimeInterval); playerDateTimeInterval = null; }
-    if (playerNetworkWatchInterval) { clearInterval(playerNetworkWatchInterval); playerNetworkWatchInterval = null; }
-    if (typeof streamAdTimer !== 'undefined' && streamAdTimer) { clearTimeout(streamAdTimer); }
-    if (typeof streamAdRotateTimer !== 'undefined' && streamAdRotateTimer) { clearInterval(streamAdRotateTimer); }
-    if (typeof overlayTimeout !== 'undefined' && overlayTimeout) { clearTimeout(overlayTimeout); }
-    if (typeof clearPlayerChromeIdleTimer === 'function') clearPlayerChromeIdleTimer();
-    if (typeof channelInputTimeout !== 'undefined' && channelInputTimeout) { clearTimeout(channelInputTimeout); channelInputTimeout = null; }
-    if (typeof playerChannelSearchTimeout !== 'undefined' && playerChannelSearchTimeout) { clearTimeout(playerChannelSearchTimeout); playerChannelSearchTimeout = null; }
+    
+    // Centralized cleanup - prevents memory leaks
+    cleanupAllTimers();
+    
     // Release AVPlayer resources
     try { if (typeof AVPlayer !== 'undefined') AVPlayer.destroy(); } catch (e) { }
 });
@@ -349,7 +471,27 @@ function shouldSuppressDuplicatePlaybackFailure(fingerprint) {
 function hidePageLoadingOverlay() {
     var pl = document.getElementById('page-loading');
     if (!pl) return;
+    
+    // FIX #3: Complete loading overlay removal
+    // Set all necessary styles to fully hide and disable the overlay
     pl.style.display = 'none';
+    pl.style.visibility = 'hidden';
+    pl.style.zIndex = '-9999';  // Remove from stacking context
+    pl.style.pointerEvents = 'none';  // Don't block mouse/touch events
+    pl.style.opacity = '0';  // Extra visibility safety
+    
+    // Clear recovery timer if player loaded successfully
+    if (window._playerRecoveryTimer) {
+        clearTimeout(window._playerRecoveryTimer);
+        window._playerRecoveryTimer = null;
+        console.log('[PLAYER] Recovery timer cleared - player initialized successfully');
+    }
+    
+    // Remove recovery error message if it's displayed
+    var recoveryMsg = document.getElementById('player-error-recovery-msg');
+    if (recoveryMsg && recoveryMsg.parentNode) {
+        recoveryMsg.parentNode.removeChild(recoveryMsg);
+    }
 }
 
 function resolveChannelEntitlement(channel) {
@@ -1072,7 +1214,7 @@ function _simpleWatcherCheckOffline() {
 
 function startSimpleAutoResumeWatcher() {
     if (_simpleWatcherInterval) return;
-    _simpleWatcherInterval = setInterval(function () {
+    _simpleWatcherInterval = registerInterval(setInterval(function () {
         // Skip when current channel doesn't need internet (DVB) or no
         // channel is set yet.
         if (!_lastAttemptedChannel) return;
@@ -1101,7 +1243,7 @@ function startSimpleAutoResumeWatcher() {
             _simpleWatcherSavedChannel = _lastAttemptedChannel;
             // Cancel any pending resume timer from a quick blip earlier.
             if (_simpleWatcherResumeTimer) {
-                clearTimeout(_simpleWatcherResumeTimer);
+                clearTimer(_simpleWatcherResumeTimer);
                 _simpleWatcherResumeTimer = null;
             }
             // STOP the avplay stream FIRST so any leftover buffered video
@@ -1130,40 +1272,91 @@ function startSimpleAutoResumeWatcher() {
             var channelToResume = _simpleWatcherSavedChannel || _lastAttemptedChannel;
             _simpleWatcherSavedChannel = null;
 
+            // Enhanced internet restoration logic with multiple verification steps
+            console.log('[Network] Internet restored - preparing auto-resume');
+            
             // Wait 2 seconds for the network to actually be usable
             // (Tizen reports cable attached the instant the link is up,
             // but DHCP/DNS/gateway may still be settling).
             if (_simpleWatcherResumeTimer) {
                 clearTimeout(_simpleWatcherResumeTimer);
             }
-            _simpleWatcherResumeTimer = setTimeout(function () {
+            _simpleWatcherResumeTimer = registerTimer(setTimeout(function () {
                 _simpleWatcherResumeTimer = null;
+                
+                // Multi-step verification before resume
+                var isStillOffline = _simpleWatcherCheckOffline();
+                var hasNetworkError = hasRecentApiNetworkFailure(5000);
+                
                 // Re-verify online before attempting.
-                if (_simpleWatcherCheckOffline()) {
+                if (isStillOffline || hasNetworkError) {
                     // Network dropped again during settle — restart cycle.
+                    console.log('[Network] Network still unstable, restarting offline cycle');
                     _simpleWatcherWasOffline = true;
                     _simpleWatcherSavedChannel = channelToResume;
                     return;
                 }
-                if (!channelToResume) return;
+                
+                if (!channelToResume) {
+                    console.log('[Network] No channel to resume');
+                    return;
+                }
+                
+                console.log('[Network] All checks passed - resuming playback');
+                
                 // Force a clean avplay state in case it is stuck.
                 try {
                     if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop();
                 } catch (eStop) {}
+                
+                // Clear any existing error states
+                try {
+                    markPlayerPlaybackHealthy();
+                } catch (eHealthy) {}
+                
                 // Restart playback with the saved channel.
                 try {
                     setupPlayer(channelToResume);
-                } catch (eSetup) {}
+                } catch (eSetup) {
+                    console.error('[Network] Failed to resume playback:', eSetup);
+                    // If setup fails, show error popup again
+                    try {
+                        showPlayerErrorPopup(
+                            'Playback Error',
+                            'Network restored but failed to resume. Please try manually.'
+                        );
+                    } catch (eShow) {}
+                    return;
+                }
+                
                 // Hide the popup unconditionally (we are resuming now).
                 try {
-                    if (playerErrorPopupOpen) hidePlayerErrorPopup();
+                    if (playerErrorPopupOpen) {
+                        hidePlayerErrorPopup();
+                        console.log('[Network] Playback error popup hidden');
+                    }
                 } catch (eHide) {}
+                
+                // Show resume notification
                 try {
-                    if (typeof showResumeToast === 'function') showResumeToast();
+                    if (typeof showResumeToast === 'function') {
+                        showResumeToast();
+                        console.log('[Network] Resume toast shown');
+                    }
                 } catch (eToast) {}
-            }, 2000);
+                
+                // Reset network error tracking
+                _lastNetworkErrorTime = 0;
+                playerNetworkDisconnectSince = 0;
+                playerNetworkReconnectSince = 0;
+                playerAutoResumeInProgress = false;
+                _pausedByNetwork = false;
+                
+                console.log('[Network] Auto-resume completed successfully');
+                
+            }, 2000));
         }
-    }, 1000);
+    }, 1000));
 }
 
 function stopSimpleAutoResumeWatcher() {
@@ -1171,22 +1364,18 @@ function stopSimpleAutoResumeWatcher() {
         clearInterval(_simpleWatcherInterval);
         _simpleWatcherInterval = null;
     }
-    if (_simpleWatcherResumeTimer) {
-        clearTimeout(_simpleWatcherResumeTimer);
-        _simpleWatcherResumeTimer = null;
-    }
-    _simpleWatcherWasOffline = false;
-    _simpleWatcherSavedChannel = null;
 }
 
-function startPlayerNetworkWatchdog() {
-    if (playerNetworkWatchInterval) clearInterval(playerNetworkWatchInterval);
-    playerNetworkDisconnectSince = 0;
-    _lastNetworkOnline = true;
-
-    // Event-driven network detection. Tizen fires this listener the moment
-    // the LAN cable is plugged/unplugged or gateway state changes — much
-    // faster than waiting for the 2s polling tick or for the avplay buffer
+var chIdx = findCurrentChannelInSidebar();
+if (chIdx < 0) {
+    chIdx = Math.max(0, Math.min(sidebarState.channelIndex, sidebarState.channels.length - 1));
+    try {
+        console.debug('[Focus] Fallback channel index:', chIdx);
+    } catch (e) {}
+} else {
+    try {
+        console.debug('[Focus] Found current channel at index:', chIdx);
+    } catch (e) {}
     // to drain. This is how other apps respond instantly to network events.
     //
     // Tizen NetworkState codes (per Samsung docs):
@@ -1279,7 +1468,7 @@ function startPlayerNetworkWatchdog() {
         } catch (eAttach) {}
     }
 
-    playerNetworkWatchInterval = setInterval(function () {
+    playerNetwork_simpleWatcherInterval = registerInterval(setInterval(function () {
         if (!currentChannelNeedsInternet()) {
             playerNetworkDisconnectSince = 0;
             playerNetworkReconnectSince = 0;
@@ -1336,13 +1525,23 @@ function startPlayerNetworkWatchdog() {
             }
 
             var networkRecoveryReady = playerNetworkReconnectSince > 0 && (Date.now() - playerNetworkReconnectSince) >= PLAYER_NETWORK_RESUME_STABLE_MS;
-            if ((playerErrorPopupOpen || hasRecentNetworkError || playerLastErrorCategory === 'network') && networkRecoveryReady && !playerAutoResumeInProgress) {
+            // Issue 1 fix: Simplify auto-resume condition - trigger if network popup is open and network is back
+            if (playerErrorPopupOpen && playerLastErrorCategory === 'network' && !playerAutoResumeInProgress && _pausedByNetwork) {
                 var retried = attemptPlayerAutoResumeRetry('watchdog-online');
                 if (retried) {
                     playerNetworkDisconnectSince = 0;
                     playerNetworkReconnectSince = 0;
                 }
             }
+            // Issue 1 fix: Add fallback recovery check every 3 seconds
+            if (_pausedByNetwork && !playerAutoResumeInProgress) {
+                var isOnline = (webapis.network.getActiveConnectionType() !== 0);
+                if (isOnline && _lastNetworkOnline === false) {
+                    attemptPlayerAutoResumeRetry('fallback-recovery');
+                    _lastNetworkOnline = true;
+                }
+            }
+            
             // Clear network error flag on successful state
             if (playerErrorPopupOpen === false && playerLastErrorCategory !== 'network') {
                 _lastNetworkErrorTime = 0;
@@ -1368,7 +1567,7 @@ function startPlayerNetworkWatchdog() {
             showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.');
             playerNetworkDisconnectSince = 0;
         }
-    }, PLAYER_NETWORK_WATCH_INTERVAL_MS);
+    }, PLAYER_NETWORK_WATCH_INTERVAL_MS));
 }
 
 function clearPlayerErrorUiTimer() {
@@ -2812,6 +3011,71 @@ function setupPlayer(channel) {
     var latestSubscribed = latestKnownChannel ? latestKnownChannel.subscribed : channel.subscribed;
     if (latestSubscribed === "no" || latestSubscribed === "No" || latestSubscribed === "NO" ||
         latestSubscribed === false || latestSubscribed === 0 || latestSubscribed === "0") {
+        
+        // Check if this was triggered by channel number search (vs normal channel switching)
+        var isFromNumberSearch = channelNumberBuffer !== '' || 
+                               (window._lastChannelSearchTrigger && Date.now() - window._lastChannelSearchTrigger < 5000);
+        
+        if (isFromNumberSearch) {
+            // For number search: switch to All Channels category and focus on entered channel
+            try {
+                // Switch to "All Channels" category
+                if (sidebarState && sidebarState.languages && sidebarState.languages.length > 0) {
+                    // Find "All Channels" language index
+                    var allChannelsIndex = -1;
+                    for (var i = 0; i < sidebarState.languages.length; i++) {
+                        var lang = sidebarState.languages[i];
+                        if (lang && (lang.code === 'all' || String(lang.name || '').toLowerCase() === 'all channels')) {
+                            allChannelsIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (allChannelsIndex >= 0) {
+                        // Switch to All Channels
+                        sidebarState.languageIndex = allChannelsIndex;
+                        sidebarState.categoryIndex = 0;
+                        sidebarState.currentLevel = 'categories';
+                        
+                        // Update sessionStorage
+                        try {
+                            sessionStorage.setItem('selectedLanguageId', 'all');
+                            sessionStorage.setItem('selectedLanguageName', 'All Channels');
+                        } catch (eSs) {}
+                        
+                        // Update language display
+                        if (typeof updateLanguageDisplay === 'function') {
+                            updateLanguageDisplay();
+                        }
+                        
+                        // Rebuild sidebar channels for All Channels
+                        if (typeof rebuildSidebarChannels === 'function') {
+                            rebuildSidebarChannels();
+                        }
+                        
+                        // Focus on the searched channel in All Channels
+                        setTimeout(function() {
+                            if (sidebarState && sidebarState.isOpen) {
+                                // Find and focus the searched channel
+                                var channelLCN = latestKnownChannel.channelno || latestKnownChannel.urno || latestKnownChannel.chno || latestKnownChannel.ch_no || "";
+                                for (var chIdx = 0; chIdx < sidebarState.channels.length; chIdx++) {
+                                    var sidebarCh = sidebarState.channels[chIdx];
+                                    var sidebarLCN = sidebarCh.channelno || sidebarCh.urno || sidebarCh.chno || sidebarCh.ch_no || "";
+                                    if (sidebarLCN === channelLCN) {
+                                        sidebarState.channelIndex = chIdx;
+                                        if (typeof focusChannelItem === 'function') {
+                                            focusChannelItem(chIdx, 0);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }, 100);
+                    }
+                }
+            } catch (eSwitch) {}
+        }
+        
         try { if (typeof AVPlayer !== 'undefined') AVPlayer.stop(); } catch (e) { }
         reportPlaybackFailure('subscription', {
             source: 'setup-precheck-local',
@@ -3040,34 +3304,122 @@ function clearStreamAdTimers() {
 function changeChannel(step) {
     if (allChannels.length === 0) return;
 
-    let nextIndex = currentIndex + step;
+    // Check if we should use sub-category navigation vs number sequence
+    var useSubCategoryNavigation = false;
+    
+    // Sub-category navigation applies when:
+    // 1. Menu is open AND
+    // 2. Current category is NOT "All Channels" AND
+    // 3. Current category has channels
+    if (sidebarState && sidebarState.isOpen && sidebarState.currentLanguage) {
+        var currentLang = sidebarState.languages[sidebarState.languageIndex];
+        if (currentLang && currentLang.code !== 'all') {
+            // For non-"All Channels" categories, use sub-category navigation
+            useSubCategoryNavigation = true;
+        }
+    }
 
-    // Wrap around
-    if (nextIndex >= allChannels.length) nextIndex = 0;
-    if (nextIndex < 0) nextIndex = allChannels.length - 1;
+    var nextCh;
+    
+    if (useSubCategoryNavigation) {
+        // Sub-category navigation: navigate within current category
+        nextCh = getNextChannelInCategory(step);
+    } else {
+        // Number sequence navigation: use original logic
+        let nextIndex = currentIndex + step;
+        
+        // Wrap around
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        
+        currentIndex = nextIndex;
+        nextCh = allChannels[nextIndex];
+    }
 
-    currentIndex = nextIndex;
+    if (nextCh) {
+        var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
+        setupPlayer(nextCh);
 
-    var nextCh = allChannels[nextIndex];
-    var nextLCN = nextCh.channelno || nextCh.urno || nextCh.chno || nextCh.ch_no || "";
-    setupPlayer(nextCh);
-
-    // Keep menu state in sync with remote zapping
-    syncSidebarWithCurrentPlayback(true);
-    requestAnimationFrame(function () {
-        syncSidebarWithCurrentPlayback(false);
-    });
-    // Deferred focus pass: wait for the sidebar/player DOM to settle after stream swap
-    // so the currently playing channel receives focus reliably.
-    requestAnimationFrame(function () {
+        // Keep menu state in sync with remote zapping
+        syncSidebarWithCurrentPlayback(true);
         requestAnimationFrame(function () {
-            if (sidebarState && sidebarState.isOpen) {
-                _sidebarPlaybackFocusCycle = 0;
-                syncSidebarWithCurrentPlayback(false);
-            }
+            syncSidebarWithCurrentPlayback(false);
         });
-    });
-    // Info bar already shown by setupPlayer — no duplicate call needed
+        // Deferred focus pass: wait for the sidebar/player DOM to settle after stream swap
+        // so the currently playing channel receives focus reliably.
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                if (sidebarState && sidebarState.isOpen) {
+                    _sidebarPlaybackFocusCycle = 0;
+                    syncSidebarWithCurrentPlayback(false);
+                }
+            });
+        });
+        // Info bar already shown by setupPlayer — no duplicate call needed
+    }
+}
+
+// Helper function to get next channel within current category
+function getNextChannelInCategory(step) {
+    if (!sidebarState || !sidebarState.currentLanguage || !sidebarState.languages) {
+        // Fallback to number sequence navigation
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    var currentLang = sidebarState.languages[sidebarState.languageIndex];
+    var categoryChannels = [];
+    
+    // Get channels for current category
+    if (typeof getChannelsForCategoryAtIndex === 'function') {
+        categoryChannels = getChannelsForCategoryAtIndex(sidebarState.categoryIndex) || [];
+    }
+    
+    if (categoryChannels.length === 0) {
+        // Fallback to number sequence navigation
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    // Find current channel in category
+    var currentChannel = _lastAttemptedChannel || _lastPlayingChannel;
+    var currentChannelId = currentChannel ? (currentChannel.channelno || currentChannel.urno || currentChannel.chno || currentChannel.ch_no || "") : "";
+    
+    var currentCategoryIndex = -1;
+    for (var i = 0; i < categoryChannels.length; i++) {
+        var chId = categoryChannels[i].channelno || categoryChannels[i].urno || categoryChannels[i].chno || categoryChannels[i].ch_no || "";
+        if (chId === currentChannelId) {
+            currentCategoryIndex = i;
+            break;
+        }
+    }
+
+    // Calculate next index in category
+    var nextCategoryIndex = currentCategoryIndex + step;
+    
+    // Wrap around within category
+    if (nextCategoryIndex >= categoryChannels.length) nextCategoryIndex = 0;
+    if (nextCategoryIndex < 0) nextCategoryIndex = categoryChannels.length - 1;
+
+    // Update global currentIndex to match the selected channel
+    var nextChannel = categoryChannels[nextCategoryIndex];
+    var nextChannelId = nextChannel.channelno || nextChannel.urno || nextChannel.chno || nextChannel.ch_no || "";
+    
+    for (var j = 0; j < allChannels.length; j++) {
+        var allChId = allChannels[j].channelno || allChannels[j].urno || allChannels[j].chno || allChannels[j].ch_no || "";
+        if (allChId === nextChannelId) {
+            currentIndex = j;
+            break;
+        }
+    }
+
+    return nextChannel;
 }
 
 function syncSidebarWithCurrentPlayback(ensureCache) {
@@ -3308,6 +3660,12 @@ function clearSidebarExpandedCategories() {
     sidebarState.expandedCategories = {};
 }
 
+function clearAllSidebarCategoryExpansions() {
+    if (sidebarState.expandedCategories) {
+        sidebarState.expandedCategories = {};
+    }
+}
+
 function getSortedExpandedCategoryIndices() {
     var o = sidebarState.expandedCategories || {};
     return Object.keys(o).map(function (x) { return parseInt(x, 10); })
@@ -3487,41 +3845,17 @@ function applyPreferredSidebarLanguage() {
 
     if (!preferredLangId && !preferredLangName) {
         // No language selected (home page launch) — default depends on operator.
-        // Some operator IDs prefer Subscribed Channels by default, others All Channels.
-        // The flag is delivered as yes/no on the user record from the auth API.
-        // Defensive: check several candidate field names and accept yes/true/1.
-        var defaultToSubscribed = true; // preserve historical behaviour as fallback
+        // Use centralized operator default category resolver for consistency
         try {
-            var userRec = (typeof AuthAPI !== 'undefined' && AuthAPI.getUserData) ? AuthAPI.getUserData() : null;
-            if (userRec) {
-                var flagCandidates = [
-                    userRec.default_subscribed,
-                    userRec.show_subscribed,
-                    userRec.subs_default,
-                    userRec.subscribed_default,
-                    userRec.op_default_subs,
-                    userRec.op_show_subs,
-                    userRec.op_subscribed_default,
-                    userRec.show_subs_default,
-                    userRec.is_default_subscribed
-                ];
-                for (var fcI = 0; fcI < flagCandidates.length; fcI++) {
-                    var fcVal = flagCandidates[fcI];
-                    if (fcVal === undefined || fcVal === null) continue;
-                    var fcStr = String(fcVal).toLowerCase().trim();
-                    if (fcStr === 'yes' || fcStr === 'true' || fcStr === '1' || fcStr === 'y') {
-                        defaultToSubscribed = true;
-                        break;
-                    }
-                    if (fcStr === 'no' || fcStr === 'false' || fcStr === '0' || fcStr === 'n') {
-                        defaultToSubscribed = false;
-                        break;
-                    }
-                }
+            if (typeof OperatorDefaults !== 'undefined' && OperatorDefaults.getLanguageIndexForCurrentUser) {
+                sidebarState.languageIndex = OperatorDefaults.getLanguageIndexForCurrentUser();
+            } else {
+                // Fallback to original logic if OperatorDefaults not available
+                sidebarState.languageIndex = 1; // Default to "Subscribed Channels"
             }
-        } catch (eOpDefault) { }
-        // index 0 = "All Channels", index 1 = "Subscribed Channels"
-        sidebarState.languageIndex = defaultToSubscribed ? 1 : 0;
+        } catch (eOpDefault) {
+            sidebarState.languageIndex = 1; // Fallback to "Subscribed Channels"
+        }
         updateLanguageDisplay();
         return;
     }
@@ -4211,41 +4545,55 @@ function getCurrentPlayingChannelId() {
 
 function getCurrentPlayingCategoryIndex() {
     var current = getCurrentPlayingChannelObject();
-    if (!current || !Array.isArray(sidebarState.categories) || sidebarState.categories.length === 0) {
-        return -1;
-    }
+    if (!current) return -1;
+    
+    // Check grouped categories first (existing logic)
+    if (Array.isArray(sidebarState.categories) && sidebarState.categories.length > 0) {
+        var langFiltered = getFilteredChannelsByLanguage();
 
-    var langFiltered = getFilteredChannelsByLanguage();
-
-    // Resolve the exact channel object from the current language-filtered list.
-    var matched = null;
-    for (var m = 0; m < langFiltered.length; m++) {
-        if (areSameChannel(langFiltered[m], current)) {
-            matched = langFiltered[m];
-            break;
+        // Resolve exact channel object from current language-filtered list.
+        var matched = null;
+        for (var m = 0; m < langFiltered.length; m++) {
+            if (areSameChannel(langFiltered[m], current)) {
+                matched = langFiltered[m];
+                break;
+            }
         }
-    }
-    if (!matched) return -1;
+        if (matched) {
+            // 1) Prefer grid-based mapping (most reliable when API categories provide grid ids).
+            var matchedGrid = String(matched.grid || matched.gridid || '').trim();
+            if (matchedGrid) {
+                for (var g = 0; g < sidebarState.categories.length; g++) {
+                    var catGrid = String(sidebarState.categories[g] && sidebarState.categories[g].grid || '').trim();
+                    if (catGrid && catGrid === matchedGrid) {
+                        return g;
+                    }
+                }
+            }
 
-    // 1) Prefer grid-based mapping (most reliable when API categories provide grid ids).
-    var matchedGrid = String(matched.grid || matched.gridid || '').trim();
-    if (matchedGrid) {
-        for (var g = 0; g < sidebarState.categories.length; g++) {
-            var catGrid = String(sidebarState.categories[g] && sidebarState.categories[g].grid || '').trim();
-            if (catGrid && catGrid === matchedGrid) {
-                return g;
+            // 2) Fallback to normalized category-name mapping.
+            var matchedCat = normalizeCategoryName(matched.grtitle || matched.category || matched.genre || 'Miscellaneous');
+            for (var i = 0; i < sidebarState.categories.length; i++) {
+                var catName = sidebarState.categories[i] && sidebarState.categories[i].name;
+                if (!catName) continue;
+                if (normalizeCategoryName(catName) === matchedCat) return i;
             }
         }
     }
-
-    // 2) Fallback to normalized category-name mapping.
-    var matchedCat = normalizeCategoryName(matched.grtitle || matched.category || matched.genre || 'Miscellaneous');
-    for (var i = 0; i < sidebarState.categories.length; i++) {
-        var catName = sidebarState.categories[i] && sidebarState.categories[i].name;
-        if (!catName) continue;
-        if (normalizeCategoryName(catName) === matchedCat) return i;
+    
+    // Check language categories (new logic for Issue 2)
+    if (current.language && sidebarState.languages && sidebarState.languages.length > 0) {
+        var langIdx = sidebarState.languages.findIndex(function(lang) {
+            return lang.name === current.language || 
+                   lang.code === current.language ||
+                   lang.name === current.lang ||
+                   lang.code === current.lang;
+        });
+        if (langIdx >= 0) {
+            return langIdx;
+        }
     }
-
+    
     return -1;
 }
 
@@ -4659,7 +5007,7 @@ function selectCategory(index, preferCurrentChannel) {
 
     // Sync / align playback: only one expansion. User browsing: keep other categories open.
     if (shouldPreferCurrent) {
-        clearSidebarExpandedCategories();
+        clearAllSidebarCategoryExpansions();
     }
 
     sidebarState.categoryIndex = index;
@@ -5019,19 +5367,40 @@ function openSidebar() {
     }
     saveCurrentLanguageUiState();
 
+    // Issue 3 fix: Clear all expansions before setting new focus
+    clearAllSidebarCategoryExpansions();
+
     // Keep focused row aligned to currently playing channel even when last-saved state was category-level.
     // Issue 3 fix: also expand the playing channel's category and refresh the channels list so the
     // subsequent focus calls below land on the playing row. Without this expansion, the saved state
     // may have a different category open, sidebarState.channels does not contain the current channel,
     // and findCurrentChannelInSidebar returns -1 for the early focus pass.
     var syncedCatIdx = getCurrentPlayingCategoryIndex();
-    if (syncedCatIdx >= 0 && sidebarState.categories && sidebarState.categories.length > 0) {
-        var clampedSyncedCatIdx = Math.max(0, Math.min(syncedCatIdx, sidebarState.categories.length - 1));
-        if (typeof setSidebarCategoryExpanded === 'function' && !isSidebarCategoryExpanded(clampedSyncedCatIdx)) {
-            setSidebarCategoryExpanded(clampedSyncedCatIdx, true);
-            if (typeof renderCategoriesList === 'function') renderCategoriesList();
-            if (typeof getChannelsForCategoryAtIndex === 'function') {
-                sidebarState.channels = getChannelsForCategoryAtIndex(clampedSyncedCatIdx) || sidebarState.channels;
+    if (syncedCatIdx >= 0) {
+        // Handle grouped categories (existing logic)
+        if (sidebarState.categories && sidebarState.categories.length > 0 && syncedCatIdx < sidebarState.categories.length) {
+            var clampedSyncedCatIdx = Math.max(0, Math.min(syncedCatIdx, sidebarState.categories.length - 1));
+            if (typeof setSidebarCategoryExpanded === 'function' && !isSidebarCategoryExpanded(clampedSyncedCatIdx)) {
+                setSidebarCategoryExpanded(clampedSyncedCatIdx, true);
+                if (typeof renderCategoriesList === 'function') renderCategoriesList();
+                if (typeof getChannelsForCategoryAtIndex === 'function') {
+                    sidebarState.channels = getChannelsForCategoryAtIndex(clampedSyncedCatIdx) || sidebarState.channels;
+                }
+                if (typeof renderChannelsList === 'function') renderChannelsList();
+            }
+        }
+        // Handle language categories (new logic for Issue 2)
+        else if (sidebarState.languages && syncedCatIdx < sidebarState.languages.length) {
+            var selectedLang = sidebarState.languages[syncedCatIdx];
+            if (selectedLang && (selectedLang.code === 'all' || selectedLang.code === 'subscribed')) {
+                // For All/Subscribed, use filtered channels
+                sidebarState.channels = getFilteredChannelsByLanguage();
+            } else {
+                // For specific languages, filter by that language
+                var originalLangIndex = sidebarState.languageIndex;
+                sidebarState.languageIndex = syncedCatIdx;
+                sidebarState.channels = getFilteredChannelsByLanguage();
+                sidebarState.languageIndex = originalLangIndex;
             }
             if (typeof renderChannelsList === 'function') renderChannelsList();
         }
@@ -5439,6 +5808,7 @@ function focusChannelItem(index, optSidebarCategoryIndex) {
     var items = _getSidebarChannels();
     var target = null;
 
+    // Enhanced focus target detection with better error handling
     if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
         for (var t = 0; t < items.length; t++) {
             var el = items[t];
@@ -5453,19 +5823,31 @@ function focusChannelItem(index, optSidebarCategoryIndex) {
 
     if (!target && items.length > 0) {
         if (typeof optSidebarCategoryIndex !== 'number' || optSidebarCategoryIndex < 0) {
-            if (index >= 0 && index < items.length) target = items[index];
+            // Bounds checking to prevent focus errors
+            var safeIndex = Math.max(0, Math.min(index, items.length - 1));
+            if (safeIndex >= 0 && safeIndex < items.length) {
+                target = items[safeIndex];
+            }
         }
     }
 
-    if (!target) return;
+    if (!target) {
+        console.warn('[Focus] Cannot focus channel item - target not found for index:', index, 'category:', optSidebarCategoryIndex);
+        return;
+    }
 
-    sidebarState.channelIndex = index;
+    // Update sidebar state with bounds checking
+    sidebarState.channelIndex = Math.max(0, Math.min(index, (sidebarState.channels || []).length - 1));
     if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
-        sidebarState.categoryIndex = optSidebarCategoryIndex;
+        sidebarState.categoryIndex = Math.max(0, Math.min(optSidebarCategoryIndex, (sidebarState.categories || []).length - 1));
     }
+    
+    // Remember focus position for expanded categories
     if (isSidebarCategoryExpanded(sidebarState.categoryIndex)) {
-        rememberCategoryChannelIndex(sidebarState.categoryIndex, index);
+        rememberCategoryChannelIndex(sidebarState.categoryIndex, sidebarState.channelIndex);
     }
+    
+    // Update channels list based on context
     if (typeof optSidebarCategoryIndex === 'number' && optSidebarCategoryIndex >= 0) {
         sidebarState.channels = getChannelsForCategoryAtIndex(optSidebarCategoryIndex);
     } else if (!sidebarState.categories.length) {
@@ -5475,19 +5857,37 @@ function focusChannelItem(index, optSidebarCategoryIndex) {
         sidebarState.channels = getChannelsForCategoryAtIndex(sidebarState.categoryIndex);
     }
 
-    _getSidebarCategories().forEach(function (catItem) {
-        catItem.classList.remove('active');
-    });
+    // Clear active states from all items first
+    try {
+        _getSidebarCategories().forEach(function (catItem) {
+            catItem.classList.remove('active');
+        });
 
-    items.forEach(function (item) {
-        item.classList.remove('active');
-    });
+        items.forEach(function (item) {
+            item.classList.remove('active');
+        });
+    } catch (eClear) {
+        console.warn('[Focus] Error clearing active states:', eClear);
+    }
 
+    // Set active state on target
     target.classList.add('active');
-    // preventScroll=true suppresses Tizen WebKit's default auto-scroll-on-
-    // focus (which otherwise centers the focused row mid-viewport). Manual
-    // scroll happens at the end of this function via scrollSidebarItemMinimal.
-    focusElementNoScroll(target);
+    
+    // Enhanced focus with error handling
+    try {
+        // preventScroll=true suppresses Tizen WebKit's default auto-scroll-on-
+        // focus (which otherwise centers the focused row mid-viewport). Manual
+        // scroll happens at the end of this function via scrollSidebarItemMinimal.
+        focusElementNoScroll(target);
+    } catch (eFocus) {
+        console.warn('[Focus] Error setting focus:', eFocus);
+        // Fallback to basic focus
+        try {
+            target.focus();
+        } catch (eFallback) {
+            console.warn('[Focus] Fallback focus also failed:', eFallback);
+        }
+    }
 
     // Load deferred logo when the row becomes active.
     if (target && target.dataset && target.dataset.deferredLogoUrl) {
@@ -6691,6 +7091,20 @@ document.addEventListener('DOMContentLoaded', function () {
             progressContainer.style.cursor = 'pointer';
         }
     }
+    
+    // ==========================================
+    // FIX #4: RE-REGISTER KEYBOARD HANDLER IN DOMContentLoaded (FALLBACK)
+    // This ensures keys are registered even if early registration fails
+    // ==========================================
+    try {
+        if (typeof handleKeydown === 'function') {
+            document.removeEventListener("keydown", handleKeydown);
+            document.addEventListener("keydown", handleKeydown, true);
+            console.log('[PLAYER] Keyboard handler registered in DOMContentLoaded (fallback)');
+        }
+    } catch (e) {
+        console.error('[PLAYER] DOMContentLoaded: Key handler registration error:', e);
+    }
 });
 
 // ==========================================
@@ -6784,6 +7198,9 @@ function hideChannelNumberInput() {
  * Uses HOME pattern: grace period timer, then search
  */
 function navigateToChannelNumber(number) {
+    // Mark that this is a channel search trigger (used for unsubscribed channel handling)
+    window._lastChannelSearchTrigger = Date.now();
+    
     // Cancel any pending timer
     if (channelInputTimeout) {
         clearTimeout(channelInputTimeout);

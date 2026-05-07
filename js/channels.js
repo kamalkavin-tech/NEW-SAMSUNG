@@ -1143,9 +1143,14 @@ function clearChannelsResultCache() {
     channelsResultCache = {};
 }
 
-function primeChannelLogoCache(channels, maxCount) {
+function primeChannelLogoCache(channels, maxCount, scrollTop, containerHeight, itemHeight) {
     if (!Array.isArray(channels) || channels.length === 0) return;
     var limit = Math.min(maxCount || 36, channels.length);
+
+    // Virtual scrolling optimization: Get viewport parameters
+    scrollTop = scrollTop || 0;
+    containerHeight = containerHeight || 600;
+    itemHeight = itemHeight || 80;
 
     // Build a queue of URLs to prefetch (skip already cached)
     var queue = [];
@@ -1165,13 +1170,18 @@ function primeChannelLogoCache(channels, maxCount) {
         queue.push({ key: logoKey, url: logoUrl });
     }
 
+    // Virtual scrolling optimization: Only load visible items + buffer
+    var VISIBLE_BUFFER = 10; // Load 10 extra items above/below viewport
+    var virtualStartIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - VISIBLE_BUFFER);
+    var virtualEndIndex = Math.min(queue.length, Math.ceil((scrollTop + containerHeight) / itemHeight) + VISIBLE_BUFFER);
+    
     // Throttled loader: max 4 concurrent image loads (prevents TV bandwidth/memory flood)
     var MAX_CONCURRENT = 4;
     var active = 0;
-    var idx = 0;
+    var idx = virtualStartIndex;
 
     function loadNext() {
-        while (active < MAX_CONCURRENT && idx < queue.length) {
+        while (active < MAX_CONCURRENT && idx < virtualEndIndex && idx < queue.length) {
             var item = queue[idx++];
             active++;
             _channelLogoPrefetchInFlight[item.key] = true;

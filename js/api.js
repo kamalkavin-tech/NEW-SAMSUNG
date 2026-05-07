@@ -155,14 +155,7 @@ function _isAuthDebugEnabled() {
 }
 
 function _authDebugLog(message, details) {
-    if (!_isAuthDebugEnabled()) return;
-    try {
-        if (typeof details !== 'undefined') {
-            console.log('[AuthDebug] ' + message, details);
-        } else {
-            console.log('[AuthDebug] ' + message);
-        }
-    } catch (e) {}
+    // Debug logging removed for production performance
 }
 
 function _getSessionUser() {
@@ -171,49 +164,17 @@ function _getSessionUser() {
     if (_sessionUserCache && (now - _sessionUserCacheTime) < 1000) return _sessionUserCache;
     try {
         var data = localStorage.getItem("bbnl_user");
-        var backup = localStorage.getItem("bbnl_user_backup");
         var user = null;
 
-        _authDebugLog('Read session keys', {
-            hasPrimary: !!data,
-            hasBackup: !!backup,
-            hasLoggedInOnce: localStorage.getItem('hasLoggedInOnce'),
-            relaunchPending: localStorage.getItem('bbnl_relaunch_pending')
-        });
-
+        // Simplified: Only use primary storage, remove backup complexity
         if (data) {
             try {
                 var parsedPrimary = JSON.parse(data);
                 if (parsedPrimary && parsedPrimary.userid) user = parsedPrimary;
-                else _authDebugLog('Primary user parsed but missing userid', parsedPrimary);
             } catch (e1) {}
         }
 
-        if (!user && backup) {
-            try {
-                var parsedBackup = JSON.parse(backup);
-                if (parsedBackup && parsedBackup.userid) user = parsedBackup;
-                else _authDebugLog('Backup user parsed but missing userid', parsedBackup);
-            } catch (e2) {}
-        }
-
         if (user) {
-            var userJson = JSON.stringify(user);
-            try {
-                if (localStorage.getItem("bbnl_user") !== userJson) {
-                    localStorage.setItem("bbnl_user", userJson);
-                    _authDebugLog('Repaired primary user key from cached/backup data');
-                }
-                if (localStorage.getItem("bbnl_user_backup") !== userJson) {
-                    localStorage.setItem("bbnl_user_backup", userJson);
-                    _authDebugLog('Repaired backup user key from primary data');
-                }
-                if (localStorage.getItem("hasLoggedInOnce") !== "true") {
-                    localStorage.setItem("hasLoggedInOnce", "true");
-                    _authDebugLog('Repaired hasLoggedInOnce flag');
-                }
-            } catch (syncErr) {}
-
             // Mobile may be at top level or nested in custdet[0].mobile
             var mobile = user.mobile || user.phone || "";
             if (!mobile && user.custdet && user.custdet.length > 0) {
@@ -1060,6 +1021,139 @@ window.BBNLSubscriptionSync = {
             sessionStorage.removeItem('home_languages_cache');
             sessionStorage.removeItem('channels_state_cache');
         } catch (e2) {}
+    },
+
+    // Unified method to detect and handle subscription changes
+    detectAndHandleSubscriptionChange: function() {
+        var changeDetected = false;
+        
+        // Check various subscription change indicators
+        try {
+            // Check payment completion flags
+            if (sessionStorage.getItem('paymentJustCompleted') === 'true') {
+                changeDetected = true;
+                sessionStorage.removeItem('paymentJustCompleted');
+            }
+            
+            if (sessionStorage.getItem('subscription_completed') === 'true') {
+                changeDetected = true;
+                sessionStorage.removeItem('subscription_completed');
+            }
+            
+            // Check recent subscription update marker
+            if (this.isRecent()) {
+                changeDetected = true;
+            }
+        } catch (e) {}
+        
+        // If any change detected, clear caches and force refresh
+        if (changeDetected) {
+            this.clearChannelDerivedCaches();
+            // Clear image URL caches as well
+            try {
+                if (typeof invalidateImageUrlCaches === 'function') {
+                    invalidateImageUrlCaches();
+                }
+            } catch (e) {}
+            
+            return true; // Signal that refresh is needed
+        }
+        
+        return false;
+    },
+
+    // Force immediate subscription refresh with cache clearing
+    forceRefreshAllSubscriptionData: async function() {
+        // Clear all caches first
+        this.clearChannelDerivedCaches();
+        
+        // Trigger background refresh if available
+        try {
+            if (window.ChannelsAPI && ChannelsAPI.forceSubscriptionRefresh) {
+                await ChannelsAPI.forceSubscriptionRefresh();
+            }
+        } catch (e) {}
+        
+        // Mark as updated to trigger other components
+        this.markUpdated();
+    }
+};
+
+// ==========================================
+// OPERATOR DEFAULT CATEGORY RESOLVER
+// Provides centralized operator-aware default category selection
+// ==========================================
+
+window.OperatorDefaults = {
+    // Operator-specific default category mappings
+    // This can be extended as more operators are identified
+    OPERATOR_DEFAULT_CATEGORY: {
+        // Add specific operator IDs here when confirmed
+        // 'OPERATOR_A': 'subscribed',
+        // 'OPERATOR_B': 'all',
+        // Default fallback: 'subscribed' (preserve historical behavior)
+    },
+
+    // Extract operator default preference from user record
+    getOperatorDefaultPreference: function(userRecord) {
+        if (!userRecord || typeof userRecord !== 'object') {
+            return 'subscribed'; // Default fallback
+        }
+
+        // Check multiple possible field names for operator default preference
+        var flagCandidates = [
+            userRecord.default_subscribed,
+            userRecord.show_subscribed,
+            userRecord.subs_default,
+            userRecord.subscribed_default,
+            userRecord.op_default_subs,
+            userRecord.op_show_subs,
+            userRecord.op_subscribed_default,
+            userRecord.show_subs_default,
+            userRecord.is_default_subscribed
+        ];
+
+        for (var i = 0; i < flagCandidates.length; i++) {
+            var flagVal = flagCandidates[i];
+            if (flagVal === undefined || flagVal === null) continue;
+            
+            var flagStr = String(flagVal).toLowerCase().trim();
+            if (flagStr === 'yes' || flagStr === 'true' || flagStr === '1' || flagStr === 'y') {
+                return 'subscribed';
+            }
+            if (flagStr === 'no' || flagStr === 'false' || flagStr === '0' || flagStr === 'n') {
+                return 'all';
+            }
+        }
+
+        return 'subscribed'; // Default fallback
+    },
+
+    // Get default category for current user
+    getDefaultCategoryForCurrentUser: function() {
+        try {
+            var userRec = (typeof AuthAPI !== 'undefined' && AuthAPI.getUserData) ? 
+                          AuthAPI.getUserData() : null;
+            
+            if (userRec) {
+                return this.getOperatorDefaultPreference(userRec);
+            }
+        } catch (e) {}
+        
+        return 'subscribed'; // Default fallback
+    },
+
+    // Get language index based on operator preference
+    // Returns 0 for "All Channels", 1 for "Subscribed Channels"
+    getLanguageIndexForCurrentUser: function() {
+        var defaultCategory = this.getDefaultCategoryForCurrentUser();
+        return defaultCategory === 'subscribed' ? 1 : 0;
+    },
+
+    // Get category name for display
+    getCategoryName: function(languageIndex) {
+        // index 0 = "All Channels", index 1 = "Subscribed Channels"
+        return languageIndex === 1 ? 'Subscribed Channels' : 'All Channels';
     }
 };
 
