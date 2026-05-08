@@ -621,6 +621,14 @@ function reportPlaybackFailure(reasonCode, options) {
         title = 'Playback Error';
         message = 'Network disconnected. Please check your connection and try again.';
     } else if (reasonCode === 'subscription') {
+        // Short-circuit if we recently suppressed subscription popups due to
+        // an immediate navigation to a subscribed channel.
+        try {
+            if (Date.now() < (_suppressSubscriptionPopupUntil || 0)) {
+                console.log('[Playback] Suppressed subscription popup due to recent navigation');
+                return;
+            }
+        } catch (eSuppress) {}
         title = 'Subscription Not Available';
         message = 'Please subscribe to watch this channel.';
     } else if (reasonCode === 'no_stream') {
@@ -1610,6 +1618,31 @@ function showPlayerErrorPopup(title, message) {
             var existingMsgEl = document.getElementById('playerErrorMessage');
             if (existingTitleEl) existingTitleEl.textContent = title || 'Playback Error';
             if (existingMsgEl) existingMsgEl.textContent = message || 'Please Check your network and try again';
+            if (incomingCategory === 'subscription') {
+                var existingPopupChName = document.getElementById('popupChannelName');
+                if (existingPopupChName) {
+                    var existingCh = (_lastAttemptedChannel) ? (_lastAttemptedChannel.channel_name || _lastAttemptedChannel.chtitle || '') : '';
+                    existingPopupChName.textContent = existingCh || '';
+                    existingPopupChName.style.display = existingCh ? '' : 'none';
+                }
+                var existingPopupDeviceId = document.getElementById('popupDeviceId');
+                if (existingPopupDeviceId) {
+                    try {
+                        existingPopupDeviceId.textContent = DeviceInfo.getDeviceIdLabel ? DeviceInfo.getDeviceIdLabel() : (DeviceInfo.duid || DeviceInfo.devslno || '--');
+                    } catch (eDeviceRefresh) {
+                        existingPopupDeviceId.textContent = '--';
+                    }
+                }
+                var existingPopupUserId = document.getElementById('popupUserId');
+                if (existingPopupUserId) {
+                    try {
+                        var existingUd = AuthAPI.getUserData();
+                        existingPopupUserId.textContent = (existingUd && (existingUd.userid || existingUd.userId || existingUd.username || existingUd.mobile)) || '--';
+                    } catch (eUserRefresh) {
+                        existingPopupUserId.textContent = '--';
+                    }
+                }
+            }
             resetPlayerErrorUiTimer();
             return;
         }
@@ -2033,6 +2066,45 @@ function initializePlayerApp() {
     startPlayerNetworkWatchdog();
     startSimpleAutoResumeWatcher();
 
+    // Attach browser online/offline fallback listeners so auto-resume
+    // also works in non-Tizen environments (e.g. desktop/browser testing).
+    if (typeof window !== 'undefined' && !window._playerBrowserNetEventAttached) {
+        try {
+            window.addEventListener('online', function () {
+                try {
+                    // Mark last network online and trigger verified auto-resume
+                    _lastNetworkOnline = true;
+                    playerNetworkReconnectSince = Date.now();
+                    // If paused by network, attempt resume
+                    if (_pausedByNetwork) {
+                        triggerVerifiedAutoResume('browser-online');
+                        try { startPausedByNetworkResumePoller(); } catch (e) {}
+                    }
+                } catch (e) {}
+            });
+
+            window.addEventListener('offline', function () {
+                try {
+                    // Treat offline similar to Tizen disconnect path
+                    if (!currentChannelNeedsInternet()) return;
+                    _lastNetworkErrorTime = Date.now();
+                    _lastNetworkOnline = false;
+                    playerNetworkReconnectSince = 0;
+                    _pausedByNetwork = true;
+                    try { stopSilentRetry(); } catch (e) {}
+                    try { hideBufferingIndicator(); } catch (e) {}
+                    try { if (typeof AVPlayer !== 'undefined' && AVPlayer.stop) AVPlayer.stop(); } catch (e) {}
+                    if (!playerErrorPopupOpen) {
+                        try { showPlayerErrorPopup('Playback Error', 'Network disconnected. Please check your connection and try again.'); } catch (e) {}
+                    }
+                    try { startPausedByNetworkResumePoller(); } catch (e) {}
+                } catch (e) {}
+            });
+
+            window._playerBrowserNetEventAttached = true;
+        } catch (eAttach) {}
+    }
+
     // ✅ Make player container focusable so sidebar focus can be moved to it
     // This is critical for proper focus management when closing sidebar
     var playerContainer = document.getElementById('player-container');
@@ -2381,6 +2453,8 @@ var _lastAttemptedChannel = null; // Tracks the current channel for retry
 var _lastPlayingChannel = null; // Tracks the last channel that passed pre-play validation
 var _playerLogoRequestToken = 0;
 var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
+// Suppress re-showing subscription popup for a short window after navigation
+var _suppressSubscriptionPopupUntil = 0;
 
 async function loadChannelList(lookupName = null) {
     try {
@@ -2886,6 +2960,19 @@ function setupPlayer(channel) {
             }
         }
     } catch (enrichErr) { }
+
+    var latestKnownChannel = findLatestKnownChannel(channel) || channel;
+    var latestSubscribed = latestKnownChannel ? latestKnownChannel.subscribed : channel.subscribed;
+    var channelIsSubscribedNow = latestSubscribed === "yes" || latestSubscribed === "1" ||
+        latestSubscribed === true || latestSubscribed === 1;
+
+    if (playerErrorPopupOpen && playerLastErrorCategory === 'subscription' && channelIsSubscribedNow) {
+        hidePlayerErrorPopup();
+        // Prevent any immediately following subscription popups (from
+        // async entitlement checks or delayed handlers) from re-showing
+        // the popup for the previous channel. Short window (2s).
+        try { _suppressSubscriptionPopupUntil = Date.now() + 2000; } catch (e) {}
+    }
 
     _playerStreamGen++;
     var myGen = _playerStreamGen;
@@ -3421,28 +3508,52 @@ function clearStreamAdTimers() {
 function changeChannel(step) {
     if (allChannels.length === 0) return;
 
-    // Check if we should use sub-category navigation vs number sequence
-    var useSubCategoryNavigation = false;
+    // Check if we should use category/language navigation vs number sequence
+    var useFilteredNavigation = false;
+    var activeLangIndex = sidebarState.languageIndex;
+    var activeCategoryIndex = -1;
     
-    // Sub-category navigation applies when:
-    // 1. Menu is open AND
-    // 2. Current category is NOT "All Channels" AND
-    // 3. Current category has channels
-    if (sidebarState && sidebarState.isOpen && sidebarState.currentLanguage) {
-        var currentLang = sidebarState.languages[sidebarState.languageIndex];
-        if (currentLang && currentLang.code !== 'all') {
-            // For non-"All Channels" categories, use sub-category navigation
-            useSubCategoryNavigation = true;
+    // ✅ CRITICAL FIX: Determine which language and category are "active" for CH+/CH-
+    // If sidebar is open, use current sidebarState
+    // If sidebar is closed, use the last selected language/category
+    if (!sidebarState.isOpen && typeof _lastSelectedLanguageIndex === 'number') {
+        activeLangIndex = _lastSelectedLanguageIndex;
+        activeCategoryIndex = _lastSelectedCategoryIndex;
+    } else {
+        // Sidebar is open - use current selection
+        activeCategoryIndex = sidebarState.categoryIndex;
+    }
+    
+    // Determine navigation mode:
+    // 1. If we have a specific CATEGORY selected (categoryIndex >= 0), navigate within that category
+    // 2. Else if we have a non-"All Channels" LANGUAGE, navigate within that language
+    // 3. Otherwise, use number sequence across all channels
+    if (sidebarState && Array.isArray(sidebarState.languages) && activeLangIndex >= 0) {
+        var currentLang = sidebarState.languages[activeLangIndex] || {};
+        var langCode = String(currentLang.code || '').toLowerCase();
+        
+        // If we have a category and it's NOT "All Channels" language, use category navigation
+        if (activeCategoryIndex >= 0 && langCode !== 'all') {
+            useFilteredNavigation = true;
+        }
+        // Else if language is NOT "All Channels", use language navigation
+        else if (langCode !== 'all') {
+            useFilteredNavigation = true;
         }
     }
 
     var nextCh;
     
-    if (useSubCategoryNavigation) {
-        // Sub-category navigation: navigate within current category
-        nextCh = getNextChannelInCategory(step);
+    if (useFilteredNavigation) {
+        if (activeCategoryIndex >= 0) {
+            // Navigate within specific category
+            nextCh = getNextChannelInCategory(step, activeLangIndex, activeCategoryIndex);
+        } else {
+            // Navigate within language
+            nextCh = getNextChannelInLanguage(step, activeLangIndex);
+        }
     } else {
-        // Number sequence navigation: use original logic
+        // Number sequence navigation: use original logic (all channels in order)
         let nextIndex = currentIndex + step;
         
         // Wrap around
@@ -3476,9 +3587,10 @@ function changeChannel(step) {
     }
 }
 
-// Helper function to get next channel within current category
-function getNextChannelInCategory(step) {
-    if (!sidebarState || !sidebarState.currentLanguage || !sidebarState.languages) {
+// ✅ CRITICAL FIX: Navigate channels within a specific category
+// When user selects a channel in a category (Sports, Movies, etc.), CH+/CH- stays within that category
+function getNextChannelInCategory(step, langIndex, categoryIndex) {
+    if (!sidebarState || !Array.isArray(sidebarState.languages) || !Array.isArray(sidebarState.categories)) {
         // Fallback to number sequence navigation
         let nextIndex = currentIndex + step;
         if (nextIndex >= allChannels.length) nextIndex = 0;
@@ -3487,21 +3599,69 @@ function getNextChannelInCategory(step) {
         return allChannels[nextIndex];
     }
 
-    var currentLang = sidebarState.languages[sidebarState.languageIndex];
-    var categoryChannels = [];
-    
-    // Get channels for current category
-    if (typeof getChannelsForCategoryAtIndex === 'function') {
-        categoryChannels = getChannelsForCategoryAtIndex(sidebarState.categoryIndex) || [];
-    }
-    
-    if (categoryChannels.length === 0) {
+    // Validate indices
+    if (langIndex < 0 || langIndex >= sidebarState.languages.length ||
+        categoryIndex < 0 || categoryIndex >= sidebarState.categories.length) {
         // Fallback to number sequence navigation
         let nextIndex = currentIndex + step;
         if (nextIndex >= allChannels.length) nextIndex = 0;
         if (nextIndex < 0) nextIndex = allChannels.length - 1;
         currentIndex = nextIndex;
         return allChannels[nextIndex];
+    }
+
+    // Get channels for this language first
+    var targetLang = sidebarState.languages[langIndex];
+    var allChannelsForFilter = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+    var languageChannels = [];
+
+    if (targetLang.code === 'subscribed') {
+        languageChannels = allChannelsForFilter.filter(function(ch) {
+            return isChannelSubscribed(ch);
+        });
+    } else if (targetLang.code === 'all') {
+        languageChannels = allChannelsForFilter.slice();
+    } else {
+        languageChannels = allChannelsForFilter.filter(function(ch) {
+            if (targetLang.langid) {
+                var chLangId = ch.langid || ch.lang_id || '';
+                return chLangId.toString() === targetLang.langid.toString();
+            }
+            var chLang = (ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').toLowerCase();
+            var langCode = targetLang.code.toLowerCase();
+            var langName = targetLang.name.toLowerCase();
+            return chLang === langCode || chLang === langName || chLang.includes(langCode);
+        });
+    }
+
+    if (languageChannels.length === 0) {
+        // Fallback to number sequence navigation
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    // Now filter language channels by category
+    var targetCategory = sidebarState.categories[categoryIndex];
+    if (!targetCategory) {
+        // Fallback to language navigation
+        return getNextChannelInLanguage(step, langIndex);
+    }
+
+    var categoryChannels = languageChannels.filter(function(ch) {
+        if (targetCategory.grid) {
+            var chGrid = String(ch.grid || ch.gridid || '').trim();
+            return chGrid === String(targetCategory.grid);
+        }
+        var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
+        return normalizeCategoryName(chCat) === normalizeCategoryName(targetCategory.name);
+    });
+
+    if (categoryChannels.length === 0) {
+        // Fallback to language navigation
+        return getNextChannelInLanguage(step, langIndex);
     }
 
     // Find current channel in category
@@ -3517,6 +3677,11 @@ function getNextChannelInCategory(step) {
         }
     }
 
+    // If current channel not found, start from first channel in category
+    if (currentCategoryIndex === -1) {
+        currentCategoryIndex = 0;
+    }
+
     // Calculate next index in category
     var nextCategoryIndex = currentCategoryIndex + step;
     
@@ -3526,6 +3691,104 @@ function getNextChannelInCategory(step) {
 
     // Update global currentIndex to match the selected channel
     var nextChannel = categoryChannels[nextCategoryIndex];
+    var nextChannelId = nextChannel.channelno || nextChannel.urno || nextChannel.chno || nextChannel.ch_no || "";
+    
+    for (var j = 0; j < allChannels.length; j++) {
+        var allChId = allChannels[j].channelno || allChannels[j].urno || allChannels[j].chno || allChannels[j].ch_no || "";
+        if (allChId === nextChannelId) {
+            currentIndex = j;
+            break;
+        }
+    }
+
+    return nextChannel;
+}
+
+// ✅ CRITICAL FIX: Navigate channels within the selected language only
+// When sidebar is closed, this respects the last selected language for CH+/CH-
+function getNextChannelInLanguage(step, activeLangIndex) {
+    if (!sidebarState || !Array.isArray(sidebarState.languages) || sidebarState.languages.length === 0) {
+        // Fallback to number sequence navigation
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    var targetLang = sidebarState.languages[activeLangIndex];
+    if (!targetLang) {
+        // Fallback to number sequence navigation
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    // Get all channels (cached)
+    var allChannelsForFilter = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+    
+    // Filter channels by language
+    var languageChannels = [];
+    if (targetLang.code === 'subscribed') {
+        // Subscribed channels: filter by subscription status
+        languageChannels = allChannelsForFilter.filter(function(ch) {
+            return isChannelSubscribed(ch);
+        });
+    } else if (targetLang.code === 'all') {
+        // All channels: no filter
+        languageChannels = allChannelsForFilter.slice();
+    } else {
+        // Specific language: filter by langid or language name
+        languageChannels = allChannelsForFilter.filter(function(ch) {
+            if (targetLang.langid) {
+                var chLangId = ch.langid || ch.lang_id || '';
+                return chLangId.toString() === targetLang.langid.toString();
+            }
+            var chLang = (ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').toLowerCase();
+            var langCode = targetLang.code.toLowerCase();
+            var langName = targetLang.name.toLowerCase();
+            return chLang === langCode || chLang === langName || chLang.includes(langCode);
+        });
+    }
+
+    if (languageChannels.length === 0) {
+        // Fallback to number sequence navigation if no channels in language
+        let nextIndex = currentIndex + step;
+        if (nextIndex >= allChannels.length) nextIndex = 0;
+        if (nextIndex < 0) nextIndex = allChannels.length - 1;
+        currentIndex = nextIndex;
+        return allChannels[nextIndex];
+    }
+
+    // Find current channel in language channels
+    var currentChannel = _lastAttemptedChannel || _lastPlayingChannel;
+    var currentChannelId = currentChannel ? (currentChannel.channelno || currentChannel.urno || currentChannel.chno || currentChannel.ch_no || "") : "";
+    
+    var currentLanguageIndex = -1;
+    for (var i = 0; i < languageChannels.length; i++) {
+        var chId = languageChannels[i].channelno || languageChannels[i].urno || languageChannels[i].chno || languageChannels[i].ch_no || "";
+        if (chId === currentChannelId) {
+            currentLanguageIndex = i;
+            break;
+        }
+    }
+
+    // If current channel not found, start from the first channel in language
+    if (currentLanguageIndex === -1) {
+        currentLanguageIndex = 0;
+    }
+
+    // Calculate next index in language
+    var nextLanguageIndex = currentLanguageIndex + step;
+    
+    // Wrap around within language
+    if (nextLanguageIndex >= languageChannels.length) nextLanguageIndex = 0;
+    if (nextLanguageIndex < 0) nextLanguageIndex = languageChannels.length - 1;
+
+    // Update global currentIndex to match the selected channel
+    var nextChannel = languageChannels[nextLanguageIndex];
     var nextChannelId = nextChannel.channelno || nextChannel.urno || nextChannel.chno || nextChannel.ch_no || "";
     
     for (var j = 0; j < allChannels.length; j++) {
@@ -3749,6 +4012,11 @@ var sidebarState = {
 var _sidebarLanguageIndexAtOpen = 0;
 var _committedNavigationFromSidebarOpen = false;
 
+// ✅ CRITICAL: Track the LAST SELECTED LANGUAGE and CATEGORY even when sidebar is closed
+// This allows CH+/CH- to respect language/category filtering even without the sidebar open
+var _lastSelectedLanguageIndex = 0;
+var _lastSelectedCategoryIndex = -1; // -1 means flat list (All/Subscribed), 0+ means category index
+
 var _sidebarChannelsHydrationPromise = null;
 var _sidebarFilteredChannelsCache = {};
 var _sidebarBuiltCategoriesCache = {};
@@ -3866,12 +4134,11 @@ function saveCurrentLanguageUiState() {
     var key = getCurrentLanguageStateKey();
     if (!key) return;
 
+    // ✅ CRITICAL FIX: Never save expansion history
+    // Expansions should not persist across sidebar close/open cycles
+    // Each time you reopen the sidebar, categories start COLLAPSED
     var expandedNames = [];
-    getSortedExpandedCategoryIndices().forEach(function (ii) {
-        var c = sidebarState.categories[ii];
-        if (c) expandedNames.push(String(c.name || ''));
-    });
-    var expandedName = expandedNames.length ? expandedNames[0] : '';
+    var expandedName = '';
 
     // RC-3: also save the focused category by NAME so restore survives an
     // API-driven reordering / shrinking of the category list. The numeric
@@ -4108,19 +4375,23 @@ async function loadSidebarCategoriesFromApi() {
         }
     } catch (e) { }
 
-    // If apiCategories transitioned from empty to populated AND the
-    // sidebar is currently open AND we are in a category-grouped tab,
-    // rebuild the categories so the user no longer sees the partial-state
-    // bucket (e.g. lone "Miscellaneous" from before apiCategories loaded).
+    // ✅ CRITICAL FIX: Always invalidate built categories cache when API categories load
+    // This prevents stale category names from being shown when switching between language tabs
+    // The cache key includes apiCategories.length, but if the cache was built before API data arrived,
+    // it can persist wrong category names even after API data loads
     var hasApiCategoriesNow = sidebarState.apiCategories.length > 0;
-    if (hasApiCategoriesNow && !hadApiCategoriesBefore && sidebarState && sidebarState.isOpen) {
+    if (hasApiCategoriesNow) {
         try {
-            // Invalidate the per-language built-categories cache so the
-            // next build does not return the stale partial-state result.
+            // ALWAYS clear the cache when API categories are available
+            // This ensures every language tab rebuilds categories with correct API names
             _sidebarBuiltCategoriesCache = {};
-            var curLang = sidebarState.languages[sidebarState.languageIndex] || {};
-            if (curLang.code !== 'all' && typeof buildCategoriesForLanguage === 'function') {
-                buildCategoriesForLanguage();
+            
+            // If sidebar is open and we're in a category-grouped tab, rebuild immediately
+            if (sidebarState && sidebarState.isOpen) {
+                var curLang = sidebarState.languages[sidebarState.languageIndex] || {};
+                if (curLang.code !== 'all' && typeof buildCategoriesForLanguage === 'function') {
+                    buildCategoriesForLanguage();
+                }
             }
         } catch (eRebuild) {}
     }
@@ -4427,18 +4698,21 @@ function buildCategoriesForLanguage() {
         // languages on first launch" bug.
         var countByGrid = {};
         var countByName = {};
+        var countByNameNormalized = {};
         var explicitCatNames = {};
         filteredChannels.forEach(function (ch) {
             var chGrid = String(ch.grid || ch.gridid || '').trim();
             var rawCat = ch.grtitle || ch.category || ch.genre || '';
             var hasExplicitCategory = !!String(rawCat).trim();
-            var chCat = hasExplicitCategory ? String(rawCat) : 'Miscellaneous';
+            var chCat = hasExplicitCategory ? String(rawCat).trim() : 'Miscellaneous';
+            var chCatKey = normalizeCategoryName(chCat);
             if (chGrid) {
                 countByGrid[chGrid] = (countByGrid[chGrid] || 0) + 1;
             }
             countByName[chCat] = (countByName[chCat] || 0) + 1;
+            countByNameNormalized[chCatKey] = (countByNameNormalized[chCatKey] || 0) + 1;
             if (hasExplicitCategory) {
-                explicitCatNames[chCat] = true;
+                explicitCatNames[chCatKey] = true;
             }
         });
 
@@ -4452,7 +4726,8 @@ function buildCategoriesForLanguage() {
                 if (lower === 'subscribed' || lower === 'all channels' || lower === 'subscribed channels') return;
 
                 var grid = getApiCategoryGrid(cat);
-                var count = grid ? (countByGrid[grid] || 0) : (countByName[name] || 0);
+                var normalizedName = normalizeCategoryName(name);
+                var count = grid ? (countByGrid[grid] || 0) : (countByNameNormalized[normalizedName] || 0);
                 if (count <= 0) return;
 
                 if (!byName[lower]) {
@@ -4469,9 +4744,9 @@ function buildCategoriesForLanguage() {
             // apiCategories is still loading.
             var explicitOnly = Object.keys(countByName)
                 .filter(function (catName) {
-                    var lowerCat = catName.toLowerCase();
+                    var lowerCat = normalizeCategoryName(catName);
                     if (lowerCat === 'subscribed' || lowerCat === 'all channels' || lowerCat === 'subscribed channels') return false;
-                    return !!explicitCatNames[catName];
+                    return !!explicitCatNames[normalizeCategoryName(catName)];
                 })
                 .map(function (catName) {
                     return {
@@ -4492,7 +4767,7 @@ function buildCategoriesForLanguage() {
                 // the moment apiCategories arrives from the API.
                 builtCategories = Object.keys(countByName)
                     .filter(function (catName) {
-                        var lowerCat = catName.toLowerCase();
+                        var lowerCat = normalizeCategoryName(catName);
                         return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
                     })
                     .map(function (catName) {
@@ -5214,7 +5489,7 @@ function filterChannelsByCategory() {
             return chGrid === String(selectedCat.grid);
         }
         var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
-        return chCat === selectedCat.name;
+        return normalizeCategoryName(chCat) === normalizeCategoryName(selectedCat.name);
     });
 
     if (isSubscribedSidebarContext() || isAllSidebarContext()) applySidebarChannelSort();
@@ -5240,7 +5515,7 @@ function getChannelsForCategoryAtIndex(catIdx) {
             return chGrid === String(selectedCat.grid);
         }
         var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
-        return chCat === selectedCat.name;
+        return normalizeCategoryName(chCat) === normalizeCategoryName(selectedCat.name);
     });
     if (isSubscribedSidebarContext() || isAllSidebarContext()) {
         list = list.slice();
@@ -5470,6 +5745,10 @@ function openSidebar() {
     // Without this, languageIndex defaults to 0 (All Channels) on sidebar reopen.
     applyPreferredSidebarLanguage();
 
+    // ✅ CRITICAL FIX: Clear all expansions BEFORE restoring saved state
+    // This prevents buildCategoriesForLanguage() from re-expanding stale categories
+    clearAllSidebarCategoryExpansions();
+
     // Preserve last focused category/channel on reopen; only fallback to playback alignment when no saved state exists.
     var languageStateKey = getCurrentLanguageStateKey();
     var hasSavedState = !!(sidebarState.languageUiState && sidebarState.languageUiState[languageStateKey]);
@@ -5482,9 +5761,9 @@ function openSidebar() {
     } else {
         alignSidebarToCurrentPlayback();
     }
-    saveCurrentLanguageUiState();
-
-    // Issue 3 fix: Clear all expansions before setting new focus
+    
+    // ✅ CRITICAL: buildCategoriesForLanguage() calls restoreCurrentLanguageUiState() internally
+    // which RE-EXPANDS saved categories. We must clear them AGAIN to prevent stale expansions.
     clearAllSidebarCategoryExpansions();
 
     // Keep focused row aligned to currently playing channel even when last-saved state was category-level.
@@ -5493,10 +5772,13 @@ function openSidebar() {
     // may have a different category open, sidebarState.channels does not contain the current channel,
     // and findCurrentChannelInSidebar returns -1 for the early focus pass.
     var syncedCatIdx = getCurrentPlayingCategoryIndex();
+    var focusCategoryIndex = Math.max(0, Math.min(sidebarState.categoryIndex, Math.max(0, (sidebarState.categories || []).length - 1)));
+    var playingChannelFound = false;
     if (syncedCatIdx >= 0) {
         // Handle grouped categories (existing logic)
         if (sidebarState.categories && sidebarState.categories.length > 0 && syncedCatIdx < sidebarState.categories.length) {
             var clampedSyncedCatIdx = Math.max(0, Math.min(syncedCatIdx, sidebarState.categories.length - 1));
+            focusCategoryIndex = clampedSyncedCatIdx;
             if (typeof setSidebarCategoryExpanded === 'function' && !isSidebarCategoryExpanded(clampedSyncedCatIdx)) {
                 setSidebarCategoryExpanded(clampedSyncedCatIdx, true);
                 if (typeof renderCategoriesList === 'function') renderCategoriesList();
@@ -5519,14 +5801,26 @@ function openSidebar() {
                 sidebarState.channels = getFilteredChannelsByLanguage();
                 sidebarState.languageIndex = originalLangIndex;
             }
+            focusCategoryIndex = Math.max(0, Math.min(sidebarState.categoryIndex, Math.max(0, (sidebarState.categories || []).length - 1)));
             if (typeof renderChannelsList === 'function') renderChannelsList();
         }
         var syncedChIdx = findCurrentChannelInSidebar();
         if (syncedChIdx >= 0) {
             sidebarState.currentLevel = 'channels';
-            sidebarState.categoryIndex = clampedSyncedCatIdx;
+            sidebarState.categoryIndex = focusCategoryIndex;
             sidebarState.channelIndex = Math.max(0, Math.min(syncedChIdx, sidebarState.channels.length - 1));
+            playingChannelFound = true;
         }
+    }
+    
+    // ✅ CRITICAL: If we found the playing channel, ensure focus is set on it immediately
+    if (playingChannelFound && sidebarState.isOpen) {
+        setTimeout(function () {
+            if (sidebarState.isOpen && sidebarState.channelIndex >= 0) {
+                var catIdx = Math.max(0, Math.min(sidebarState.categoryIndex, (sidebarState.categories || []).length - 1));
+                focusChannelItem(sidebarState.channelIndex, catIdx);
+            }
+        }, 0);
     }
 
     // Make sidebar visible only after alignment to avoid intermediate All Channels flicker.
@@ -5623,6 +5917,12 @@ function closeSidebar() {
         updateLanguageDisplay();
         buildCategoriesForLanguage();
     }
+
+    // Transient expansion history should not survive a menu close.
+    // Reopening the sidebar should start from the current committed context,
+    // not from the last expanded subcategory stack or remembered row position.
+    clearAllSidebarCategoryExpansions();
+    sidebarState.categoryChannelIndexMap = {};
 
     // ✅ CRITICAL: Persist current sidebar state before closing
     // This ensures when user reopens sidebar, they return to the exact same position
@@ -6675,6 +6975,14 @@ function playChannelFromSidebar(channel) {
     hidePageLoadingOverlay();
 
     _committedNavigationFromSidebarOpen = true;
+    
+    // ✅ CRITICAL: Save the selected language and category so CH+/CH- uses them even when sidebar is closed
+    _lastSelectedLanguageIndex = sidebarState.languageIndex;
+    // For flat list (All/Subscribed with no categories), set category to -1
+    // For category-grouped languages, save the actual category index
+    var isLanguageFlatList = (sidebarState.categories.length === 0);
+    _lastSelectedCategoryIndex = isLanguageFlatList ? -1 : sidebarState.categoryIndex;
+    
     applySidebarLanguageToZapListAndSession(channel);
 
     var wasAllChannelsContext = isAllSidebarContext();

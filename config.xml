@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://yourdomain/BBNLIPTV"
-    version="1.0.4"
+        id="ph3Ha7N8EQ.BBNLIPTV"
+    version="1.0.5"
         viewmodes="maximized">
     
     <!-- Samsung TV profile -->

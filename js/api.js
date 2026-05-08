@@ -1094,10 +1094,60 @@ window.OperatorDefaults = {
         // Default fallback: 'subscribed' (preserve historical behavior)
     },
 
+    _normalizeDefaultCategory: function(value) {
+        var raw = String(value || '').trim().toLowerCase();
+        if (!raw) return '';
+        if (raw === 'all' || raw === 'all channels' || raw === 'all_channels') return 'all';
+        if (raw === 'subscribed' || raw === 'subscribed channels' || raw === 'subs' || raw === 'subscribed_channels') return 'subscribed';
+        return '';
+    },
+
+    _getUserOperatorId: function(userRecord) {
+        if (!userRecord || typeof userRecord !== 'object') return '';
+        var candidates = [
+            userRecord.operatorId,
+            userRecord.operator_id,
+            userRecord.opid,
+            userRecord.op_id,
+            userRecord.operator,
+            userRecord.operator_code,
+            userRecord.operatorcode,
+            userRecord.opcode,
+            userRecord.op_code
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            var candidate = String(candidates[i] || '').trim();
+            if (candidate) return candidate;
+        }
+        return '';
+    },
+
     // Extract operator default preference from user record
     getOperatorDefaultPreference: function(userRecord) {
         if (!userRecord || typeof userRecord !== 'object') {
             return 'subscribed'; // Default fallback
+        }
+
+        // Some user payloads expose a direct category hint instead of a yes/no flag.
+        var categoryCandidates = [
+            userRecord.default_category,
+            userRecord.defaultCategory,
+            userRecord.op_default_category,
+            userRecord.opDefaultCategory,
+            userRecord.preferred_category,
+            userRecord.preferredCategory,
+            userRecord.home_category,
+            userRecord.homeCategory
+        ];
+        for (var c = 0; c < categoryCandidates.length; c++) {
+            var normalizedCategory = this._normalizeDefaultCategory(categoryCandidates[c]);
+            if (normalizedCategory) return normalizedCategory;
+        }
+
+        var operatorId = this._getUserOperatorId(userRecord);
+        if (operatorId) {
+            var mappedCategory = this._normalizeDefaultCategory(this.OPERATOR_DEFAULT_CATEGORY[operatorId]);
+            if (mappedCategory) return mappedCategory;
         }
 
         // Check multiple possible field names for operator default preference
