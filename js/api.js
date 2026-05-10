@@ -759,7 +759,8 @@ const CacheManager = {
         LANGUAGES: 'bbnl_languages_cache',
         FOFI_PLAYED: 'fofi_autoplay_done',  // Uses sessionStorage - consistent across all files
         LAST_CHANNEL: 'bbnl_last_channel',
-        EXPIRING_CHANNELS: 'bbnl_expiring_cache'
+        EXPIRING_CHANNELS: 'bbnl_expiring_cache',
+        CHANNEL_METADATA: 'bbnl_channels_metadata'
     },
 
     // Default cache expiry times (in milliseconds)
@@ -1182,6 +1183,22 @@ window.OperatorDefaults = {
     // Get default category for current user
     getDefaultCategoryForCurrentUser: function() {
         try {
+            // Priority 1: Metadata flag from chnl_data API (subs_categ_change)
+            if (typeof CacheManager !== 'undefined') {
+                var metadata = CacheManager.get(CacheManager.KEYS.CHANNEL_METADATA, true) || CacheManager.get(CacheManager.KEYS.CHANNEL_METADATA);
+                if (metadata && typeof metadata === 'object') {
+                    var flag = metadata.subs_categ_change;
+                    if (flag !== undefined && flag !== null) {
+                        // Normalize truthy values (boolean true or string "true")
+                        var isTrue = (flag === true || String(flag).trim().toLowerCase() === 'true');
+                        // subs_categ_change: true -> "All Channels"
+                        // subs_categ_change: false -> "Subscribed Channels"
+                        return isTrue ? 'all' : 'subscribed';
+                    }
+                }
+            }
+
+            // Priority 2: User record hint
             var userRec = (typeof AuthAPI !== 'undefined' && AuthAPI.getUserData) ? 
                           AuthAPI.getUserData() : null;
             
@@ -1190,7 +1207,7 @@ window.OperatorDefaults = {
             }
         } catch (e) {}
         
-        return 'all'; // Default fallback
+        return 'subscribed'; // Default fallback
     },
 
     // Get language index based on operator preference
@@ -3083,6 +3100,21 @@ const ChannelsAPI = {
             // Fresh API data should replace stale cached image URL references.
             invalidateImageUrlCaches();
             CacheManager.set(CacheManager.KEYS.CHANNEL_LIST, channels, CacheManager.EXPIRY.CHANNEL_LIST);
+
+            // Extract and cache metadata (others object)
+            // Can be at root: response.others OR inside body: response.body[0].others
+            var metadata = null;
+            if (response && response.others) {
+                metadata = response.others;
+            } else if (response && response.body && Array.isArray(response.body) && response.body.length > 0 && response.body[0].others) {
+                metadata = response.body[0].others;
+            }
+
+            if (metadata && typeof metadata === 'object') {
+                try {
+                    CacheManager.set(CacheManager.KEYS.CHANNEL_METADATA, metadata, CacheManager.EXPIRY.CHANNEL_LIST);
+                } catch (eMeta) {}
+            }
 
             // ==========================================
             // DEBUG: Log exactly what logo URLs API returned

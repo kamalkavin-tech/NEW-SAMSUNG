@@ -15,7 +15,7 @@ echo.
 setlocal enabledelayedexpansion
 
 REM Set paths
-set CERT_DIR=C:\Users\bavis\SamsungCertificate\NEWBBNL
+set CERT_DIR=C:\Users\bavis\Downloads\BBNLCERTIFICATE-20260510T133326Z-3-001\BBNLCERTIFICATE
 set PROJECT_DIR=d:\Github Repo\NEW-SAMSUNG
 set AUTHOR_CERT=%CERT_DIR%\author.p12
 set DISTRIBUTOR_CERT=%CERT_DIR%\distributor.p12
