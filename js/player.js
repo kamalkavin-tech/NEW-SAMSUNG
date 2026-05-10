@@ -72,10 +72,9 @@
 // Prevents app from being stuck on "Loading Channel..." screen
 // ==========================================
 (function playerInitializationRecovery() {
-    // Force remove loading screen after 8 seconds max
+    // Force remove loading screen after 3 seconds max
     // If player initialization completes before timeout, this will be cleared
-    // Reduced from 15s → 8s: 15s is too long for users to wait on a black screen
-    var RECOVERY_TIMEOUT_MS = 8000;
+    var RECOVERY_TIMEOUT_MS = 3000;
     var recoveryTimer = setTimeout(function() {
         console.warn('[PLAYER] Initialization timeout at ' + RECOVERY_TIMEOUT_MS + 'ms - forcing recovery');
         console.error('PLAYER');
@@ -176,10 +175,12 @@ var _activeIntervals = new Set();
 
 function registerTimer(id) {
     _activeTimers.add(id);
+    return id;
 }
 
 function registerInterval(id) {
     _activeIntervals.add(id);
+    return id;
 }
 
 function clearTimer(id) {
@@ -1299,6 +1300,11 @@ function startSimpleAutoResumeWatcher() {
             // ONLINE -> OFFLINE TRANSITION
             _simpleWatcherWasOffline = true;
             _simpleWatcherSavedChannel = _lastAttemptedChannel;
+            // Sync network flags so the poller, watchdog, and verified-resume
+            // paths all recognize this as a network-paused state.
+            _pausedByNetwork = true;
+            _lastNetworkErrorTime = Date.now();
+            _lastNetworkOnline = false;
             // Cancel any pending resume timer from a quick blip earlier.
             if (_simpleWatcherResumeTimer) {
                 clearTimer(_simpleWatcherResumeTimer);
@@ -1321,6 +1327,9 @@ function startSimpleAutoResumeWatcher() {
                     );
                 } catch (eShow) {}
             }
+            // Start the dedicated resume poller so retries keep firing
+            // even if the simple watcher settle-delay fails.
+            try { startPausedByNetworkResumePoller(); } catch (ePoll) {}
             return;
         }
 
@@ -1887,6 +1896,9 @@ function initializePlayerApp() {
     if (_playerAppInitialized) return;
     _playerAppInitialized = true;
     console.log('[PLAYER] Player initialization started');
+
+    // Hide loading overlay immediately so key events are never blocked.
+    hidePageLoadingOverlay();
 
     // Issue 1 (cold launch subscription refresh): when the player page loads
     // (relaunch, BFCache restore, or direct deep link), make sure the cached
@@ -4134,11 +4146,21 @@ function saveCurrentLanguageUiState() {
     var key = getCurrentLanguageStateKey();
     if (!key) return;
 
-    // ✅ CRITICAL FIX: Never save expansion history
-    // Expansions should not persist across sidebar close/open cycles
-    // Each time you reopen the sidebar, categories start COLLAPSED
+    // Save currently expanded categories by NAME so they survive
+    // API-driven category reordering when switching tabs (◄ ►).
+    // The playing channel's category is always re-expanded on open,
+    // so this primarily preserves user-initiated expansions during
+    // tab switching within the same sidebar session.
     var expandedNames = [];
     var expandedName = '';
+    var expIndices = getSortedExpandedCategoryIndices();
+    for (var ei = 0; ei < expIndices.length; ei++) {
+        var eCat = sidebarState.categories[expIndices[ei]];
+        if (eCat && eCat.name) {
+            expandedNames.push(String(eCat.name));
+            if (!expandedName) expandedName = String(eCat.name);
+        }
+    }
 
     // RC-3: also save the focused category by NAME so restore survives an
     // API-driven reordering / shrinking of the category list. The numeric
@@ -4155,6 +4177,21 @@ function saveCurrentLanguageUiState() {
         currentLevel: sidebarState.currentLevel,
         categoryChannelIndexMap: sidebarState.categoryChannelIndexMap
     };
+}
+
+/**
+ * Wipe expansion history for all language tabs.
+ * Call this when the sidebar is CLOSED to ensure history doesn't survive.
+ */
+function clearAllLanguageUiExpansionHistory() {
+    if (!sidebarState.languageUiState) return;
+    Object.keys(sidebarState.languageUiState).forEach(function (key) {
+        var state = sidebarState.languageUiState[key];
+        if (state) {
+            state.expandedCategoryNames = [];
+            state.expandedCategoryName = '';
+        }
+    });
 }
 
 function restoreCurrentLanguageUiState() {
@@ -4234,11 +4271,11 @@ function applyPreferredSidebarLanguage() {
             if (typeof OperatorDefaults !== 'undefined' && OperatorDefaults.getLanguageIndexForCurrentUser) {
                 sidebarState.languageIndex = OperatorDefaults.getLanguageIndexForCurrentUser();
             } else {
-                // Fallback to original logic if OperatorDefaults not available
-                sidebarState.languageIndex = 1; // Default to "Subscribed Channels"
+                // Fallback: default to "All Channels" (index 0)
+                sidebarState.languageIndex = 0;
             }
         } catch (eOpDefault) {
-            sidebarState.languageIndex = 1; // Fallback to "Subscribed Channels"
+            sidebarState.languageIndex = 0; // Fallback to "All Channels"
         }
         updateLanguageDisplay();
         return;
@@ -4355,10 +4392,11 @@ async function initializeSidebar() {
     // Setup language arrow navigation
     setupLanguageArrowNavigation();
 
-    // Load available channels
-    loadSidebarChannels();
+    // Load available channels (WAIT for hydration)
+    await loadSidebarChannels();
 
     // Fix Issue: Sync sidebar with current playing channel immediately on launch
+    // Now that loadSidebarChannels is awaited, this will have valid data.
     alignSidebarToCurrentPlayback();
     saveCurrentLanguageUiState();
 }
@@ -4526,6 +4564,35 @@ function changeLanguage(direction) {
     // or sessionStorage here — user may be previewing English while still watching Subscribed;
     // CH+/- stays on the last committed list until they OK a channel (see playChannelFromSidebar).
     buildCategoriesForLanguage();
+
+    // Auto-expand the category containing the currently playing channel so it
+    // remains visible and focused when the user switches tabs (◄ ►). Without
+    // this, switching to another tab and back would leave all categories collapsed.
+    try {
+        var playingCatIdx = getCurrentPlayingCategoryIndex();
+        if (playingCatIdx >= 0 && playingCatIdx < sidebarState.categories.length) {
+            if (!isSidebarCategoryExpanded(playingCatIdx)) {
+                setSidebarCategoryExpanded(playingCatIdx, true);
+                renderCategoriesList();
+            }
+            // Load channels for the playing channel's category and focus
+            sidebarState.channels = getChannelsForCategoryAtIndex(playingCatIdx) || [];
+            renderChannelsList();
+            var playingChIdx = findCurrentChannelInSidebar();
+            if (playingChIdx >= 0) {
+                sidebarState.categoryIndex = playingCatIdx;
+                sidebarState.channelIndex = playingChIdx;
+                sidebarState.currentLevel = 'channels';
+                setTimeout(function () {
+                    if (sidebarState.isOpen) {
+                        focusChannelItem(sidebarState.channelIndex, sidebarState.categoryIndex);
+                    }
+                }, 0);
+            }
+        }
+    } catch (eAutoExpand) {}
+
+    saveCurrentLanguageUiState();
 }
 
 /**
@@ -4826,6 +4893,29 @@ function buildCategoriesForLanguage() {
     // Restore language-specific expanded category/channel state.
     restoreCurrentLanguageUiState();
 
+    // ✅ CRITICAL: Ensure the category containing the currently playing channel
+    // is expanded even if it wasn't in the saved UI state for this language.
+    // This maintains visibility and highlight consistency across tab switches.
+    try {
+        var playingCatIdx = getCurrentPlayingCategoryIndex();
+        if (playingCatIdx >= 0 && playingCatIdx < sidebarState.categories.length) {
+            setSidebarCategoryExpanded(playingCatIdx, true);
+            
+            // RC-5: ensure the state reflects this active category so focus logic
+            // below finds the correct channel in the expanded list.
+            sidebarState.categoryIndex = playingCatIdx;
+            
+            // Populate channels for this category so they are ready for render and focus
+            sidebarState.channels = getChannelsForCategoryAtIndex(playingCatIdx) || [];
+            
+            var pChIdx = findCurrentChannelInSidebar();
+            if (pChIdx >= 0) {
+                sidebarState.channelIndex = pChIdx;
+                sidebarState.currentLevel = 'channels';
+            }
+        }
+    } catch (eExp) {}
+
     renderCategoriesList();
     renderChannelsList();
 
@@ -4833,7 +4923,8 @@ function buildCategoriesForLanguage() {
     // 1. If a category is expanded, visually restore the 'active' class for expanded category
     // 2. Ensure focus is set to a valid element
     if (sidebarState.isOpen) {
-        if (getSortedExpandedCategoryIndices().length > 0) {
+        var expIndices = getSortedExpandedCategoryIndices();
+        if (expIndices.length > 0) {
             if (sidebarState.channels && sidebarState.channels.length > 0 && sidebarState.currentLevel === 'channels') {
                 setTimeout(function () {
                     if (sidebarState.isOpen) {
@@ -4892,6 +4983,7 @@ function getCurrentPlayingChannelObject() {
 function areSameChannel(a, b) {
     if (!a || !b) return false;
 
+    // 1) Primary check: ID fields
     var aIds = [
         a.chid, a.channelid, a.id,
         a.channelno, a.urno, a.chno, a.ch_no
@@ -4903,13 +4995,22 @@ function areSameChannel(a, b) {
     ].map(function (v) { return String(v || '').trim(); }).filter(Boolean);
 
     for (var i = 0; i < aIds.length; i++) {
-        if (bIds.indexOf(aIds[i]) !== -1) return true;
+        if (bIds.indexOf(aIds[i]) !== -1) {
+            // ID Match: verify language tab context if available to prevent incorrect
+            // jumps between unrelated channels that share a channel number (e.g. Tamil #1 vs Hindi #1).
+            if (a.language && b.language && String(a.language).trim().toLowerCase() !== String(b.language).trim().toLowerCase()) {
+                continue;
+            }
+            return true;
+        }
     }
 
+    // 2) Secondary check: Name match
     var aName = String(a.chtitle || a.channel_name || a.chname || '').trim().toLowerCase();
     var bName = String(b.chtitle || b.channel_name || b.chname || '').trim().toLowerCase();
     if (aName && bName && aName === bName) return true;
 
+    // 3) Final fallback: Stream URL match
     var aStream = String(a.streamlink || a.channel_url || a.url || '').trim().toLowerCase();
     var bStream = String(b.streamlink || b.channel_url || b.url || '').trim().toLowerCase();
     if (aStream && bStream && aStream === bStream) return true;
@@ -4935,11 +5036,15 @@ function getCurrentPlayingChannelId() {
     return current.channelno || current.urno || current.chid || current.chno || current.ch_no || current.id || '';
 }
 
+/**
+ * Get the category index of the currently playing channel within the CURRENT language tab.
+ * Returns -1 if the channel is not found in the currently selected tab's categories.
+ */
 function getCurrentPlayingCategoryIndex() {
     var current = getCurrentPlayingChannelObject();
     if (!current) return -1;
     
-    // Check grouped categories first (existing logic)
+    // Check grouped categories first
     if (Array.isArray(sidebarState.categories) && sidebarState.categories.length > 0) {
         var langFiltered = getFilteredChannelsByLanguage();
 
@@ -4952,7 +5057,7 @@ function getCurrentPlayingCategoryIndex() {
             }
         }
         if (matched) {
-            // 1) Prefer grid-based mapping (most reliable when API categories provide grid ids).
+            // 1) Prefer grid-based mapping
             var matchedGrid = String(matched.grid || matched.gridid || '').trim();
             if (matchedGrid) {
                 for (var g = 0; g < sidebarState.categories.length; g++) {
@@ -4973,19 +5078,26 @@ function getCurrentPlayingCategoryIndex() {
         }
     }
     
-    // Check language categories (new logic for Issue 2)
+    return -1;
+}
+
+/**
+ * Get the language tab index of the currently playing channel.
+ */
+function getCurrentPlayingLanguageIndex() {
+    var current = getCurrentPlayingChannelObject();
+    if (!current) return -1;
+
     if (current.language && sidebarState.languages && sidebarState.languages.length > 0) {
         var langIdx = sidebarState.languages.findIndex(function(lang) {
-            return lang.name === current.language || 
-                   lang.code === current.language ||
-                   lang.name === current.lang ||
-                   lang.code === current.lang;
+            var lName = String(lang.name || '').toLowerCase();
+            var lCode = String(lang.code || '').toLowerCase();
+            var cLang = String(current.language || '').toLowerCase();
+            var cLCode = String(current.lang || '').toLowerCase();
+            return lName === cLang || lCode === cLang || lName === cLCode || lCode === cLCode;
         });
-        if (langIdx >= 0) {
-            return langIdx;
-        }
+        return langIdx;
     }
-    
     return -1;
 }
 
@@ -5540,32 +5652,41 @@ function syncSidebarStateFromChannelButton(el) {
 
 /**
  * Load channels for sidebar (uses ALL channels — subscribed + unsubscribed)
- * Sidebar displays all channels; playback is controlled by subscription check in setupPlayer.
+ * Returns a Promise that resolves when channels are ready.
  */
 function loadSidebarChannels() {
-    // Use unfiltered list for sidebar (all channels visible)
-    ensureSidebarAllChannelsCache();
-    var channelsForSidebar = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
-    if (!channelsForSidebar || channelsForSidebar.length === 0) {
-        hydrateSidebarAllChannelsCache().then(function () {
-            if (sidebarState && sidebarState.isOpen) {
-                buildCategoriesForLanguage();
-            }
-        });
-        return;
-    }
+    return new Promise(function (resolve) {
+        // Use unfiltered list for sidebar (all channels visible)
+        ensureSidebarAllChannelsCache();
+        var channelsForSidebar = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+        
+        if (!channelsForSidebar || channelsForSidebar.length === 0) {
+            hydrateSidebarAllChannelsCache().then(function () {
+                // Always build categories after hydration — even during init
+                // when the sidebar isn't open yet. Skipping this when !isOpen
+                // was the root cause of missing categories on first launch.
+                if (sidebarState) {
+                    buildCategoriesForLanguage();
+                }
+                resolve();
+            }).catch(function () {
+                resolve();
+            });
+            return;
+        }
 
-    // Cache ALL channels for sidebar filtering (language/category)
-    sidebarState.allChannelsCache = channelsForSidebar.slice();
-    sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
-    invalidateSidebarDerivedCaches();
+        // Cache ALL channels for sidebar filtering (language/category)
+        sidebarState.allChannelsCache = channelsForSidebar.slice();
+        sidebarState.allChannelsCacheVersion = (sidebarState.allChannelsCacheVersion || 0) + 1;
+        invalidateSidebarDerivedCaches();
 
-    // Preload a capped set so visible rows load faster without network saturation.
-    prefetchSidebarChannelLogos(channelsForSidebar, 120);
+        // Preload a capped set so visible rows load faster without network saturation.
+        prefetchSidebarChannelLogos(channelsForSidebar, 120);
 
-    // Build categories for current language
-    buildCategoriesForLanguage();
-
+        // Build categories for current language
+        buildCategoriesForLanguage();
+        resolve();
+    });
 }
 
 /**
@@ -5762,9 +5883,11 @@ function openSidebar() {
         alignSidebarToCurrentPlayback();
     }
     
-    // ✅ CRITICAL: buildCategoriesForLanguage() calls restoreCurrentLanguageUiState() internally
-    // which RE-EXPANDS saved categories. We must clear them AGAIN to prevent stale expansions.
-    clearAllSidebarCategoryExpansions();
+    // NOTE: Do NOT clear expansions here — buildCategoriesForLanguage →
+    // restoreCurrentLanguageUiState correctly restores saved expansions.
+    // The playing channel's category is also auto-expanded below (line 5825+).
+    // A second clearAll here was the root cause of the "subcategory closes
+    // when switching back" bug.
 
     // Keep focused row aligned to currently playing channel even when last-saved state was category-level.
     // Issue 3 fix: also expand the playing channel's category and refresh the channels list so the
@@ -5922,6 +6045,7 @@ function closeSidebar() {
     // Reopening the sidebar should start from the current committed context,
     // not from the last expanded subcategory stack or remembered row position.
     clearAllSidebarCategoryExpansions();
+    clearAllLanguageUiExpansionHistory();
     sidebarState.categoryChannelIndexMap = {};
 
     // ✅ CRITICAL: Persist current sidebar state before closing
@@ -7699,46 +7823,40 @@ function playChannelByLCNFromPlayer(lcn) {
             }
         } catch (eIdx) {}
 
-        // BUG-1 fix: switch the menubar language tab to the new channel's
-        // language. If the user was on Hindi and typed a Kannada channel,
-        // the sidebar must reopen on the Kannada tab so the channel can be
-        // found in the filter and highlighted. We persist the choice to
-        // sessionStorage so applyPreferredSidebarLanguage picks it up on
-        // the next open. We do NOT switch when the current tab is sticky
-        // (All Channels / Subscribed Channels) — those tabs already
-        // contain the channel and switching would be wrong.
+        // Switch the menubar category based on the searched channel's
+        // subscription status:
+        //   - Subscribed channel  → open "Subscribed Channels" tab
+        //   - Unsubscribed channel → open "All Channels" tab
+        // This ensures the sidebar always shows the correct category
+        // when opened after a number-search so the channel is visible
+        // and highlighted in the list.
         try {
             if (sidebarState && Array.isArray(sidebarState.languages) && sidebarState.languages.length > 0) {
-                var curLang = sidebarState.languages[sidebarState.languageIndex] || {};
-                var curCode = String(curLang.code || '').toLowerCase();
-                var isStickyTab = (curCode === 'all' || curCode === 'subscribed');
-                if (!isStickyTab) {
-                    var chLangId = String(channel.langid || channel.lang_id || '').trim();
-                    var chLangName = String(channel.lalng || channel.langtitle || channel.langname || channel.language || channel.lang || '').trim().toLowerCase();
-                    var matchedLangIdx = -1;
-                    for (var li = 0; li < sidebarState.languages.length; li++) {
-                        var lObj = sidebarState.languages[li];
-                        if (!lObj) continue;
-                        var lCode = String(lObj.code || '').toLowerCase();
-                        if (lCode === 'all' || lCode === 'subscribed') continue;
-                        var lLangId = String(lObj.langid || '').trim();
-                        var lName = String(lObj.name || '').trim().toLowerCase();
-                        if (chLangId && lLangId && chLangId === lLangId) { matchedLangIdx = li; break; }
-                        if (chLangName && lName && chLangName === lName) { matchedLangIdx = li; break; }
+                var isSubscribed = isChannelMarkedSubscribed(channel);
+                var targetCode = isSubscribed ? 'subscribed' : 'all';
+                var targetIdx = -1;
+
+                for (var li = 0; li < sidebarState.languages.length; li++) {
+                    var lObj = sidebarState.languages[li];
+                    if (!lObj) continue;
+                    var lCode = String(lObj.code || '').toLowerCase();
+                    if (lCode === targetCode) {
+                        targetIdx = li;
+                        break;
                     }
-                    if (matchedLangIdx >= 0 && matchedLangIdx !== sidebarState.languageIndex) {
-                        sidebarState.languageIndex = matchedLangIdx;
-                        var newLang = sidebarState.languages[matchedLangIdx] || {};
-                        try {
-                            sessionStorage.setItem('selectedLanguageId', String(newLang.langid || newLang.code || ''));
-                            sessionStorage.setItem('selectedLanguageName', String(newLang.name || ''));
-                        } catch (eSs) {}
-                        // Invalidate per-language built caches so the next open
-                        // builds categories for the new language using fresh data.
-                        try {
-                            if (typeof updateLanguageDisplay === 'function') updateLanguageDisplay();
-                        } catch (eUpd) {}
-                    }
+                }
+
+                if (targetIdx >= 0 && targetIdx !== sidebarState.languageIndex) {
+                    sidebarState.languageIndex = targetIdx;
+                    var targetLang = sidebarState.languages[targetIdx] || {};
+                    try {
+                        sessionStorage.setItem('selectedLanguageId', String(targetLang.langid || targetLang.code || ''));
+                        sessionStorage.setItem('selectedLanguageName', String(targetLang.name || ''));
+                    } catch (eSs) {}
+                    // Rebuild sidebar categories for the newly selected tab.
+                    try {
+                        if (typeof updateLanguageDisplay === 'function') updateLanguageDisplay();
+                    } catch (eUpd) {}
                 }
             }
         } catch (eLangSwitch) {}

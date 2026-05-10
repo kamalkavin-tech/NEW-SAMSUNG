@@ -1125,7 +1125,7 @@ window.OperatorDefaults = {
     // Extract operator default preference from user record
     getOperatorDefaultPreference: function(userRecord) {
         if (!userRecord || typeof userRecord !== 'object') {
-            return 'subscribed'; // Default fallback
+            return 'all'; // Default fallback
         }
 
         // Some user payloads expose a direct category hint instead of a yes/no flag.
@@ -1176,7 +1176,7 @@ window.OperatorDefaults = {
             }
         }
 
-        return 'subscribed'; // Default fallback
+        return 'all'; // Default fallback
     },
 
     // Get default category for current user
@@ -1190,7 +1190,7 @@ window.OperatorDefaults = {
             }
         } catch (e) {}
         
-        return 'subscribed'; // Default fallback
+        return 'all'; // Default fallback
     },
 
     // Get language index based on operator preference
