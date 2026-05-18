@@ -1560,7 +1560,8 @@ function _setupLazyImageLoading(scrollContainer) {
 // ==========================================
 
 function createChannelCard(ch, loadImmediate, channelIdx) {
-    const chName = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
+    const chNameRaw = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
+    const chName = (typeof decodeHtmlEntities === 'function') ? decodeHtmlEntities(chNameRaw) : chNameRaw;
     const chLogo = getChannelCardLogo(ch);
     const streamLink = ch.streamlink || ch.channel_url || "";
     const chNo = String(ch.channelno || ch.urno || ch.chno || ch.ch_no || "").trim();
@@ -2367,6 +2368,7 @@ function handleEnter(el) {
 
         const streamUrl = el.dataset.url;
         const channelName = el.dataset.name;
+        const channelNameDecoded = (typeof decodeHtmlEntities === 'function') ? decodeHtmlEntities(channelName) : channelName;
 
         if (!streamUrl || streamUrl.trim() === "") {
             return;
@@ -2374,9 +2376,9 @@ function handleEnter(el) {
 
         // Build a lightweight payload for fast player handoff.
         // Large raw channel objects can slow JSON serialization on big "All Channels" lists.
-        var channel = {
-            chtitle: channelName,
-            channel_name: channelName,
+            var channel = {
+            chtitle: channelNameDecoded,
+            channel_name: channelNameDecoded,
             streamlink: streamUrl,
             channel_url: streamUrl,
             chlogo: el.dataset.logo || "",

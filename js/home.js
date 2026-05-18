@@ -185,11 +185,16 @@ function normalizeHomeAssetUrl(rawUrl) {
 }
 
 function extractFoFiLogoPath(response) {
-    if (!response) return '';
+    if (!response) {
+        BBNLLogger.warn("[HOME] extractFoFiLogoPath: response is null/undefined");
+        return '';
+    }
 
     if (response.body && typeof response.body === 'object' && !Array.isArray(response.body)) {
         var bodyPath = response.body.logo_path || response.body.logo || response.body.logopath || response.body.path || '';
-        if (bodyPath) return String(bodyPath).trim();
+        if (bodyPath) {
+            return String(bodyPath).trim();
+        }
     }
 
     if (response.body && Array.isArray(response.body) && response.body.length > 0) {
@@ -199,35 +204,75 @@ function extractFoFiLogoPath(response) {
     }
 
     var directPath = response.logo_path || response.logo || response.logopath || response.path || '';
-    return String(directPath || '').trim();
+    if (directPath) return String(directPath).trim();
+    
+    BBNLLogger.warn("[HOME] extractFoFiLogoPath: no valid logo path found in API response");
+    return '';
 }
 
-function showFoFiLogo(logoUrl) {
+function showFoFiLogo(logoUrl, skipNormalize) {
     var logoImg = document.getElementById('fofitv-logo');
     var fallbackText = document.getElementById('brand-text-fallback');
     if (!logoImg) return false;
 
-    var resolved = normalizeHomeAssetUrl(logoUrl);
+    // CRITICAL: Only normalize once. Cache stores raw API path, not normalized URL
+    var resolved = skipNormalize ? logoUrl : normalizeHomeAssetUrl(logoUrl);
     if (!resolved) {
+        BBNLLogger.debug("[HOME] Logo normalization returned empty path");
         return false;
     }
 
+    // Validate URL structure before attempting to load
+    if (!/^https?:\/\//.test(resolved)) {
+        BBNLLogger.warn("[HOME] Logo URL is not a valid HTTP(S) URL: " + resolved.substring(0, 50));
+        return false;
+    }
+
+    // Clear any existing retry attempts on this element
+    try { logoImg.removeAttribute('data-img-retry-attempt'); } catch (e) {}
+
+    var loadSucceeded = false;
+    var timeoutId = null;
+
+    // onerror: show fallback
     logoImg.onerror = function () {
-        this.removeAttribute('src');
+        loadSucceeded = false;
+        if (timeoutId) clearTimeout(timeoutId);
+        try { this.removeAttribute('src'); } catch (e) {}
         this.style.display = 'none';
         if (fallbackText) fallbackText.style.display = 'block';
+        BBNLLogger.debug("[HOME] Logo failed to load, showing fallback");
     };
 
+    // onload: mark cached and show image
     logoImg.onload = function () {
+        loadSucceeded = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        try {
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
+        } catch (e) {}
+        this.style.display = 'block';
+        if (fallbackText) fallbackText.style.display = 'none';
+        BBNLLogger.debug("[HOME] Logo loaded successfully: " + this.src.substring(0, 50));
     };
 
+    // Set image source (prefer BBNL_API helper when available)
     if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-        BBNL_API.setImageSource(logoImg, resolved);
+        BBNL_API.setImageSource(logoImg, resolved, { priority: true });
     } else {
         logoImg.src = resolved;
     }
-    logoImg.style.display = 'block';
-    if (fallbackText) fallbackText.style.display = 'none';
+
+    // If image hasn't loaded within timeout, show fallback (reduced to 2.5s for TV networks)
+    timeoutId = setTimeout(function () {
+        if (!loadSucceeded) {
+            try { logoImg.removeAttribute('src'); } catch (e) {}
+            logoImg.style.display = 'none';
+            if (fallbackText) fallbackText.style.display = 'block';
+            BBNLLogger.warn("[HOME] Logo load timeout after 2500ms, showing fallback");
+        }
+    }, 2500);
+
     return true;
 }
 
@@ -1495,7 +1540,8 @@ function renderChannelsInHomeGrid(channels) {
     var fragment = document.createDocumentFragment();
 
     channels.forEach(function (channel) {
-        var channelName = channel.chtitle || channel.channel_name || "Channel";
+        var channelNameRaw = channel.chtitle || channel.channel_name || "Channel";
+        var channelName = (typeof decodeHtmlEntities === 'function') ? decodeHtmlEntities(channelNameRaw) : channelNameRaw;
         var rawLogo = (typeof BBNL_API !== 'undefined' && typeof BBNL_API.extractChannelLogoUrl === 'function')
             ? BBNL_API.extractChannelLogoUrl(channel)
             : (channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.channellogo || channel.logo || channel.logo_path || channel.default_logo || channel.defaultimage || channel.image || channel.img || "");
@@ -2364,7 +2410,7 @@ function sendTRPDataOnLoad() {
         return;
     }
 
-    TRPDataAPI.sendTRPData("")
+    TRPDataAPI.sendTRPData()
         .then(function (response) {
         })
         .catch(function (error) {
@@ -2722,35 +2768,47 @@ function loadFoFiLogo() {
     }
 
     // Paint instantly from cache while API request is in-flight.
-    var cachedLogo = '';
+    // CRITICAL: Cache stores RAW API path, not normalized URL, to avoid double-normalization
+    var cachedLogoPath = '';
     try {
-        cachedLogo = sessionStorage.getItem('home_fofi_logo_url') || localStorage.getItem('home_fofi_logo_url') || '';
+        cachedLogoPath = sessionStorage.getItem('home_fofi_logo_raw_path') || localStorage.getItem('home_fofi_logo_raw_path') || '';
     } catch (e) {}
-    if (cachedLogo) {
-        showFoFiLogo(cachedLogo);
+    
+    if (cachedLogoPath) {
+        BBNLLogger.debug("[HOME] Loading logo from cache: " + cachedLogoPath.substring(0, 50));
+        showFoFiLogo(cachedLogoPath);  // Will normalize once
     }
 
     BBNL_API.getFoFiLogo().then(function (response) {
-
         var logoPath = extractFoFiLogoPath(response);
-        var resolvedLogo = normalizeHomeAssetUrl(logoPath);
-
-        if (resolvedLogo) {
-            var visible = showFoFiLogo(resolvedLogo);
-            if (visible) {
-                try { sessionStorage.setItem('home_fofi_logo_url', resolvedLogo); } catch (e) {}
-                try { localStorage.setItem('home_fofi_logo_url', resolvedLogo); } catch (e) {}
-                return;
+        
+        if (!logoPath) {
+            BBNLLogger.warn("[HOME] API returned empty logo path");
+            if (!cachedLogoPath) {
+                logoImg.style.display = 'none';
+                if (fallbackText) fallbackText.style.display = 'block';
             }
+            return;
         }
 
-        if (!cachedLogo) {
+        BBNLLogger.debug("[HOME] API returned logo path: " + logoPath.substring(0, 50));
+        
+        var visible = showFoFiLogo(logoPath);  // Will normalize once
+        if (visible) {
+            // Cache the RAW path from API, not the normalized URL
+            try { sessionStorage.setItem('home_fofi_logo_raw_path', logoPath); } catch (e) {}
+            try { localStorage.setItem('home_fofi_logo_raw_path', logoPath); } catch (e) {}
+            return;
+        }
+
+        // Logo display failed
+        if (!cachedLogoPath) {
             logoImg.style.display = 'none';
             if (fallbackText) fallbackText.style.display = 'block';
         }
     }).catch(function (error) {
-        console.error("[HOME] FoFi logo fetch failed:", error);
-        if (!cachedLogo) {
+        BBNLLogger.error("[HOME] FoFi logo fetch failed: " + (error && error.message ? error.message : error));
+        if (!cachedLogoPath) {
             logoImg.style.display = 'none';
             if (fallbackText) fallbackText.style.display = 'block';
         }

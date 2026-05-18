@@ -232,7 +232,8 @@ function renderFavoriteChannels(channels) {
     grid.innerHTML = '';
 
     channels.forEach(function (channel) {
-        var channelName = channel.chtitle || channel.channel_name || "Channel";
+        var channelNameRaw = channel.chtitle || channel.channel_name || "Channel";
+        var channelName = (typeof decodeHtmlEntities === 'function') ? decodeHtmlEntities(channelNameRaw) : channelNameRaw;
         var channelLogo = channel.chlogo || channel.chnllogo || channel.logo_url || channel.channel_logo || channel.logo || "";
         if (typeof BBNL_API !== 'undefined' && BBNL_API.getValidatedImageUrl) {
             channelLogo = BBNL_API.getValidatedImageUrl(channelLogo);

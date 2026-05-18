@@ -18,6 +18,12 @@ Fo-Fi TV is a Tizen-based web application designed specifically for Samsung Smar
 - **Platform:** Samsung Tizen TV Web Application platform
 - **APIs Used:** `tizen.tvinputdevice`, `tizen.systeminfo`, `webapis.avplay`, `webapis.network`, `webapis.productinfo`
 
+## Development Workflow
+- **Live reload for development:** Run `npm run dev` from the project root to start the local dev server in `dev-server.js`.
+- **What it does:** The server watches HTML, CSS, JS, XML, and docs files, then refreshes the browser automatically when a file changes.
+- **Scope:** This is a dev-time live reload flow for this static Tizen app; it is not bundler-based HMR.
+- **How it works:** HTML responses are served with the reload client injected automatically, so you do not need to edit the pages manually.
+
 ## Core Architecture & Modules
 
 ### 1. API & Core Services (`js/api.js`)

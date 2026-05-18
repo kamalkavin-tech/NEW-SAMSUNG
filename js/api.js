@@ -18,6 +18,27 @@
 })();
 
 // ==========================================
+// GLOBAL HTML ENTITY DECODER (used by all pages)
+// ==========================================
+/**
+ * Decode HTML entities in strings (e.g., &amp; → &, &quot; → ")
+ * Safely decodes channel names from API before displaying in UI
+ */
+function decodeHtmlEntities(str) {
+    if (typeof str !== 'string') return str;
+    try {
+        var textarea = document.createElement('textarea');
+        textarea.innerHTML = str;
+        return textarea.textContent || textarea.value || '';
+    } catch (e) {
+        return str;
+    }
+}
+
+// Expose globally
+window.decodeHtmlEntities = decodeHtmlEntities;
+
+// ==========================================
 // API CONFIGURATION
 // ==========================================
 
@@ -1659,7 +1680,7 @@ async function apiCall(endpoint, payload, customHeaders) {
     // for login/loginOtp flows to avoid false timeout on slower TV networks.
     var controller = null;
     var timeoutId = null;
-    var requestTimeoutMs = /\/login(?:Otp)?$/i.test(String(url)) ? 10000 : 4000;
+    var requestTimeoutMs = /\/login(?:Otp)?$/i.test(String(url)) ? 15000 : 4000;
     try {
         controller = new AbortController();
         timeoutId = setTimeout(function () { controller.abort(); }, requestTimeoutMs);
@@ -3998,22 +4019,68 @@ const TRPDataAPI = {
     sendTRPData: async function (chid) {
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
+        const resolvedChid = _resolveTRPChannelId(chid);
 
         const payload = {
             userid: user && user.userid ? user.userid : _getSessionUser().userid,
             mobile: user && user.mobile ? user.mobile : _getSessionUser().mobile,
             ip_address: device.ip_address,
-            chid: chid || ""
+            chid: resolvedChid
         };
 
 
         return await apiCall(API_ENDPOINTS.TRP_DATA, payload, {
             userid: payload.userid,
             mobile: payload.mobile,
-            chid: chid || ""
+            chid: resolvedChid
         });
     }
 };
+
+function _resolveTRPChannelId(chid) {
+    var directChid = String(chid || '').trim();
+    if (directChid) return directChid;
+
+    try {
+        if (typeof getCurrentPlayingChannelId === 'function') {
+            directChid = String(getCurrentPlayingChannelId() || '').trim();
+            if (directChid) return directChid;
+        }
+    } catch (e1) {}
+
+    try {
+        if (typeof getCurrentPlayingChannelObject === 'function') {
+            var currentChannel = getCurrentPlayingChannelObject();
+            if (currentChannel) {
+                directChid = String(currentChannel.chid || currentChannel.channelid || currentChannel.id || currentChannel.channelno || currentChannel.urno || currentChannel.chno || currentChannel.ch_no || '').trim();
+                if (directChid) return directChid;
+            }
+        }
+    } catch (e2) {}
+
+    try {
+        var fallbackChannel = null;
+        if (window._lastAttemptedChannel) fallbackChannel = window._lastAttemptedChannel;
+        else if (window._lastPlayingChannel) fallbackChannel = window._lastPlayingChannel;
+        if (fallbackChannel) {
+            directChid = String(fallbackChannel.chid || fallbackChannel.channelid || fallbackChannel.id || fallbackChannel.channelno || fallbackChannel.urno || fallbackChannel.chno || fallbackChannel.ch_no || '').trim();
+            if (directChid) return directChid;
+        }
+    } catch (e3) {}
+
+    try {
+        var savedChannel = localStorage.getItem('paymentReturnChannel');
+        if (savedChannel) {
+            var parsed = JSON.parse(savedChannel);
+            if (parsed) {
+                directChid = String(parsed.chid || parsed.channelid || parsed.id || parsed.channelno || parsed.urno || parsed.chno || parsed.ch_no || '').trim();
+                if (directChid) return directChid;
+            }
+        }
+    } catch (e4) {}
+
+    return '';
+}
 
 // ==========================================
 // RAISE TICKET API

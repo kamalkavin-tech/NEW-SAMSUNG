@@ -10,7 +10,10 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/pages/player.css">
     <!-- Tizen Web API -->
-    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+    <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js" async></script>
+    <!-- Logger utility (loaded early for conditional logging) -->
+    <script type="text/javascript" src="js/logger.js" defer></script>
+    <script type="text/javascript" src="js/image-optimizer.js" defer></script>
 </head>
 
 <body class="player-page" style="background:transparent !important;">

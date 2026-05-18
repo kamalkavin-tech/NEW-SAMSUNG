@@ -1,0 +1,10 @@
+{
+  "name": "bbnl-iptv-dev",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Development server with live reload for the BBNL IPTV Tizen app",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js"
+  }
+}
