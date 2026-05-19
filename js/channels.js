@@ -422,6 +422,15 @@ async function initPage() {
         if (typeof CacheManager !== 'undefined') {
             var cachedLangs = CacheManager.get(CacheManager.KEYS.LANGUAGES) || CacheManager.get(CacheManager.KEYS.LANGUAGES, true);
             if (cachedLangs && cachedLangs.length > 0) {
+                var hasRealLanguage = cachedLangs.some(function (lang) {
+                    var name = String((lang && (lang.langtitle || lang.langname || lang.title || lang.name)) || '').trim().toLowerCase();
+                    return name && name !== 'all channels' && name !== 'all' && name.indexOf('subscribed') === -1;
+                });
+                if (!hasRealLanguage) {
+                    cachedLangs = null;
+                }
+            }
+            if (cachedLangs && cachedLangs.length > 0) {
                 renderLanguagePills(cachedLangs);
             }
         }
@@ -1083,7 +1092,7 @@ function hasRecentApiNetworkFailure(maxAgeMs) {
     var failure = root && root.__bbnlLastApiFailure;
     if (!failure || !failure.networkLike) return false;
     var age = Date.now() - Number(failure.ts || 0);
-    return age >= 0 && age <= (maxAgeMs || 30000);
+    return age >= 0 && age <= (maxAgeMs || 8000);
 }
 
 function setChannelsLoadingState(isLoading) {

@@ -58,6 +58,11 @@ var IS_LOCALHOST = window.location.hostname === 'localhost' || window.location.h
 // Leave as false for production deployment to Samsung TV
 var FORCE_PROXY_MODE = false;
 
+// Network access lock.
+// Set to true in production to lock the app to the first registered network.
+// Set to false in development to allow the app on any network.
+var NETWORK_ACCESS_LOCK_ENABLED = true;
+
 // Determine whether to use proxy
 var USE_PROXY = !IS_TIZEN_TV && FORCE_PROXY_MODE;
 
@@ -1680,7 +1685,7 @@ async function apiCall(endpoint, payload, customHeaders) {
     // for login/loginOtp flows to avoid false timeout on slower TV networks.
     var controller = null;
     var timeoutId = null;
-    var requestTimeoutMs = /\/login(?:Otp)?$/i.test(String(url)) ? 15000 : 4000;
+    var requestTimeoutMs = /\/login(?:Otp)?$/i.test(String(url)) ? 15000 : 10000;
     try {
         controller = new AbortController();
         timeoutId = setTimeout(function () { controller.abort(); }, requestTimeoutMs);
@@ -2023,8 +2028,14 @@ const DeviceInfo = {
      * Always overrides private IP from webapis.network.getIp()
      * Caches result in sessionStorage for instant use on subsequent pages
      */
-    _detectPublicIP: function () {
+    _detectPublicIP: function (forceRefresh) {
         var self = this;
+
+        if (forceRefresh) {
+            try { sessionStorage.removeItem('_publicIP'); } catch (e) {}
+            try { localStorage.removeItem('_publicIP'); } catch (e) {}
+            this._publicIPPromise = null;
+        }
 
         // Check if network changed by comparing cached local IP with current local IP
         var currentLocalIP = DEVICE_INFO.ip_address || "";
@@ -2041,7 +2052,7 @@ const DeviceInfo = {
         try { localStorage.setItem('_lastLocalIP', currentLocalIP); } catch (e) {}
 
         // If we already have a public IP from localStorage, skip external detection
-        if (!this._isPrivateIP(DEVICE_INFO.ip_address)) {
+        if (!forceRefresh && !this._isPrivateIP(DEVICE_INFO.ip_address)) {
             this._publicIPPromise = Promise.resolve(true);
             return;
         }
@@ -2599,6 +2610,11 @@ const AuthAPI = {
                 localStorage.setItem("hasLoggedInOnce", "true");
                 localStorage.removeItem('bbnl_logged_out');
                 try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie1) {}
+
+                if (typeof NetworkAccessLockAPI !== 'undefined' && NetworkAccessLockAPI.isEnabled() && !NetworkAccessLockAPI.getAllowedNetworkSignature()) {
+                    try { NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent(); } catch (eNet1) {}
+                }
+
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
                 CacheManager.clearAll();
@@ -2608,6 +2624,10 @@ const AuthAPI = {
                     localStorage.setItem("hasLoggedInOnce", "true");
                     localStorage.removeItem('bbnl_logged_out');
                     try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie2) {}
+
+                    if (typeof NetworkAccessLockAPI !== 'undefined' && NetworkAccessLockAPI.isEnabled() && !NetworkAccessLockAPI.getAllowedNetworkSignature()) {
+                        try { NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent(); } catch (eNet2) {}
+                    }
                 } catch (retryErr) {
                     // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
@@ -2619,6 +2639,10 @@ const AuthAPI = {
                     localStorage.setItem("hasLoggedInOnce", "true");
                     localStorage.removeItem('bbnl_logged_out');
                     try { document.cookie = 'bbnl_has_logged_in_once=1; path=/; max-age=315360000; SameSite=Lax'; } catch (eCookie3) {}
+
+                    if (typeof NetworkAccessLockAPI !== 'undefined' && NetworkAccessLockAPI.isEnabled() && !NetworkAccessLockAPI.getAllowedNetworkSignature()) {
+                        try { NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent(); } catch (eNet3) {}
+                    }
                 }
             }
         } else {
@@ -4003,6 +4027,121 @@ const AppLockAPI = {
 };
 
 // ==========================================
+// NETWORK ACCESS LOCK
+// When enabled, the app records the first network fingerprint used after login
+// and blocks the app if the network changes later.
+// Disable this in development by setting NETWORK_ACCESS_LOCK_ENABLED = false.
+// ==========================================
+const NetworkAccessLockAPI = {
+    isEnabled: function () {
+        return NETWORK_ACCESS_LOCK_ENABLED === true;
+    },
+
+    getAllowedNetworkSignature: function () {
+        try {
+            return sessionStorage.getItem('bbnl_allowed_network_signature') || localStorage.getItem('bbnl_allowed_network_signature') || '';
+        } catch (e) {
+            return '';
+        }
+    },
+
+    setAllowedNetworkSignature: function (signature) {
+        var value = String(signature || '').trim();
+        if (!value) return;
+        try { sessionStorage.setItem('bbnl_allowed_network_signature', value); } catch (e) {}
+        try { localStorage.setItem('bbnl_allowed_network_signature', value); } catch (e) {}
+    },
+
+    clearAllowedNetworkSignature: function () {
+        try { sessionStorage.removeItem('bbnl_allowed_network_signature'); } catch (e) {}
+        try { localStorage.removeItem('bbnl_allowed_network_signature'); } catch (e) {}
+    },
+
+    _getCurrentNetworkSignature: function () {
+        try {
+            if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.getActiveConnectionType === 'function') {
+                var connectionType = Number(webapis.network.getActiveConnectionType());
+                if (connectionType <= 0) return '';
+
+                var signatureParts = ['type:' + connectionType];
+                try {
+                    if (typeof webapis.network.getGateway === 'function') {
+                        var gateway = webapis.network.getGateway(connectionType);
+                        if (gateway) signatureParts.push('gw:' + String(gateway).trim());
+                    }
+                } catch (eGw) {}
+                try {
+                    if (typeof webapis.network.getDns === 'function') {
+                        var dns = webapis.network.getDns(connectionType);
+                        if (dns) signatureParts.push('dns:' + String(dns).trim());
+                    }
+                } catch (eDns) {}
+                try {
+                    if (typeof webapis.network.getIp === 'function') {
+                        var ip = webapis.network.getIp(connectionType);
+                        if (ip) signatureParts.push('ip:' + String(ip).trim());
+                    }
+                } catch (eIp) {}
+
+                return signatureParts.join('|');
+            }
+        } catch (e) {}
+
+        try {
+            var info = (typeof DeviceInfo !== 'undefined' && DeviceInfo.getDeviceInfo) ? DeviceInfo.getDeviceInfo() : null;
+            var ip = info && info.ip_address ? String(info.ip_address).trim() : '';
+            if (ip) {
+                return 'ip:' + ip;
+            }
+        } catch (e2) {}
+
+        return '';
+    },
+
+    seedAllowedNetworkSignatureFromCurrent: function () {
+        if (!this.isEnabled()) return false;
+        var current = this._getCurrentNetworkSignature();
+        if (!current) return false;
+        var allowed = this.getAllowedNetworkSignature();
+        if (!allowed) {
+            this.setAllowedNetworkSignature(current);
+            return true;
+        }
+        return allowed === current;
+    },
+
+    checkAccess: function (options) {
+        var self = this;
+        var opts = options || {};
+
+        if (!this.isEnabled()) {
+            return Promise.resolve({ enabled: false, locked: false, allowedSignature: '', currentSignature: '' });
+        }
+
+        if (opts.refresh && typeof DeviceInfo !== 'undefined' && DeviceInfo.initializeDeviceInfo) {
+            try { DeviceInfo.initializeDeviceInfo(); } catch (e) {}
+        }
+
+        return Promise.resolve().then(function () {
+            var current = self._getCurrentNetworkSignature();
+            var allowed = self.getAllowedNetworkSignature();
+
+            if (!allowed && current) {
+                self.setAllowedNetworkSignature(current);
+                allowed = current;
+            }
+
+            return {
+                enabled: true,
+                locked: !!(allowed && current && allowed !== current),
+                allowedSignature: allowed,
+                currentSignature: current
+            };
+        });
+    }
+};
+
+// ==========================================
 // TRP DATA API
 // ==========================================
 const TRPDataAPI = {
@@ -4277,6 +4416,13 @@ const BBNL_API = {
     // App Lock Methods
     checkAppLock: AppLockAPI.checkAppLock.bind(AppLockAPI),
 
+    // Dev Network Access Lock Methods
+    checkNetworkAccessLock: NetworkAccessLockAPI.checkAccess.bind(NetworkAccessLockAPI),
+    seedNetworkAccessLockIp: NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent.bind(NetworkAccessLockAPI),
+    isNetworkAccessLockEnabled: NetworkAccessLockAPI.isEnabled.bind(NetworkAccessLockAPI),
+    getNetworkAccessLockAllowedIp: NetworkAccessLockAPI.getAllowedNetworkSignature.bind(NetworkAccessLockAPI),
+    clearNetworkAccessLockIp: NetworkAccessLockAPI.clearAllowedNetworkSignature.bind(NetworkAccessLockAPI),
+
     // TRP Data Methods
     sendTRPData: TRPDataAPI.sendTRPData.bind(TRPDataAPI),
 
@@ -4434,6 +4580,7 @@ if (typeof window !== 'undefined') {
     window.AppVersionAPI = AppVersionAPI;
     window.OTTAppsAPI = OTTAppsAPI;
     window.AppLockAPI = AppLockAPI;
+    window.NetworkAccessLockAPI = NetworkAccessLockAPI;
     window.TRPDataAPI = TRPDataAPI;
     window.RaiseTicketAPI = RaiseTicketAPI;
     window.ErrorImagesAPI = ErrorImagesAPI;

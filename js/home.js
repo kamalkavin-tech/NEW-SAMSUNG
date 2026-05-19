@@ -222,6 +222,8 @@ function showFoFiLogo(logoUrl, skipNormalize) {
         return false;
     }
 
+    var useCachedLogo = !!skipNormalize;
+
     // Validate URL structure before attempting to load
     if (!/^https?:\/\//.test(resolved)) {
         BBNLLogger.warn("[HOME] Logo URL is not a valid HTTP(S) URL: " + resolved.substring(0, 50));
@@ -239,6 +241,12 @@ function showFoFiLogo(logoUrl, skipNormalize) {
         loadSucceeded = false;
         if (timeoutId) clearTimeout(timeoutId);
         try { this.removeAttribute('src'); } catch (e) {}
+        if (useCachedLogo) {
+            // Keep the cached logo visible instead of falling back to text.
+            // A stale cached image is still better than the plain brand label.
+            BBNLLogger.warn("[HOME] Cached logo failed to reload, keeping cached display state");
+            return;
+        }
         this.style.display = 'none';
         if (fallbackText) fallbackText.style.display = 'block';
         BBNLLogger.debug("[HOME] Logo failed to load, showing fallback");
@@ -266,6 +274,11 @@ function showFoFiLogo(logoUrl, skipNormalize) {
     // If image hasn't loaded within timeout, show fallback (reduced to 2.5s for TV networks)
     timeoutId = setTimeout(function () {
         if (!loadSucceeded) {
+            if (useCachedLogo) {
+                // Keep cached logo visible while the API request is still pending.
+                BBNLLogger.debug("[HOME] Cached logo load timeout, keeping logo visible");
+                return;
+            }
             try { logoImg.removeAttribute('src'); } catch (e) {}
             logoImg.style.display = 'none';
             if (fallbackText) fallbackText.style.display = 'block';
@@ -706,6 +719,7 @@ function runInitializeHomePage() {
 
     // Load FoFi TV logo from API
     loadFoFiLogo();
+    startNetworkAccessLockWatcher();
 
     // Auto-play FoFi channel immediately — API call already started by DOMContentLoaded
     if (fofiShouldAutoPlay) {
@@ -2055,6 +2069,30 @@ function initDarkMode() {
 var networkPopupOpen = false;
 
 /**
+ * Attempt automatic recovery of homepage when network is restored
+ */
+function attemptHomeAutoResume() {
+    if (!homeErrorPopupOpen) return;
+    var failedPopup = document.getElementById('failedLoadPopup');
+    var noChannelsPopup = document.getElementById('noChannelsPopup');
+    
+    // Only auto-resume if the failed load or no channels popup is active
+    if ((failedPopup && failedPopup.style.display === 'flex') || 
+        (noChannelsPopup && noChannelsPopup.style.display === 'flex')) {
+        console.log('[HOME] Network restored - automatically retrying homepage load');
+        
+        // Clear cached API failure so hasRecentApiNetworkFailure() doesn't block the reload
+        var root = (typeof window !== 'undefined') ? window : globalThis;
+        if (root) root.__bbnlLastApiFailure = null;
+        
+        hideHomeErrorPopups();
+        if (typeof loadHomeLanguages === 'function') loadHomeLanguages();
+        if (typeof loadHomeChannels === 'function') loadHomeChannels();
+        if (typeof loadHomeAds === 'function') loadHomeAds();
+    }
+}
+
+/**
  * Initialize and update network status dynamically
  */
 function initNetworkStatus() {
@@ -2062,6 +2100,17 @@ function initNetworkStatus() {
 
     // Update network status every 5 seconds
     homeNetworkInterval = setInterval(updateNetworkStatus, 5000);
+
+    // Add Tizen native network state change listener for instant auto-resume on cable/wifi reconnect
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
+            webapis.network.addNetworkStateChangeListener(function () {
+                setTimeout(function () {
+                    updateNetworkStatus();
+                }, 1000);
+            });
+        }
+    } catch (e) {}
 
     // Close popup when clicking outside
     document.addEventListener('click', function (e) {
@@ -2222,6 +2271,18 @@ function updateNetworkStatus() {
         btnElement.classList.remove('disconnected');
         labelElement.innerText = "Network";
     }
+
+    try {
+        var isNowOnline = false;
+        if (typeof webapis !== 'undefined' && webapis.network) {
+            isNowOnline = (webapis.network.getActiveConnectionType() !== 0);
+        } else {
+            isNowOnline = navigator.onLine;
+        }
+        if (isNowOnline) {
+            attemptHomeAutoResume();
+        }
+    } catch (eAuto) {}
 }
 
 // ==========================================
@@ -2313,54 +2374,181 @@ document.addEventListener('DOMContentLoaded', function () {
 
 var appLockActive = false;
 
+function getNetworkLockOverlayTitle() {
+    return 'Network Changed';
+}
+
+function getNetworkLockOverlayMessage() {
+    return 'You are connected to a different network. Please reconnect to the same network used during registration to continue using the app.';
+}
+
+function showNetworkLockScreen() {
+    var overlay = document.getElementById('appLockOverlay');
+    if (!overlay) return;
+
+    var titleEl = overlay.querySelector('.applock-title');
+    var messageEl = overlay.querySelector('.applock-message');
+    var img = document.getElementById('errorImg_serviceLocked');
+
+    if (titleEl) titleEl.innerText = getNetworkLockOverlayTitle();
+    if (messageEl) messageEl.innerHTML = getNetworkLockOverlayMessage();
+    if (img) {
+        var imageUrl = 'images/error-network.png';
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            BBNL_API.setImageSource(img, imageUrl);
+        } else {
+            img.src = imageUrl;
+        }
+    }
+
+    overlay.style.display = 'flex';
+    appLockActive = true;
+
+    var retryBtn = document.getElementById('appLockRetryBtn');
+    if (retryBtn) retryBtn.focus();
+}
+
+function checkNetworkAccessLockStatus(forceRefresh) {
+    if (typeof BBNL_API === 'undefined' || !BBNL_API.checkNetworkAccessLock || !BBNL_API.isNetworkAccessLockEnabled || !BBNL_API.isNetworkAccessLockEnabled()) {
+        return Promise.resolve(false);
+    }
+
+    return BBNL_API.checkNetworkAccessLock({ refresh: !!forceRefresh, timeoutMs: 3000 })
+        .then(function (result) {
+            if (result && result.locked) {
+                showNetworkLockScreen();
+                return true;
+            }
+            return false;
+        })
+        .catch(function () {
+            return false;
+        });
+}
+
+var networkAccessLockWatcherStarted = false;
+
+function startNetworkAccessLockWatcher() {
+    if (networkAccessLockWatcherStarted) return;
+    if (typeof BBNL_API === 'undefined' || !BBNL_API.isNetworkAccessLockEnabled || !BBNL_API.isNetworkAccessLockEnabled()) {
+        return;
+    }
+    try {
+        if (typeof webapis !== 'undefined' && webapis.network && typeof webapis.network.addNetworkStateChangeListener === 'function') {
+            webapis.network.addNetworkStateChangeListener(function () {
+                setTimeout(function () {
+                    checkAppLockStatus(true);
+                }, 1200);
+            });
+            networkAccessLockWatcherStarted = true;
+        }
+    } catch (e) {}
+}
+
 /**
  * Check app lock status on startup
  * If locked, shows the lock overlay and prevents app usage
  */
-function checkAppLockStatus() {
+function checkAppLockStatus(forceRefresh) {
 
-    if (typeof AppLockAPI === 'undefined') {
-        return;
+    // 1. Check if the network lock condition is enabled
+    var isLockFeatureEnabled = true;
+    if (typeof NetworkAccessLockAPI !== 'undefined' && typeof NetworkAccessLockAPI.isEnabled === 'function') {
+        isLockFeatureEnabled = NetworkAccessLockAPI.isEnabled();
+    } else if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.isNetworkAccessLockEnabled === 'function') {
+        isLockFeatureEnabled = BBNL_API.isNetworkAccessLockEnabled();
     }
 
+    // If condition is false, we allow all networks to access the app (unlocked)
+    if (!isLockFeatureEnabled) {
+        hideAppLockScreen();
+        return Promise.resolve(false);
+    }
+
+    if (typeof AppLockAPI === 'undefined') {
+        return Promise.resolve(false);
+    }
+
+    // 2. Fetch the popup response from the API itself
     AppLockAPI.checkAppLock()
         .then(function (response) {
-
-            // Check if app is locked based on API response
-            // Response typically has status/locked field
-            var isLocked = false;
+            var apiMessage = response && (response.message || response.msg || (typeof response.status === 'string' && response.status !== '0' && response.status !== 'locked' ? response.status : null));
+            var apiReturnedLock = false;
 
             if (response) {
-                // Check common response patterns
-                if (response.status === "locked" || response.locked === true || response.lock === true) {
-                    isLocked = true;
-                } else if (response.status === "0" || response.status === 0 || response.status === "fail" || response.status === "error") {
-                    isLocked = true;
-                } else if (response.message && response.message.toLowerCase().includes("lock")) {
-                    isLocked = true;
-                }
+                if (response.status === "locked" || response.locked === true || response.lock === true) apiReturnedLock = true;
+                else if (response.status === "0" || response.status === 0 || response.status === "fail" || response.status === "error") apiReturnedLock = true;
+                else if (response.message && response.message.toLowerCase().includes("lock")) apiReturnedLock = true;
             }
 
-            if (isLocked) {
-                showAppLockScreen();
+            // 3. Block completely if network changed OR API says locked
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.checkNetworkAccessLock) {
+                BBNL_API.checkNetworkAccessLock({ refresh: !!forceRefresh, timeoutMs: 3000 })
+                    .then(function (result) {
+                        if (apiReturnedLock || (result && result.locked)) {
+                            // Show the popup coming from the API itself
+                            showAppLockScreen(apiMessage);
+                        } else {
+                            hideAppLockScreen();
+                        }
+                    })
+                    .catch(function () {
+                        if (apiReturnedLock) showAppLockScreen(apiMessage);
+                        else hideAppLockScreen();
+                    });
             } else {
-                hideAppLockScreen();
+                if (apiReturnedLock) showAppLockScreen(apiMessage);
+                else hideAppLockScreen();
             }
         })
         .catch(function (error) {
-            console.error("[HOME] App lock check failed:", error);
-            // On error, allow app to work (fail-open)
+            console.error("[HOME] App lock API check failed:", error);
+            // Even if API fails (due to network switch), block the app if network changed locally
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.checkNetworkAccessLock) {
+                BBNL_API.checkNetworkAccessLock({ refresh: !!forceRefresh, timeoutMs: 3000 })
+                    .then(function (result) {
+                        if (result && result.locked) {
+                            showAppLockScreen(); // Lock it completely, uses default message if API failed
+                        } else {
+                            hideAppLockScreen();
+                        }
+                    });
+            } else {
+                hideAppLockScreen();
+            }
         });
 }
 
 /**
  * Show the app lock overlay screen
+ * @param {string} customMessage - Optional message to display from the API
  */
-function showAppLockScreen() {
+function showAppLockScreen(customMessage) {
     var overlay = document.getElementById('appLockOverlay');
     if (overlay) {
+        // If a custom message from the API is provided (and not just a generic "locked" string), update the UI text.
+        // Otherwise, preserve the default HTML message: "We request you to use BBNL network to continue enjoying your favorite content."
+        if (customMessage && customMessage.toLowerCase() !== 'locked' && customMessage.toLowerCase() !== 'service locked') {
+            var messageEl = overlay.querySelector('.applock-message');
+            if (messageEl) {
+                messageEl.innerHTML = customMessage;
+            }
+        }
+
         overlay.style.display = 'flex';
         appLockActive = true;
+
+        // Stop any background playback since the app is locked
+        try {
+            if (typeof AVPlayer !== 'undefined' && typeof AVPlayer.stop === 'function') {
+                AVPlayer.stop();
+            }
+            if (typeof stopSilentRetry === 'function') stopSilentRetry();
+            if (typeof stopSimpleAutoResumeWatcher === 'function') stopSimpleAutoResumeWatcher();
+            if (typeof stopPausedByNetworkResumePoller === 'function') stopPausedByNetworkResumePoller();
+            if (typeof clearPlayerAutoResumeRetryTimer === 'function') clearPlayerAutoResumeRetryTimer();
+            if (typeof hideBufferingIndicator === 'function') hideBufferingIndicator();
+        } catch (e) {}
 
         // Set error image from API
         var img = document.getElementById('errorImg_serviceLocked');
@@ -2394,7 +2582,7 @@ function hideAppLockScreen() {
  * Retry app lock check (triggered by button or BACK key)
  */
 function retryAppLockCheck() {
-    checkAppLockStatus();
+    checkAppLockStatus(true);
 }
 
 // ==========================================
@@ -2445,7 +2633,7 @@ function hasRecentApiNetworkFailure(maxAgeMs) {
     var failure = root && root.__bbnlLastApiFailure;
     if (!failure || !failure.networkLike) return false;
     var age = Date.now() - Number(failure.ts || 0);
-    return age >= 0 && age <= (maxAgeMs || 30000);
+    return age >= 0 && age <= (maxAgeMs || 8000);
 }
 
 // ==========================================
@@ -2776,7 +2964,7 @@ function loadFoFiLogo() {
     
     if (cachedLogoPath) {
         BBNLLogger.debug("[HOME] Loading logo from cache: " + cachedLogoPath.substring(0, 50));
-        showFoFiLogo(cachedLogoPath);  // Will normalize once
+        showFoFiLogo(cachedLogoPath, true);  // Cache-first: keep logo visible over text fallback
     }
 
     BBNL_API.getFoFiLogo().then(function (response) {

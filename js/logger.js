@@ -80,6 +80,21 @@ var BBNLLogger = {
     }
 };
 
+// ==========================================
+// SAMSUNG TIZEN PRODUCTION LOGGING OVERRIDE
+// ==========================================
+// In accordance with Samsung Tizen performance guidelines, all console logging methods 
+// (log, warn, info, error) block the main JavaScript thread and degrade TV performance.
+// When BBNL_DEBUG is false, we replace them with no-op functions to ensure zero thread blocking.
+if (!window.BBNL_DEBUG) {
+    if (typeof console !== 'undefined') {
+        console.log = function() {};
+        console.warn = function() {};
+        console.info = function() {};
+        console.error = function() {};
+    }
+}
+
 // Export for use in other scripts
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = BBNLLogger;

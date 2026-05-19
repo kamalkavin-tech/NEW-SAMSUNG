@@ -1230,7 +1230,7 @@ body.light-mode .exit-btn-yes {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.96);
+    background: #000000;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -74,7 +74,7 @@
 (function playerInitializationRecovery() {
     // Force remove loading screen after 3 seconds max
     // If player initialization completes before timeout, this will be cleared
-    var RECOVERY_TIMEOUT_MS = 3000;
+    var RECOVERY_TIMEOUT_MS = 8000;
     var recoveryTimer = setTimeout(function() {
         console.warn('[PLAYER] Initialization timeout at ' + RECOVERY_TIMEOUT_MS + 'ms - forcing recovery');
         console.error('PLAYER');
@@ -94,7 +94,7 @@
         if (typeof handleKeydown === 'function') {
             try {
                 document.removeEventListener("keydown", handleKeydown);
-                document.addEventListener("keydown", handleKeydown);
+                document.addEventListener("keydown", handleKeydown, true);
                 
                 if (typeof RemoteKeys !== 'undefined') {
                     RemoteKeys.registerAllKeys();
@@ -232,6 +232,7 @@ window.addEventListener('pageshow', function (event) {
         }
         startPlayerNetworkWatchdog();
         startSimpleAutoResumeWatcher();
+        checkAppLockStatus(true);
         // RC-7: refresh sidebar derivations against the live channel cache
         // before any focus/render runs. Without this, an open sidebar restored
         // from BFCache may paint against stale categories/channels (e.g. the
@@ -406,7 +407,7 @@ function hasRecentApiNetworkFailure(maxAgeMs) {
     var failure = root && root.__bbnlLastApiFailure;
     if (!failure || !failure.networkLike) return false;
     var age = Date.now() - Number(failure.ts || 0);
-    return age >= 0 && age <= (maxAgeMs || 30000);
+    return age >= 0 && age <= (maxAgeMs || 8000);
 }
 
 function isChannelMarkedSubscribed(channel) {
@@ -1433,6 +1434,142 @@ function stopSimpleAutoResumeWatcher() {
     }
 }
 
+// ==========================================
+// APP LOCK / NETWORK ACCESS LOCK
+// ==========================================
+var appLockActive = false;
+
+function checkAppLockStatus(forceRefresh) {
+    var isLockFeatureEnabled = true;
+    if (typeof NetworkAccessLockAPI !== 'undefined' && typeof NetworkAccessLockAPI.isEnabled === 'function') {
+        isLockFeatureEnabled = NetworkAccessLockAPI.isEnabled();
+    } else if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.isNetworkAccessLockEnabled === 'function') {
+        isLockFeatureEnabled = BBNL_API.isNetworkAccessLockEnabled();
+    }
+
+    if (!isLockFeatureEnabled) {
+        hideAppLockScreen();
+        return Promise.resolve(false);
+    }
+
+    if (typeof AppLockAPI === 'undefined') {
+        return Promise.resolve(false);
+    }
+
+    AppLockAPI.checkAppLock()
+        .then(function (response) {
+            var apiMessage = response && (response.message || response.msg || (typeof response.status === 'string' && response.status !== '0' && response.status !== 'locked' ? response.status : null));
+            var apiReturnedLock = false;
+
+            if (response) {
+                if (response.status === "locked" || response.locked === true || response.lock === true) apiReturnedLock = true;
+                else if (response.status === "0" || response.status === 0 || response.status === "fail" || response.status === "error") apiReturnedLock = true;
+                else if (response.message && response.message.toLowerCase().includes("lock")) apiReturnedLock = true;
+            }
+
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.checkNetworkAccessLock) {
+                BBNL_API.checkNetworkAccessLock({ refresh: !!forceRefresh, timeoutMs: 3000 })
+                    .then(function (result) {
+                        if (apiReturnedLock || (result && result.locked)) {
+                            showAppLockScreen(apiMessage);
+                        } else {
+                            hideAppLockScreen();
+                        }
+                    })
+                    .catch(function () {
+                        if (apiReturnedLock) showAppLockScreen(apiMessage);
+                        else hideAppLockScreen();
+                    });
+            } else {
+                if (apiReturnedLock) showAppLockScreen(apiMessage);
+                else hideAppLockScreen();
+            }
+        })
+        .catch(function (error) {
+            console.error("[PLAYER] App lock API check failed:", error);
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.checkNetworkAccessLock) {
+                BBNL_API.checkNetworkAccessLock({ refresh: !!forceRefresh, timeoutMs: 3000 })
+                    .then(function (result) {
+                        if (result && result.locked) {
+                            showAppLockScreen();
+                        } else {
+                            hideAppLockScreen();
+                        }
+                    });
+            } else {
+                hideAppLockScreen();
+            }
+        });
+}
+
+function showAppLockScreen(customMessage) {
+    var overlay = document.getElementById('appLockOverlay');
+    if (overlay) {
+        if (customMessage && customMessage.toLowerCase() !== 'locked' && customMessage.toLowerCase() !== 'service locked') {
+            var messageEl = overlay.querySelector('.applock-message');
+            if (messageEl) {
+                messageEl.innerHTML = customMessage;
+            }
+        }
+
+        overlay.style.display = 'flex';
+        appLockActive = true;
+
+        try {
+            if (typeof AVPlayer !== 'undefined' && typeof AVPlayer.stop === 'function') {
+                AVPlayer.stop();
+            }
+            if (typeof stopSilentRetry === 'function') stopSilentRetry();
+            if (typeof stopSimpleAutoResumeWatcher === 'function') stopSimpleAutoResumeWatcher();
+            if (typeof stopPausedByNetworkResumePoller === 'function') stopPausedByNetworkResumePoller();
+            if (typeof clearPlayerAutoResumeRetryTimer === 'function') clearPlayerAutoResumeRetryTimer();
+            if (typeof hideBufferingIndicator === 'function') hideBufferingIndicator();
+        } catch (e) {}
+
+        var img = document.getElementById('errorImg_serviceLocked');
+        if (img && typeof ErrorImagesAPI !== 'undefined') {
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'));
+            } else {
+                img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
+            }
+        }
+
+        var retryBtn = document.getElementById('appLockRetryBtn');
+        if (retryBtn) {
+            retryBtn.focus();
+            retryBtn.onclick = retryAppLockCheck;
+        }
+    }
+}
+
+function hideAppLockScreen() {
+    var overlay = document.getElementById('appLockOverlay');
+    if (overlay) {
+        var wasActive = appLockActive;
+        overlay.style.display = 'none';
+        appLockActive = false;
+
+        if (wasActive) {
+            console.log('[PLAYER] App lock removed - auto-resuming channel playback');
+            try {
+                if (typeof startSimpleAutoResumeWatcher === 'function') startSimpleAutoResumeWatcher();
+                _lastNetworkOnline = true;
+                playerNetworkReconnectSince = Date.now();
+                if (typeof triggerVerifiedAutoResume === 'function') {
+                    triggerVerifiedAutoResume('app-lock-unlocked');
+                } else if (typeof playCurrentChannel === 'function') {
+                    playCurrentChannel();
+                }
+            } catch (e) {}
+        }
+    }
+}
+
+function retryAppLockCheck() {
+    checkAppLockStatus(true);
+}
+
 // The canonical implementation of startPlayerNetworkWatchdog
 function startPlayerNetworkWatchdog() {
     // Attach Tizen network listener once.
@@ -1478,6 +1615,10 @@ function startPlayerNetworkWatchdog() {
                         playerNetworkReconnectSince = Date.now();
                         triggerVerifiedAutoResume('net-event-online');
                     }
+
+                    if (typeof BBNL_API !== 'undefined' && BBNL_API.checkNetworkAccessLock && BBNL_API.isNetworkAccessLockEnabled && BBNL_API.isNetworkAccessLockEnabled()) {
+                        checkAppLockStatus(true);
+                    }
                 });
                 window._playerNetEventListenerAttached = true;
             }
@@ -1486,6 +1627,7 @@ function startPlayerNetworkWatchdog() {
 
     if (window.playerNetworkWatchInterval) return;
     window.playerNetworkWatchInterval = registerInterval(setInterval(function () {
+        if (appLockActive) return;
         if (!currentChannelNeedsInternet()) {
             playerNetworkDisconnectSince = 0;
             playerNetworkReconnectSince = 0;
@@ -2079,6 +2221,7 @@ function initializePlayerApp() {
 
     startPlayerNetworkWatchdog();
     startSimpleAutoResumeWatcher();
+    checkAppLockStatus(true);
 
     // Attach browser online/offline fallback listeners so auto-resume
     // also works in non-Tizen environments (e.g. desktop/browser testing).
@@ -4421,7 +4564,18 @@ async function loadLanguagesFromChannels() {
     // Use ALL channels (including unsubscribed) so all languages appear in sidebar
     var channelsForLangs = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
     if (!channelsForLangs || channelsForLangs.length === 0) {
-        return;
+        // Cold start can reach here before the channel cache is hydrated.
+        // Wait for the shared cache once so launch-time language tabs are
+        // built from real channel data instead of stopping at the two
+        // built-in entries (All / Subscribed).
+        try {
+            await hydrateSidebarAllChannelsCache();
+        } catch (eHydrate) {}
+
+        channelsForLangs = _allChannelsUnfiltered.length > 0 ? _allChannelsUnfiltered : allChannels;
+        if (!channelsForLangs || channelsForLangs.length === 0) {
+            return;
+        }
     }
 
     // Build languages array with special entries first
@@ -4828,7 +4982,7 @@ function buildCategoriesForLanguage() {
             var chGrid = String(ch.grid || ch.gridid || '').trim();
             var rawCat = ch.grtitle || ch.category || ch.genre || '';
             var hasExplicitCategory = !!String(rawCat).trim();
-            var chCat = hasExplicitCategory ? String(rawCat).trim() : 'Miscellaneous';
+            var chCat = hasExplicitCategory ? String(rawCat).trim() : '';
             var chCatKey = normalizeCategoryName(chCat);
             if (chGrid) {
                 countByGrid[chGrid] = (countByGrid[chGrid] || 0) + 1;
@@ -4868,9 +5022,10 @@ function buildCategoriesForLanguage() {
             // apiCategories is still loading.
             var explicitOnly = Object.keys(countByName)
                 .filter(function (catName) {
-                    var lowerCat = normalizeCategoryName(catName);
-                    if (lowerCat === 'subscribed' || lowerCat === 'all channels' || lowerCat === 'subscribed channels') return false;
-                    return !!explicitCatNames[normalizeCategoryName(catName)];
+                    var normalized = normalizeCategoryName(catName);
+                    if (!normalized) return false; // ignore empty/unknown names
+                    if (normalized === 'subscribed' || normalized === 'all channels' || normalized === 'subscribed channels') return false;
+                    return !!explicitCatNames[normalized];
                 })
                 .map(function (catName) {
                     return {
@@ -4892,7 +5047,7 @@ function buildCategoriesForLanguage() {
                 builtCategories = Object.keys(countByName)
                     .filter(function (catName) {
                         var lowerCat = normalizeCategoryName(catName);
-                        return lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
+                        return lowerCat && lowerCat !== 'subscribed' && lowerCat !== 'all channels' && lowerCat !== 'subscribed channels';
                     })
                     .map(function (catName) {
                         return {
@@ -4901,6 +5056,14 @@ function buildCategoriesForLanguage() {
                             grid: ''
                         };
                     });
+
+                if (builtCategories.length === 0 && filteredChannels.length > 0) {
+                    builtCategories = [{
+                        name: 'Channels',
+                        count: filteredChannels.length,
+                        grid: ''
+                    }];
+                }
             }
         }
 
@@ -5145,7 +5308,7 @@ function getCurrentPlayingCategoryIndex() {
             }
 
             // 2) Fallback to normalized category-name mapping.
-            var matchedCat = normalizeCategoryName(matched.grtitle || matched.category || matched.genre || 'Miscellaneous');
+                var matchedCat = normalizeCategoryName(matched.grtitle || matched.category || matched.genre || '');
             for (var i = 0; i < sidebarState.categories.length; i++) {
                 var catName = sidebarState.categories[i] && sidebarState.categories[i].name;
                 if (!catName) continue;
@@ -5340,6 +5503,9 @@ function getFilteredChannelsByLanguage() {
         var subscribed = sidebarState.allChannelsCache.filter(function (ch) {
             return isChannelSubscribed(ch);
         });
+        if (subscribed.length === 0) {
+            subscribed = sidebarState.allChannelsCache.slice();
+        }
         _sidebarFilteredChannelsCache[filterCacheKey] = subscribed.slice();
         return subscribed;
     }
@@ -5695,7 +5861,7 @@ function filterChannelsByCategory() {
             var chGrid = String(ch.grid || ch.gridid || '').trim();
             return chGrid === String(selectedCat.grid);
         }
-        var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
+        var chCat = ch.grtitle || ch.category || ch.genre || '';
         return normalizeCategoryName(chCat) === normalizeCategoryName(selectedCat.name);
     });
 
@@ -5721,7 +5887,7 @@ function getChannelsForCategoryAtIndex(catIdx) {
             var chGrid = String(ch.grid || ch.gridid || '').trim();
             return chGrid === String(selectedCat.grid);
         }
-        var chCat = ch.grtitle || ch.category || ch.genre || 'Miscellaneous';
+        var chCat = ch.grtitle || ch.category || ch.genre || '';
         return normalizeCategoryName(chCat) === normalizeCategoryName(selectedCat.name);
     });
     if (isSubscribedSidebarContext() || isAllSidebarContext()) {
@@ -7330,6 +7496,24 @@ var _KEY_THROTTLE_MS = 40; // reduced from 120ms — real TV remotes already hav
 function handleKeydown(e) {
     var code;
     try { code = e.keyCode; } catch (_) { return; }
+
+    // Check if app lock screen is active - handle BACK or OK/ENTER key to retry
+    if (appLockActive) {
+        e.preventDefault();
+        if (code === 10009 || code === 13) {
+            retryAppLockCheck();
+        }
+        return;
+    }
+
+    // Check if app lock screen is active - handle BACK or OK/ENTER key to retry
+    if (appLockActive) {
+        e.preventDefault();
+        if (code === 10009 || code === 13) {
+            retryAppLockCheck();
+        }
+        return;
+    }
 
     // Throttle navigation keys (arrows, OK, CH+/-) to prevent UI flood.
     // Volume, BACK, and number keys are exempt (must always respond instantly).

@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="ph3Ha7N8EQ.BBNLIPTV"
-    version="1.0.5"
+        version="1.0.5"
         viewmodes="maximized">
     
     <!-- Samsung TV profile -->

@@ -201,8 +201,9 @@ var AVPlayer = (function () {
             }
 
             try {
-                // Start with lowest bitrate for fastest initial playback
-                avplay.setStreamingProperty("ADAPTIVE_INFO", "BITRATES=LOWEST");
+                // Enable mixed resolution to allow seamless switching from SD to HD/FHD based on bandwidth
+                avplay.setStreamingProperty("SET_MIXED_RESOLUTION", "true");
+                // Start with the lowest bitrate for the fastest initial channel load, then let it adapt upwards
                 avplay.setStreamingProperty("START_BITRATE", "LOWEST");
             } catch (e) {}
 

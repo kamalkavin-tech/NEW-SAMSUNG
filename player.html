@@ -158,6 +158,36 @@
         </div>
     </div>
 
+    <!-- App Lock Screen Overlay -->
+    <div class="applock-overlay" id="appLockOverlay" style="display: none;">
+        <div class="applock-card">
+            <!-- Left Side - Message -->
+            <div class="applock-left">
+                <div class="applock-icon-circle">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <h1 class="applock-title">Oops! Service Locked</h1>
+                <p class="applock-message">We request you to use <strong>BBNL network</strong> to continue enjoying your favorite content.</p>
+                <button class="applock-btn focusable" id="appLockRetryBtn" tabindex="0">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                    </svg>
+                    Press back to check status
+                </button>
+            </div>
+            <!-- Right Side - Error Image from API -->
+            <div class="applock-right">
+                <div class="applock-mascot">
+                    <img id="errorImg_serviceLocked" src="" alt="Service locked" style="max-width: 280px; max-height: 280px;" crossorigin="anonymous">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="js/api.js" defer></script>
     <script src="js/avplayer.js" defer></script>
