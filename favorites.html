@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=1920, user-scalable=no">
     <!-- CSP for Samsung Tizen widget - allow fetch from any origin for image loading -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; connect-src * data: blob:;">
-    <title>Fo-Fi TV - Favorites</title>
+    <title>Favorites</title>
     <!-- Base Styles -->
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/pages/favorites.css">
@@ -26,7 +26,7 @@
             <button class="back-btn focusable" tabindex="0" onclick="if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }">
                 <span class="back-icon">←</span>
             </button>
-            <div class="page-title">Favorite TV Channels</div>
+            <div class="page-title">Favorite Channels</div>
         </div>
 
         <div class="header-right">
@@ -34,16 +34,7 @@
         </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="filters-bar">
-        <button class="filter-chip active focusable" tabindex="0">All</button>
-        <button class="filter-chip focusable" tabindex="0">Subscribed</button>
-        <button class="filter-chip focusable" tabindex="0">Entertainment</button>
-        <button class="filter-chip focusable" tabindex="0">Sports</button>
-        <button class="filter-chip focusable" tabindex="0">News</button>
-        <button class="filter-chip focusable" tabindex="0">Kids</button>
-        <button class="filter-chip focusable" tabindex="0">Language ⌄</button>
-    </div>
+    
 
     <!-- Favorites Grid -->
     <div class="subpage-section">
@@ -60,9 +51,47 @@
             </div>
             <h2 class="error-popup-title">Coming Soon</h2>
             <p class="error-popup-message">Favorite Channels feature is coming soon. Stay tuned!</p>
-            <button class="error-popup-btn focusable" id="goBackBtn" tabindex="0">Go Back</button>
+            <button class="error-popup-btn focusable" id="goBackBtn" tabindex="0" onclick="if(window.history.length > 1) { window.history.back(); } else { window.location.href = 'home.html'; }">Go Back</button>
         </div>
     </div>
+
+    <!-- Network Status Popup (shows previous vs current connection) -->
+    <div class="error-popup-overlay" id="networkStatusPopup" style="display: none;">
+        <div class="error-popup">
+            <h2 class="error-popup-title">Network Status</h2>
+            <div class="error-popup-message" id="networkStatusBody" style="text-align:left; max-width:520px;">
+                <p id="networkPrev">Previous: unknown</p>
+                <p id="networkNow">Current: detecting...</p>
+            </div>
+            <div style="display:flex; gap:12px; margin-top:12px;">
+                <button class="error-popup-btn focusable" id="networkRetryBtn" tabindex="0">Check Now</button>
+                <button class="error-popup-btn focusable" id="networkCloseBtn" tabindex="0">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Show popup as early as possible to avoid flashing the page before scripts run -->
+    <script>
+        (function(){
+            try {
+                var popup = document.getElementById('comingSoonPopup');
+                if (popup) {
+                    // Blur background content immediately
+                    var content = document.querySelector('.subpage-section');
+                    var header = document.querySelector('.subpage-header');
+                    var filters = document.querySelector('.filters-bar');
+                    if (content) content.classList.add('blurred');
+                    if (header) header.classList.add('blurred');
+                    if (filters) filters.classList.add('blurred');
+                    popup.style.display = 'flex';
+                    var goBack = document.getElementById('goBackBtn');
+                    if (goBack && typeof goBack.focus === 'function') {
+                        try { goBack.focus(); } catch(e) {}
+                    }
+                }
+            } catch (e) {}
+        })();
+    </script>
 
     <script src="js/api.js" defer></script>
     <script src="js/favorites.js" defer></script>

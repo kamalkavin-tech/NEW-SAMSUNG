@@ -13,6 +13,7 @@ var homeSearchActivated = false; // Only activate keypad/editing on explicit act
 var homeLanguageLogoCache = {}; // URL -> true
 var homeLanguageLogoPrefetchInFlight = {}; // URL -> true
 var homeAdImageCache = {}; // URL -> true
+var _homeChannelsRenderSignature = '';
 
 // CI-08: data-URI cache for language logos so home revisits paint instantly
 // without a network fetch. Persists across page navigations via sessionStorage.
@@ -232,24 +233,22 @@ function showFoFiLogo(logoUrl, skipNormalize) {
 
     // Clear any existing retry attempts on this element
     try { logoImg.removeAttribute('data-img-retry-attempt'); } catch (e) {}
+    logoImg.style.display = 'block';
+    logoImg.style.visibility = 'hidden';
+    logoImg.style.opacity = '0';
 
     var loadSucceeded = false;
     var timeoutId = null;
 
-    // onerror: show fallback
+    // onerror: keep the logo hidden instead of flashing text fallback.
     logoImg.onerror = function () {
         loadSucceeded = false;
         if (timeoutId) clearTimeout(timeoutId);
         try { this.removeAttribute('src'); } catch (e) {}
-        if (useCachedLogo) {
-            // Keep the cached logo visible instead of falling back to text.
-            // A stale cached image is still better than the plain brand label.
-            BBNLLogger.warn("[HOME] Cached logo failed to reload, keeping cached display state");
-            return;
-        }
-        this.style.display = 'none';
-        if (fallbackText) fallbackText.style.display = 'block';
-        BBNLLogger.debug("[HOME] Logo failed to load, showing fallback");
+        this.style.visibility = 'hidden';
+        this.style.opacity = '0';
+        if (fallbackText) fallbackText.style.display = 'none';
+        BBNLLogger.debug("[HOME] Logo failed to load, leaving placeholder hidden");
     };
 
     // onload: mark cached and show image
@@ -260,6 +259,8 @@ function showFoFiLogo(logoUrl, skipNormalize) {
             if (typeof BBNL_API !== 'undefined' && BBNL_API.markImageCached) BBNL_API.markImageCached(this.src);
         } catch (e) {}
         this.style.display = 'block';
+        this.style.visibility = 'visible';
+        this.style.opacity = '1';
         if (fallbackText) fallbackText.style.display = 'none';
         BBNLLogger.debug("[HOME] Logo loaded successfully: " + this.src.substring(0, 50));
     };
@@ -274,15 +275,11 @@ function showFoFiLogo(logoUrl, skipNormalize) {
     // If image hasn't loaded within timeout, show fallback (reduced to 2.5s for TV networks)
     timeoutId = setTimeout(function () {
         if (!loadSucceeded) {
-            if (useCachedLogo) {
-                // Keep cached logo visible while the API request is still pending.
-                BBNLLogger.debug("[HOME] Cached logo load timeout, keeping logo visible");
-                return;
-            }
             try { logoImg.removeAttribute('src'); } catch (e) {}
-            logoImg.style.display = 'none';
-            if (fallbackText) fallbackText.style.display = 'block';
-            BBNLLogger.warn("[HOME] Logo load timeout after 2500ms, showing fallback");
+            logoImg.style.visibility = 'hidden';
+            logoImg.style.opacity = '0';
+            if (fallbackText) fallbackText.style.display = 'none';
+            BBNLLogger.warn("[HOME] Logo load timeout after 2500ms, leaving placeholder hidden");
         }
     }, 2500);
 
@@ -339,6 +336,8 @@ var fofiShouldAutoPlay = false;
         fofiShouldAutoPlay = false;
     }
 })();
+// Runtime guard to prevent duplicate auto-play attempts within one JS session
+// (runtime guard removed — autoplay controlled by sessionStorage only)
 
 // HOME button now exits the app completely (handled globally in api.js).
 // On re-launch, sessionStorage is empty → detectFreshLaunch() sets fofiShouldAutoPlay = true.
@@ -717,22 +716,37 @@ function runInitializeHomePage() {
         });
     }
 
-    // Load FoFi TV logo from API
-    loadFoFiLogo();
+    // Load FoFi TV logo from API - REMOVED (already loaded at DOMContentLoaded)
+    // loadFoFiLogo();  // <-- SKIP: Logo already displayed instantly at DOMContentLoaded
+    
     startNetworkAccessLockWatcher();
 
     // Auto-play FoFi channel immediately — API call already started by DOMContentLoaded
     if (fofiShouldAutoPlay) {
+        // Auto-play based on sessionStorage flag only. playFoFiChannel() will mark the flag.
         playFoFiChannel();
-    } else {
     }
 
     // Preload channels and languages in background to speed up channels page
+    // Skip background prefetch when returning from internal navigation or
+    // when the home caches are already seeded to avoid duplicate network requests
     setTimeout(function() {
-        if (typeof BBNL_API !== 'undefined') {
-            if (BBNL_API.getChannelList) BBNL_API.getChannelList({}).catch(function(){});
-            if (BBNL_API.getLanguageList) BBNL_API.getLanguageList().catch(function(){});
-        }
+        try {
+            var returningFromChannels = sessionStorage.getItem('returningFromChannels');
+            // If returning from channels (internal navigation), skip prefetch
+            if (returningFromChannels === 'true') return;
+
+            if (typeof BBNL_API !== 'undefined') {
+                // Only prefetch if we don't already have cached data
+                try {
+                    var hasHomeChannels = !!sessionStorage.getItem('home_channels_cache');
+                    var hasHomeLangs = !!sessionStorage.getItem('home_languages_cache');
+                } catch (eHas) { var hasHomeChannels = false; var hasHomeLangs = false; }
+
+                if (BBNL_API.getChannelList && !hasHomeChannels) BBNL_API.getChannelList({}).catch(function(){});
+                if (BBNL_API.getLanguageList && !hasHomeLangs) BBNL_API.getLanguageList().catch(function(){});
+            }
+        } catch (e) {}
     }, 1500); // 1.5 seconds after home page loads
 
     _homePageInitialized = true;
@@ -828,7 +842,11 @@ document.addEventListener('keydown', function (e) {
             if (document.activeElement.value.trim() !== '') {
                 document.activeElement.value = '';
             } else {
-                handleBackNavigation();
+                if (typeof BBNL_exitAppPreservingAuth === 'function') {
+                    BBNL_exitAppPreservingAuth();
+                } else {
+                    confirmExit();
+                }
             }
             return;
         }
@@ -891,11 +909,14 @@ document.addEventListener('keydown', function (e) {
             break;
         case 10009: // BACK
             e.preventDefault();
-            // Smart back navigation:
-            // If in content area -> go back to sidebar
-            // If in sidebar at home icon -> show exit confirmation
-            // If in sidebar at other icon -> go to home icon
-            handleBackNavigation();
+            if (document.activeElement && document.activeElement.id === 'searchInput' && document.activeElement.value.trim() !== '') {
+                clearTimeout(homeSearchTimeout);
+                document.activeElement.value = '';
+            } else if (typeof BBNL_exitAppPreservingAuth === 'function') {
+                BBNL_exitAppPreservingAuth();
+            } else {
+                confirmExit();
+            }
             break;
         case 447: // VolumeUp
         case 448: // VolumeDown
@@ -1006,47 +1027,10 @@ function handleExitPopupNavigation(keyCode) {
 
 // Smart back navigation handler
 function handleBackNavigation() {
-    var active = document.activeElement;
-
-    // Check if we're in the exit modal
-    var exitModal = document.getElementById('exitModal');
-    if (exitModal && exitModal.classList.contains('show')) {
-        // Close the exit modal
-        hideExitConfirmation();
-        return;
-    }
-
-    // Check if we're in sidebar
-    var sidebarIcons = document.querySelectorAll('.sidebar-icon');
-    var inSidebar = false;
-    var atHomeIcon = false;
-
-    sidebarIcons.forEach(function (icon, index) {
-        if (icon === active || icon.contains(active)) {
-            inSidebar = true;
-            if (index === 0) {
-                atHomeIcon = true;
-            }
-        }
-    });
-
-    if (inSidebar) {
-        if (atHomeIcon) {
-            // At home icon in sidebar - show exit confirmation
-            showExitConfirmation();
-        } else {
-            // In sidebar but not at home - go to home icon
-            var homeIcon = document.querySelector('.sidebar-icon');
-            if (homeIcon) {
-                homeIcon.focus();
-            }
-        }
+    if (typeof BBNL_exitAppPreservingAuth === 'function') {
+        BBNL_exitAppPreservingAuth();
     } else {
-        // In content area - go to sidebar home icon
-        var homeIcon = document.querySelector('.sidebar-icon');
-        if (homeIcon) {
-            homeIcon.focus();
-        }
+        confirmExit();
     }
 }
 
@@ -1284,6 +1268,8 @@ function handleClick(element) {
  */
 function loadHomeAds() {
     var renderedFromCache = false;
+    var returningFromChannels = false;
+    try { returningFromChannels = sessionStorage.getItem('returningFromChannels') === 'true'; } catch (e) { returningFromChannels = false; }
 
     // Check sessionStorage cache first
     try {
@@ -1315,8 +1301,9 @@ function loadHomeAds() {
         }
     } catch (e) {}
 
-    // Get ads from API
-    AdsAPI.getHomeAds()
+    // Get ads from API (skip network when returning from other pages)
+    if (!returningFromChannels) {
+        AdsAPI.getHomeAds()
         .then(function (ads) {
 
             // Only proceed if we have valid ads
@@ -1333,6 +1320,13 @@ function loadHomeAds() {
             // Fail silently - don't show errors to user
             console.error("[HOME] Failed to load ads:", error);
         });
+    } else {
+        // When returning from other pages, avoid network calls; if not rendered from cache above,
+        // leave hero banner blank to prevent duplicate image/network requests.
+        if (!renderedFromCache) {
+            // No-op: keep existing banner state (empty)
+        }
+    }
 }
 
 /**
@@ -1547,6 +1541,18 @@ function renderChannelsInHomeGrid(channels) {
         return;
     }
 
+    // Skip duplicate render to avoid visible refresh/flicker on repeated init calls.
+    var signature = '';
+    try {
+        signature = (channels || []).map(function (ch) {
+            return String(ch.channelno || ch.urno || ch.chid || ch.ch_no || ch.chtitle || ch.channel_name || '');
+        }).join('|');
+    } catch (eSig) {}
+    if (signature && signature === _homeChannelsRenderSignature && container.childElementCount > 0) {
+        return;
+    }
+    _homeChannelsRenderSignature = signature;
+
 
     // Build all cards in a DocumentFragment (single DOM insert = single reflow)
     // This is critical on Samsung TV where each appendChild triggers expensive layout
@@ -1755,6 +1761,10 @@ function renderLanguagesInHomeGrid(languages) {
         return;
     }
 
+    // ✅ RENDERING FIX: Ensure container is visible before rendering
+    container.style.display = 'grid';
+    container.style.opacity = '1';
+    container.style.visibility = 'visible';
 
     // Sort languages alphabetically (keep special entries at top)
     languages.sort(function (a, b) {
@@ -1786,10 +1796,17 @@ function renderLanguagesInHomeGrid(languages) {
         item.setAttribute('data-langid', langId);
         item.setAttribute('data-langname', langName);
         item.setAttribute('data-index', index.toString());
+        // ✅ RENDERING FIX: Ensure item is visible
+        item.style.display = 'flex';
+        item.style.opacity = '1';
+        item.style.visibility = 'visible';
 
         if (langLogo && !langLogo.includes('noimage')) {
             var logoContainer = document.createElement('div');
             logoContainer.className = 'language-logo-container';
+            logoContainer.style.display = 'flex';
+            logoContainer.style.opacity = '1';
+            logoContainer.style.visibility = 'visible';
 
             var img = document.createElement('img');
             img.className = 'language-logo';
@@ -1828,6 +1845,8 @@ function renderLanguagesInHomeGrid(languages) {
                 var fallback = document.createElement('div');
                 fallback.className = 'language-logo-fallback';
                 fallback.innerText = langName.substring(0, 2).toUpperCase();
+                fallback.style.display = 'flex';
+                fallback.style.opacity = '1';
                 item.insertBefore(fallback, item.firstChild);
                 logoContainer.remove();
             };
@@ -1837,12 +1856,17 @@ function renderLanguagesInHomeGrid(languages) {
             var fallback = document.createElement('div');
             fallback.className = 'language-logo-fallback';
             fallback.innerText = langName.substring(0, 2).toUpperCase();
+            fallback.style.display = 'flex';
+            fallback.style.opacity = '1';
             item.appendChild(fallback);
         }
 
         var nameLabel = document.createElement('div');
         nameLabel.className = 'language-name';
         nameLabel.innerText = langName;
+        nameLabel.style.display = 'block';
+        nameLabel.style.opacity = '1';
+        nameLabel.style.visibility = 'visible';
         item.appendChild(nameLabel);
 
         item.addEventListener('click', function () {
@@ -1860,6 +1884,9 @@ function renderLanguagesInHomeGrid(languages) {
     viewAllItem.className = 'language-item view-all focusable';
     viewAllItem.tabIndex = 0;
     viewAllItem.innerHTML = '<div class="language-logo-fallback">\u2192</div><div class="language-name">View All</div>';
+    viewAllItem.style.display = 'flex';
+    viewAllItem.style.opacity = '1';
+    viewAllItem.style.visibility = 'visible';
     viewAllItem.addEventListener('click', function () {
         window.location.href = 'language-select.html';
     });
@@ -2319,13 +2346,12 @@ function hideExitConfirmation() {
  */
 function confirmExit() {
     try {
-        // Tizen app exit
-        if (typeof tizen !== 'undefined' && tizen.application) {
-            tizen.application.getCurrentApplication().exit();
-        } else {
-            // Browser fallback - close window
-            window.close();
+        if (typeof BBNL_exitAppPreservingAuth === 'function') {
+            BBNL_exitAppPreservingAuth();
+            return;
         }
+        // Browser fallback - close window
+        window.close();
     } catch (e) {
         console.error("[HOME] Exit error:", e);
         window.close();
@@ -2360,12 +2386,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Initialize UI features immediately
-    initDarkMode();
-    initNetworkStatus();
-    
-    // Send analytics view event (only on fresh load)
-    sendTRPDataOnLoad();
+    // ✅ CRITICAL FIX: Load logo NOW (DOMContentLoaded, not window.onload)
+    // This ensures the sidebar logo appears INSTANTLY, not after all images load
+    loadFoFiLogoEarly();
 });
 
 // ==========================================
@@ -2946,61 +2969,68 @@ function autoTuneDefaultChannel() {
 }
 
 /**
- * Load FoFi TV logo from API and display in sidebar
+ * Load FoFi TV logo EARLY from cache (called at DOMContentLoaded)
+ * This ensures logo appears INSTANTLY before homepage data loads
+ * Caches to localStorage (persists across app exits, like login credentials)
  */
-function loadFoFiLogo() {
+function loadFoFiLogoEarly() {
     var logoImg = document.getElementById('fofitv-logo');
     var fallbackText = document.getElementById('brand-text-fallback');
-    if (!logoImg) {
-        return;
-    }
+    if (!logoImg) return;
 
-    // Paint instantly from cache while API request is in-flight.
-    // CRITICAL: Cache stores RAW API path, not normalized URL, to avoid double-normalization
+    // ✅ Step 1: Try localStorage FIRST (persistent cache like login credentials)
     var cachedLogoPath = '';
     try {
-        cachedLogoPath = sessionStorage.getItem('home_fofi_logo_raw_path') || localStorage.getItem('home_fofi_logo_raw_path') || '';
+        cachedLogoPath = localStorage.getItem('home_fofi_logo_raw_path') || '';
     } catch (e) {}
     
     if (cachedLogoPath) {
-        BBNLLogger.debug("[HOME] Loading logo from cache: " + cachedLogoPath.substring(0, 50));
-        showFoFiLogo(cachedLogoPath, true);  // Cache-first: keep logo visible over text fallback
+        BBNLLogger.debug("[HOME] Loading logo from localStorage (persistent): " + cachedLogoPath.substring(0, 50));
+        showFoFiLogo(cachedLogoPath, true);  // Display cached logo INSTANTLY
+        return;
     }
 
-    BBNL_API.getFoFiLogo().then(function (response) {
-        var logoPath = extractFoFiLogoPath(response);
-        
-        if (!logoPath) {
-            BBNLLogger.warn("[HOME] API returned empty logo path");
-            if (!cachedLogoPath) {
-                logoImg.style.display = 'none';
-                if (fallbackText) fallbackText.style.display = 'block';
+    // ✅ Step 2: Try sessionStorage (fast access within same session)
+    try {
+        cachedLogoPath = sessionStorage.getItem('home_fofi_logo_raw_path') || '';
+    } catch (e) {}
+    
+    if (cachedLogoPath) {
+        BBNLLogger.debug("[HOME] Loading logo from sessionStorage: " + cachedLogoPath.substring(0, 50));
+        // Also cache to localStorage for future sessions
+        try { localStorage.setItem('home_fofi_logo_raw_path', cachedLogoPath); } catch (e) {}
+        showFoFiLogo(cachedLogoPath, true);  // Display cached logo INSTANTLY
+        return;
+    }
+
+    // ✅ Step 3: Cache miss - fetch from API in background
+    // Logo should already be fetched during login (setSession), but fetch again if needed
+    if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.getFoFiLogo === 'function') {
+        BBNL_API.getFoFiLogo().then(function (response) {
+            var logoPath = extractFoFiLogoPath(response);
+            if (logoPath) {
+                BBNLLogger.debug("[HOME] API returned logo path at DOMContentLoaded: " + logoPath.substring(0, 50));
+                // Cache it for next load (both sessionStorage and localStorage)
+                try {
+                    sessionStorage.setItem('home_fofi_logo_raw_path', logoPath);
+                    localStorage.setItem('home_fofi_logo_raw_path', logoPath);
+                } catch (e) {}
+                // Display it now
+                showFoFiLogo(logoPath, true);
             }
-            return;
-        }
+        }).catch(function (err) {
+            BBNLLogger.warn("[HOME] Failed to fetch logo at DOMContentLoaded:", err);
+        });
+    }
+}
 
-        BBNLLogger.debug("[HOME] API returned logo path: " + logoPath.substring(0, 50));
-        
-        var visible = showFoFiLogo(logoPath);  // Will normalize once
-        if (visible) {
-            // Cache the RAW path from API, not the normalized URL
-            try { sessionStorage.setItem('home_fofi_logo_raw_path', logoPath); } catch (e) {}
-            try { localStorage.setItem('home_fofi_logo_raw_path', logoPath); } catch (e) {}
-            return;
-        }
-
-        // Logo display failed
-        if (!cachedLogoPath) {
-            logoImg.style.display = 'none';
-            if (fallbackText) fallbackText.style.display = 'block';
-        }
-    }).catch(function (error) {
-        BBNLLogger.error("[HOME] FoFi logo fetch failed: " + (error && error.message ? error.message : error));
-        if (!cachedLogoPath) {
-            logoImg.style.display = 'none';
-            if (fallbackText) fallbackText.style.display = 'block';
-        }
-    });
+/**
+ * Load FoFi TV logo from API and display in sidebar
+ */
+function loadFoFiLogo() {
+    // ✅ Logo already loaded at DOMContentLoaded
+    // This function is kept for compatibility but won't do anything
+    // since the logo is already displayed
 }
 
 /**
@@ -3009,6 +3039,14 @@ function loadFoFiLogo() {
  */
 function playFoFiChannel() {
     console.log("[HOME] Attempting FoFi auto-play...");
+    // Guard: don't start if already marked in sessionStorage
+    try {
+        if (sessionStorage.getItem('fofi_autoplay_done') === 'true') {
+            console.log('[HOME] FoFi autoplay skipped: already done (session flag)');
+            return;
+        }
+    } catch (eSkip) {}
+
     BBNL_API.getChannelList()
         .then(function (channels) {
             
@@ -3053,10 +3091,10 @@ function playFoFiChannel() {
             // NO FALLBACK: Only play FoFi channel, never fall back to other channels
             if (fofiChannel) {
                 // Play FoFi channel on app launch - NO subscription restriction for FoFi
-                sessionStorage.setItem('fofi_autoplay_done', 'true');
+                try { sessionStorage.setItem('fofi_autoplay_done', 'true'); } catch (e) {}
                 BBNL_API.playChannel(fofiChannel);
             } else {
-                sessionStorage.setItem('fofi_autoplay_done', 'true');
+                try { sessionStorage.setItem('fofi_autoplay_done', 'true'); } catch (e) {}
             }
         })
         .catch(function (error) {

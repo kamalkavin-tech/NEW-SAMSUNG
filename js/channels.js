@@ -121,6 +121,65 @@ var _progressiveNextIndex = 0;
 var _progressiveGrid = null;
 var _progressiveRenderDone = true;
 var _quickCategoryCache = { all: null, subs: null };
+var _channelCardElementCache = {}; // key -> DOM card, reused across category/language switches
+var _lastChannelsRenderSignature = '';
+// Menubar state: when false, channels should scroll by numeric channel number
+var isMenubarOpen = false;
+
+/**
+ * External setter for menubar open/closed state.
+ * Player (or other UI) can call `window.BBNL_setMenubarOpen(true|false)`.
+ * When menubar is closed we switch to number-ordered scrolling starting
+ * from the first subscribed channel.
+ */
+function setMenubarOpen(state) {
+    isMenubarOpen = !!state;
+    if (!isMenubarOpen) {
+        sortChannelsByNumberAndReset();
+    } else {
+        // When opening menubar, caller should set appropriate category ordering
+        // We leave the current display as-is; the menubar UI can request re-render.
+    }
+}
+window.BBNL_setMenubarOpen = setMenubarOpen;
+
+function sortChannelsByNumberAndReset() {
+    try {
+        // Choose source list: prefer quick 'all' cache, then currentDisplayedChannels, then masterChannelList
+        var source = null;
+        if (Array.isArray(_quickCategoryCache.all) && _quickCategoryCache.all.length > 0) source = _quickCategoryCache.all.slice();
+        else if (Array.isArray(currentDisplayedChannels) && currentDisplayedChannels.length > 0) source = currentDisplayedChannels.slice();
+        else if (Array.isArray(masterChannelList) && masterChannelList.length > 0) source = masterChannelList.slice();
+        if (!source || source.length === 0) return;
+
+        // Numeric sort by channel number ascending
+        source.sort(function(a, b) {
+            var an = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10) || 0;
+            var bn = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10) || 0;
+            return an - bn;
+        });
+
+        // Render number-ordered list
+        allChannels = source;
+        renderAllChannels(allChannels);
+
+        // After render, focus first subscribed channel (if any) or first card
+        setTimeout(function() {
+            var container = document.getElementById('channel-grid-container');
+            if (!container) return;
+            var cards = container.querySelectorAll('.channel-card.focusable');
+            if (!cards || cards.length === 0) return;
+            var target = null;
+            for (var i = 0; i < cards.length; i++) {
+                try {
+                    if (cards[i].dataset && (cards[i].dataset.subscribed === '1' || cards[i].dataset.subscribed === 'yes')) { target = cards[i]; break; }
+                } catch (e) {}
+            }
+            if (!target) target = cards[0];
+            try { target.focus(); scrollCardIntoView(target); } catch (eFocus) {}
+        }, 120);
+    } catch (eSort) {}
+}
 
 function fastLaunchChannelFromChannels(channel) {
     if (!channel || !channel.streamlink) return false;
@@ -201,12 +260,40 @@ function exitChannelsToHome() {
     }
     try { hideErrorPopups(); } catch (e) {}
     setChannelsLoadingState(false);
-
     window.__BBNL_NAVIGATING = true;
     sessionStorage.removeItem('selectedLanguageId');
     sessionStorage.removeItem('selectedLanguageName');
+    // Mark flag so Home can fast-path restore instead of full reload
     sessionStorage.setItem('returningFromChannels', 'true');
-    window.location.replace("home.html");
+
+    // Prefer history.back() so browser can restore Home from BFCache when possible.
+    // Fall back to replace() if history.back() doesn't navigate to home within timeout.
+    try {
+        var prev = document.referrer || '';
+        if (prev && prev.indexOf('home.html') !== -1) {
+            // If we came from home, go back in history to allow BFCache restore
+            history.back();
+            // Fallback: if not navigated to home after 350ms, force replace
+            setTimeout(function () {
+                if (window.location.pathname.split('/').pop() !== 'home.html') {
+                    window.location.replace('home.html');
+                }
+            }, 350);
+            return;
+        }
+    } catch (eRef) {}
+
+    // Default fallback when referrer unknown: try history.back() first
+    try {
+        history.back();
+        setTimeout(function () {
+            if (window.location.pathname.split('/').pop() !== 'home.html') {
+                window.location.replace('home.html');
+            }
+        }, 350);
+    } catch (eBack) {
+        window.location.replace('home.html');
+    }
 }
 
 function normalizeChannelLogoKey(url) {
@@ -219,6 +306,38 @@ function normalizeChannelLogoKey(url) {
     } catch (e) {
         return resolved.split('?')[0].split('#')[0];
     }
+}
+
+function getChannelCardIdentity(ch) {
+    if (!ch || typeof ch !== 'object') return '';
+    var parts = [
+        ch.channelid,
+        ch.chid,
+        ch.urno,
+        ch.channelno,
+        ch.ch_no,
+        ch.streamlink,
+        ch.channel_url,
+        ch.chtitle,
+        ch.channel_name
+    ];
+    for (var i = 0; i < parts.length; i++) {
+        var v = parts[i];
+        if (v === null || v === undefined) continue;
+        var s = String(v).trim();
+        if (s) return s;
+    }
+    return '';
+}
+
+function getChannelsRenderSignature(channels) {
+    if (!Array.isArray(channels) || channels.length === 0) return 'empty';
+    var parts = new Array(channels.length);
+    for (var i = 0; i < channels.length; i++) {
+        var ch = channels[i] || {};
+        parts[i] = String(ch.channelno || ch.urno || ch.chid || ch.ch_no || ch.chtitle || ch.channel_name || i);
+    }
+    return parts.join('|');
 }
 
 function resolveChannelAssetUrl(rawUrl) {
@@ -412,7 +531,12 @@ async function initPage() {
         }
         if (cached && cached.length > 0) {
             allChannels = cached;
-            renderAllChannels(allChannels);
+            // If menubar is closed on page open, enforce numeric ordering
+            if (!isMenubarOpen) {
+                try { sortChannelsByNumberAndReset(); } catch (e) { renderAllChannels(allChannels); }
+            } else {
+                renderAllChannels(allChannels);
+            }
             setChannelsLoadingState(false);
         }
     } catch (e) {}
@@ -1150,6 +1274,7 @@ function setCachedChannels(options, channels) {
 
 function clearChannelsResultCache() {
     channelsResultCache = {};
+    _channelCardElementCache = {};
 }
 
 function primeChannelLogoCache(channels, maxCount, scrollTop, containerHeight, itemHeight) {
@@ -1364,7 +1489,12 @@ async function loadChannels(options = {}) {
     var cachedChannels = getCachedChannels(apiOptions);
     if (cachedChannels && cachedChannels.length > 0) {
         allChannels = cachedChannels.slice();
-        renderAllChannels(allChannels);
+        // Respect menubar mode: numeric ordering when closed, category ordering when open
+        if (!isMenubarOpen) {
+            try { sortChannelsByNumberAndReset(); } catch (e) { renderAllChannels(allChannels); }
+        } else {
+            renderAllChannels(allChannels);
+        }
         setChannelsLoadingState(false);
         return;
     }
@@ -1449,7 +1579,12 @@ async function loadChannels(options = {}) {
                 return;
             }
 
-            renderAllChannels(allChannels);
+            // Respect menubar mode on full response
+            if (!isMenubarOpen) {
+                try { sortChannelsByNumberAndReset(); } catch (e) { renderAllChannels(allChannels); }
+            } else {
+                renderAllChannels(allChannels);
+            }
             setChannelsLoadingState(false);
         } else {
             container.innerHTML = '';
@@ -1473,6 +1608,7 @@ function renderAllChannels(channels) {
     if (channelsPageExiting) return;
 
     var container = document.getElementById("channel-grid-container");
+    if (!container) return;
     var renderGeneration = ++_renderGeneration;
 
     // Store currently displayed channels for LCN search
@@ -1482,8 +1618,17 @@ function renderAllChannels(channels) {
     if (channels.length === 0) {
         container.innerHTML = '<div class="loading-spinner">No channels found</div>';
         _cachedFocusables = null;
+        _lastChannelsRenderSignature = 'empty';
         return;
     }
+
+    // If the exact same ordered channel list is requested again, keep DOM as-is
+    // to prevent visible logo refresh on repeated category/language callbacks.
+    var signature = getChannelsRenderSignature(channels);
+    if (signature === _lastChannelsRenderSignature && container.querySelector('.channels-grid')) {
+        return;
+    }
+    _lastChannelsRenderSignature = signature;
 
     // PERFORMANCE: Properly remove old grid to free event listeners + DOM nodes.
     while (container.firstChild) { container.removeChild(container.firstChild); }
@@ -1569,6 +1714,15 @@ function _setupLazyImageLoading(scrollContainer) {
 // ==========================================
 
 function createChannelCard(ch, loadImmediate, channelIdx) {
+    var identity = getChannelCardIdentity(ch);
+    if (identity && _channelCardElementCache[identity]) {
+        var cachedCard = _channelCardElementCache[identity];
+        if (typeof channelIdx === 'number' && channelIdx >= 0) {
+            cachedCard.dataset.channelIdx = String(channelIdx);
+        }
+        return cachedCard;
+    }
+
     const chNameRaw = String(ch.chtitle || ch.channel_name || ch.chname || "").trim();
     const chName = (typeof decodeHtmlEntities === 'function') ? decodeHtmlEntities(chNameRaw) : chNameRaw;
     const chLogo = getChannelCardLogo(ch);
@@ -1757,6 +1911,10 @@ function createChannelCard(ch, loadImmediate, channelIdx) {
     card.addEventListener("focus", () => {
         currentZone = 'cards';
     });
+
+    if (identity) {
+        _channelCardElementCache[identity] = card;
+    }
 
     return card;
 }

@@ -2613,6 +2613,39 @@ var _playerStreamGen = 0; // Tracks which channel switch the callbacks belong to
 // Suppress re-showing subscription popup for a short window after navigation
 var _suppressSubscriptionPopupUntil = 0;
 
+function applyDefaultClosedMenubarOrdering(sourceChannels) {
+    var base = Array.isArray(sourceChannels) ? sourceChannels.slice() : [];
+    if (base.length === 0) {
+        allChannels = [];
+        currentIndex = -1;
+        return;
+    }
+
+    // Default closed-menubar behavior: subscribed channels in ascending LCN order.
+    var subscribedOnly = base.filter(function (ch) {
+        return isChannelSubscribed(ch);
+    });
+    var ordered = (subscribedOnly.length > 0 ? subscribedOnly : base).slice();
+    ordered.sort(function (a, b) {
+        var aNo = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10) || 0;
+        var bNo = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10) || 0;
+        return aNo - bNo;
+    });
+
+    allChannels = ordered;
+
+    var currentCh = _lastAttemptedChannel || _lastPlayingChannel;
+    if (currentCh) {
+        var currentId = String(currentCh.channelno || currentCh.urno || currentCh.chid || '').trim();
+        var idx = allChannels.findIndex(function (c) {
+            return String(c.channelno || c.urno || c.chid || '').trim() === currentId;
+        });
+        currentIndex = idx >= 0 ? idx : 0;
+    } else {
+        currentIndex = 0;
+    }
+}
+
 async function loadChannelList(lookupName = null) {
     try {
         // Cache-first hydration: when returning to the player, reuse the existing
@@ -2643,40 +2676,41 @@ async function loadChannelList(lookupName = null) {
                 sidebarState.allChannelsCache = sortedAll.slice();
             }
 
-            // Apply language filter for CH+/CH- navigation — only cycle through
-            // the same channels that were visible on the channels page
-            var langId = sessionStorage.getItem('selectedLanguageId') || '';
-            var langName = sessionStorage.getItem('selectedLanguageName') || '';
-
-            if (langId === 'subs' || (langName && langName.toLowerCase().indexOf('subscribed') !== -1)) {
-                // Subscribed filter
-                allChannels = sortedAll.filter(function (ch) {
-                    return isChannelSubscribed(ch);
-                });
-            } else if (langId === 'all' || String(langId).toLowerCase() === 'all channels' ||
-                (langName && String(langName).trim().toLowerCase() === 'all channels')) {
-                // Explicit "All Channels" — full list for zapping (distinct from empty session = home default)
-                allChannels = sortedAll.slice();
-            } else if (langId && langId !== '' && langId !== 'all') {
-                // Language filter
-                var filterLangId = String(langId).trim();
-                var filterLangName = String(langName || '').trim().toLowerCase();
-                allChannels = sortedAll.filter(function (ch) {
-                    var chLangId = String(ch.langid || ch.lang_id || '').trim();
-                    if (chLangId && chLangId === filterLangId) return true;
-                    if (filterLangName) {
-                        var chLang = String(ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').trim().toLowerCase();
-                        if (chLang === filterLangName || chLang === filterLangId.toLowerCase()) return true;
-                    }
-                    return false;
-                });
+            // Menubar closed (default launch/relaunch): always use subscribed numeric sequence.
+            // Menubar open: keep existing subcategory/language behavior via sidebar flows.
+            if (!sidebarState || !sidebarState.isOpen) {
+                applyDefaultClosedMenubarOrdering(sortedAll);
             } else {
-                // No filter in session (e.g. home launch) — default to subscribed channels only
-                allChannels = sortedAll.filter(function (ch) {
-                    return isChannelSubscribed(ch);
-                });
+                // Sidebar is open - keep language/category context.
+                var langId = sessionStorage.getItem('selectedLanguageId') || '';
+                var langName = sessionStorage.getItem('selectedLanguageName') || '';
+
+                if (langId === 'subs' || (langName && langName.toLowerCase().indexOf('subscribed') !== -1)) {
+                    allChannels = sortedAll.filter(function (ch) {
+                        return isChannelSubscribed(ch);
+                    });
+                } else if (langId === 'all' || String(langId).toLowerCase() === 'all channels' ||
+                    (langName && String(langName).trim().toLowerCase() === 'all channels')) {
+                    allChannels = sortedAll.slice();
+                } else if (langId && langId !== '' && langId !== 'all') {
+                    var filterLangId = String(langId).trim();
+                    var filterLangName = String(langName || '').trim().toLowerCase();
+                    allChannels = sortedAll.filter(function (ch) {
+                        var chLangId = String(ch.langid || ch.lang_id || '').trim();
+                        if (chLangId && chLangId === filterLangId) return true;
+                        if (filterLangName) {
+                            var chLang = String(ch.lalng || ch.langtitle || ch.langname || ch.language || ch.lang || '').trim().toLowerCase();
+                            if (chLang === filterLangName || chLang === filterLangId.toLowerCase()) return true;
+                        }
+                        return false;
+                    });
+                } else {
+                    allChannels = sortedAll.filter(function (ch) {
+                        return isChannelSubscribed(ch);
+                    });
+                }
+                if (allChannels.length === 0) allChannels = sortedAll;
             }
-            if (allChannels.length === 0) allChannels = sortedAll;
 
 
             // IF lookupName is provided, find it and play
@@ -6110,6 +6144,11 @@ function openSidebar() {
     }
 
     sidebarState.isOpen = true;
+    // Menubar opened: switch away from default numeric-only scrolling.
+    try { sessionStorage.setItem('player_menubar_open', '1'); } catch (eMOpen) {}
+    try {
+        if (window && typeof window.BBNL_setMenubarOpen === 'function') window.BBNL_setMenubarOpen(true);
+    } catch (eNotify) {}
     _sidebarOpenCycle += 1;
     _sidebarOpenTs = Date.now();
     _sidebarPlaybackFocusCycle = 0;
@@ -6118,6 +6157,28 @@ function openSidebar() {
     sidebarState.currentLevel = 'categories';
 
     if (!hasSidebarCache) {
+        return;
+    }
+
+    // ✅ CRITICAL: Ensure languages list is populated before restoring preferred language.
+    // If language metadata isn't loaded yet (only built-in entries present), load it
+    // so `applyPreferredSidebarLanguage()` can match sessionStorage to a real tab.
+    if (!Array.isArray(sidebarState.languages) || sidebarState.languages.length <= 2) {
+        loadLanguagesFromChannels().then(function () {
+            try {
+                applyPreferredSidebarLanguage();
+
+                // After languages are ready, restore category/channel state as before
+                clearAllSidebarCategoryExpansions();
+                var languageStateKey = getCurrentLanguageStateKey();
+                var hasSavedState = !!(sidebarState.languageUiState && sidebarState.languageUiState[languageStateKey]);
+                if (hasSavedState && languageContainsCurrentPlayingChannel(sidebarState.languageIndex)) {
+                    buildCategoriesForLanguage();
+                } else {
+                    alignSidebarToCurrentPlayback();
+                }
+            } catch (eLoadLang) {}
+        }).catch(function () {});
         return;
     }
 
@@ -6314,6 +6375,10 @@ function closeSidebar() {
     saveCurrentLanguageUiState();
 
     sidebarState.isOpen = false;
+    // Menubar closed: restore default subscribed numeric ordering.
+    try { sessionStorage.removeItem('player_menubar_open'); } catch (eMClose) {}
+    try { if (window && typeof window.BBNL_setMenubarOpen === 'function') window.BBNL_setMenubarOpen(false); } catch (eNotify) {}
+    try { applyDefaultClosedMenubarOrdering(_allChannelsUnfiltered); } catch (eOrder) {}
 
     // ✅ CRITICAL: Clear focus from sidebar BEFORE closing
     // This prevents focus from remaining on sidebar elements after close

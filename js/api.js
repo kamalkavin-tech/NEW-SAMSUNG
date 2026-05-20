@@ -2615,6 +2615,19 @@ const AuthAPI = {
                     try { NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent(); } catch (eNet1) {}
                 }
 
+                // ✅ CRITICAL: Fetch and cache logo DURING LOGIN
+                // This ensures logo is available immediately on every subsequent app launch
+                // (stored in localStorage like login credentials, not sessionStorage)
+                if (typeof FoFiLogoAPI !== 'undefined' && typeof FoFiLogoAPI.getFoFiLogo === 'function') {
+                    FoFiLogoAPI.getFoFiLogo().then(function(logoResponse) {
+                        // Logo cached automatically by getFoFiLogo() to localStorage
+                        console.log('[AuthAPI] Logo fetched and cached during login');
+                    }).catch(function(err) {
+                        // Fail silently - logo caching is nice-to-have, not critical
+                        console.log('[AuthAPI] Logo fetch during login failed (non-critical):', err);
+                    });
+                }
+
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
                 CacheManager.clearAll();
@@ -2628,13 +2641,24 @@ const AuthAPI = {
                     if (typeof NetworkAccessLockAPI !== 'undefined' && NetworkAccessLockAPI.isEnabled() && !NetworkAccessLockAPI.getAllowedNetworkSignature()) {
                         try { NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent(); } catch (eNet2) {}
                     }
+
+                    // ✅ Retry logo fetch after clearing cache
+                    if (typeof FoFiLogoAPI !== 'undefined' && typeof FoFiLogoAPI.getFoFiLogo === 'function') {
+                        FoFiLogoAPI.getFoFiLogo().then(function(logoResponse) {
+                            console.log('[AuthAPI] Logo fetched and cached during login (after cache clear)');
+                        }).catch(function(err) {
+                            console.log('[AuthAPI] Logo fetch after cache clear failed (non-critical):', err);
+                        });
+                    }
                 } catch (retryErr) {
                     // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
                     var savedBackup = localStorage.getItem("bbnl_user_backup");
+                    var savedLogo = localStorage.getItem("_fofi_logo_response_persistent");
                     localStorage.clear();
                     if (savedFlag) localStorage.setItem("hasLoggedInOnce", savedFlag);
                     if (savedBackup) localStorage.setItem("bbnl_user_backup", savedBackup);
+                    if (savedLogo) localStorage.setItem("_fofi_logo_response_persistent", savedLogo);
                     localStorage.setItem("bbnl_user", userJson);
                     localStorage.setItem("hasLoggedInOnce", "true");
                     localStorage.removeItem('bbnl_logged_out');
@@ -3920,6 +3944,18 @@ const FoFiLogoAPI = {
         }
 
         try {
+            // ✅ Check localStorage FIRST (persists across app exits like login credentials)
+            var cachedLocal = localStorage.getItem('_fofi_logo_response_persistent');
+            if (cachedLocal) {
+                this._cachedResponse = JSON.parse(cachedLocal);
+                // Also populate sessionStorage for fast repeated access
+                try { sessionStorage.setItem('_fofi_logo_response', cachedLocal); } catch (e) {}
+                return this._cachedResponse;
+            }
+        } catch (e) {}
+
+        try {
+            // ✅ Fall back to sessionStorage (cleared on app exit)
             var cached = sessionStorage.getItem('_fofi_logo_response');
             if (cached) {
                 this._cachedResponse = JSON.parse(cached);
@@ -3941,7 +3977,9 @@ const FoFiLogoAPI = {
         var response = await apiCall(API_ENDPOINTS.FOFITV_LOGO, payload);
         if (response && !response.error) {
             this._cachedResponse = response;
+            // ✅ Cache in BOTH sessionStorage and localStorage
             try { sessionStorage.setItem('_fofi_logo_response', JSON.stringify(response)); } catch (e) {}
+            try { localStorage.setItem('_fofi_logo_response_persistent', JSON.stringify(response)); } catch (e) {}
         }
         return response;
     }
@@ -4856,6 +4894,59 @@ if (typeof window !== 'undefined') {
     window.BBNL_gateAuthenticatedPage = BBNL_gateAuthenticatedPage;
 }
 
+function BBNL_clearAppStatePreservingAuth() {
+    var authSnapshot = {
+        bbnl_user: null,
+        bbnl_user_backup: null,
+        hasLoggedInOnce: null,
+        bbnl_has_logged_in_once: null,
+        fofi_logo_response: null,
+        fofi_logo_raw_path: null
+    };
+
+    try { authSnapshot.bbnl_user = localStorage.getItem('bbnl_user'); } catch (e1) {}
+    try { authSnapshot.bbnl_user_backup = localStorage.getItem('bbnl_user_backup'); } catch (e2) {}
+    try { authSnapshot.hasLoggedInOnce = localStorage.getItem('hasLoggedInOnce'); } catch (e3) {}
+    try { authSnapshot.bbnl_has_logged_in_once = localStorage.getItem('bbnl_has_logged_in_once'); } catch (e4) {}
+    // ✅ PRESERVE logo cache (like auth credentials)
+    try { authSnapshot.fofi_logo_response = localStorage.getItem('_fofi_logo_response_persistent'); } catch (e9) {}
+    try { authSnapshot.fofi_logo_raw_path = localStorage.getItem('home_fofi_logo_raw_path'); } catch (e10) {}
+
+    try { sessionStorage.clear(); } catch (e5) {}
+    try { localStorage.clear(); } catch (e6) {}
+
+    try {
+        if (authSnapshot.bbnl_user) localStorage.setItem('bbnl_user', authSnapshot.bbnl_user);
+        if (authSnapshot.bbnl_user_backup) localStorage.setItem('bbnl_user_backup', authSnapshot.bbnl_user_backup);
+        if (authSnapshot.hasLoggedInOnce === 'true') localStorage.setItem('hasLoggedInOnce', 'true');
+        if (authSnapshot.bbnl_has_logged_in_once === '1') localStorage.setItem('bbnl_has_logged_in_once', '1');
+        // ✅ Restore logo cache (persists across app exits like auth)
+        if (authSnapshot.fofi_logo_response) localStorage.setItem('_fofi_logo_response_persistent', authSnapshot.fofi_logo_response);
+        if (authSnapshot.fofi_logo_raw_path) localStorage.setItem('home_fofi_logo_raw_path', authSnapshot.fofi_logo_raw_path);
+    } catch (e7) {}
+
+    try { localStorage.removeItem('bbnl_logged_out'); } catch (e8) {}
+    try { localStorage.removeItem('bbnl_relaunch_pending'); } catch (e11) {}
+}
+
+function BBNL_exitAppPreservingAuth() {
+    BBNL_clearAppStatePreservingAuth();
+
+    try {
+        if (typeof tizen !== 'undefined' && tizen.application) {
+            tizen.application.getCurrentApplication().exit();
+            return true;
+        }
+    } catch (e1) {}
+
+    try {
+        window.close();
+        return true;
+    } catch (e2) {}
+
+    return false;
+}
+
 // ==========================================
 // APP LIFECYCLE - HOME button handling
 // Samsung TV HOME button sends app to background.
@@ -4931,12 +5022,9 @@ document.addEventListener('visibilitychange', function () {
 
         // 3. Exit the Tizen application completely
         //    sessionStorage is automatically cleared when the process dies.
-        //    localStorage (hasLoggedInOnce, bbnl_user) persists for relaunch.
+        //    localStorage is cleared first, then auth state is restored for relaunch.
         try {
-            localStorage.setItem('bbnl_relaunch_pending', '1');
-            if (typeof tizen !== 'undefined' && tizen.application) {
-                tizen.application.getCurrentApplication().exit();
-            }
+            BBNL_exitAppPreservingAuth();
         } catch (e) {
             console.error("[App] Exit failed:", e);
         }

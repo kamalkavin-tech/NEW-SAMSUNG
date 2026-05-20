@@ -22,8 +22,8 @@
     <aside class="icon-sidebar">
         <!-- FoFi TV Logo (loaded from API) -->
         <div class="sidebar-brand">
-            <img id="fofitv-logo" src="" alt="FoFi TV" style="display:none;max-width:72px;max-height:72px;object-fit:contain;" crossorigin="anonymous">
-            <span class="brand-text" id="brand-text-fallback">BBNL</span>
+            <img id="fofitv-logo" src="" alt="FoFi TV" style="display:block;opacity:0;visibility:hidden;width:72px;height:72px;object-fit:contain;transition:opacity 0.15s ease;" crossorigin="anonymous">
+            <span class="brand-text" id="brand-text-fallback" style="display:none;">BBNL</span>
         </div>
         <nav class="sidebar-nav">
             <button class="sidebar-icon-btn focusable" tabindex="0" data-route="home.html" title="Home">
@@ -196,7 +196,7 @@
                 </div>
                 <h1 class="applock-title">Oops! Service Locked</h1>
                 <p class="applock-message">We request you to use <strong>BBNL network</strong> to continue enjoying your favorite content.</p>
-                <button class="applock-btn focusable" id="appLockRetryBtn" tabindex="0">
+                <button class="applock-btn focusable" id="appLockRetryBtn" tabindex="0" onclick="retryAppLockCheck(); return false;">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="1 4 1 10 7 10"></polyline>
                         <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>

@@ -176,6 +176,93 @@ function showComingSoonPopup() {
             currentFocus = 0;
         }
     }
+
+    // Show network status popup: compares last known network vs current
+    function getNetworkInfo() {
+        var info = { online: !!navigator.onLine, type: 'unknown', effectiveType: '' };
+        try {
+            var nav = navigator;
+            if (nav && nav.connection) {
+                info.type = nav.connection.type || nav.connection.effectiveType || info.type;
+                if (nav.connection.effectiveType) info.effectiveType = nav.connection.effectiveType;
+            } else if (nav && nav.connection === undefined && nav.navigator) {
+                // no-op
+            }
+        } catch (e) {}
+        return info;
+    }
+
+    function formatNetworkInfoLabel(info) {
+        if (!info) return 'unknown';
+        var parts = [];
+        parts.push(info.online ? 'Online' : 'Offline');
+        if (info.type) parts.push('type: ' + info.type);
+        if (info.effectiveType) parts.push('eff: ' + info.effectiveType);
+        return parts.join(' — ');
+    }
+
+    function showNetworkStatusPopup() {
+        try {
+            var prevRaw = localStorage.getItem('bbnl_last_network_info');
+            var prev = prevRaw ? JSON.parse(prevRaw) : null;
+        } catch (e) { prev = null; }
+
+        var now = getNetworkInfo();
+
+        var pEl = document.getElementById('networkPrev');
+        var nEl = document.getElementById('networkNow');
+        if (pEl) pEl.textContent = 'Previous: ' + (prev ? formatNetworkInfoLabel(prev) : 'unknown');
+        if (nEl) nEl.textContent = 'Current: ' + formatNetworkInfoLabel(now);
+
+        // Persist current as last-known for next time
+        try { localStorage.setItem('bbnl_last_network_info', JSON.stringify(now)); } catch (e) {}
+
+        var popup = document.getElementById('networkStatusPopup');
+        if (popup) {
+            popup.style.display = 'flex';
+            // focus retry button
+            var retry = document.getElementById('networkRetryBtn');
+            if (retry) { retry.focus(); focusables = [retry]; currentFocus = 0; }
+        }
+    }
+
+    function closeNetworkStatusPopup() {
+        var popup = document.getElementById('networkStatusPopup');
+        if (popup) popup.style.display = 'none';
+        // restore coming soon popup focus
+        var goBack = document.getElementById('goBackBtn');
+        if (goBack) { goBack.focus(); focusables = [goBack]; currentFocus = 0; }
+    }
+
+    // Wire network popup buttons (safe to call multiple times)
+    function _wireNetworkPopup() {
+        try {
+            var retry = document.getElementById('networkRetryBtn');
+            var closeBtn = document.getElementById('networkCloseBtn');
+            if (retry) {
+                retry.addEventListener('click', function () {
+                    // quick connectivity check: try fetch small resource
+                    var nNow = getNetworkInfo();
+                    var nNowEl = document.getElementById('networkNow');
+                    if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow);
+                    // attempt to fetch a small CORS-friendly endpoint to verify
+                    fetch('https://www.google.com/generate_204', { method: 'GET', mode: 'no-cors' }).then(function () {
+                        // cannot read response in no-cors; assume success
+                        try { localStorage.setItem('bbnl_last_network_info', JSON.stringify(nNow)); } catch (e) {}
+                        if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (reachable)';
+                    }).catch(function () {
+                        if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (unreachable)';
+                    });
+                });
+            }
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () { closeNetworkStatusPopup(); });
+            }
+        } catch (e) {}
+    }
+
+    // Ensure wiring at load
+    document.addEventListener('DOMContentLoaded', _wireNetworkPopup);
 }
 
 var FAVORITES_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -347,7 +434,16 @@ document.addEventListener("keydown", function (e) {
     // Lock remote navigation to popup controls only.
     if (comingSoonPopupOpen) {
         e.preventDefault();
-        if (code === 13 || code === 10009) {
+        if (code === 13) {
+            // Enter on popup -> show network status instead of immediate navigation
+            showNetworkStatusPopup();
+        } else if (code === 10009) {
+            // Back on popup -> close popup or navigate home
+            var networkPopup = document.getElementById('networkStatusPopup');
+            if (networkPopup && networkPopup.style.display === 'flex') {
+                closeNetworkStatusPopup();
+                return;
+            }
             window.__BBNL_NAVIGATING = true;
             window.location.replace('home.html');
         }
