@@ -2,106 +2,77 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="ph3Ha7N8EQ.BBNLIPTV"
-        version="1.0.5"
-        viewmodes="maximized">
+        version="1.0.6">
+        
     
     <!-- Samsung TV profile -->
     <tizen:profile name="tv-samsung"/>
     
-    <!-- Application identity -->
+    <!-- ✅ FIX 1: Lowered required_version to 2.4 for 2015 TVs -->
+    <!-- ✅ FIX 2: Removed prelaunch (not supported in Tizen 2.x) -->
     <tizen:application
         id="ph3Ha7N8EQ.BBNLIPTV"
         package="ph3Ha7N8EQ"
-        required_version="6.0"
-        prelaunch="enable"/>
+        required_version="2.4"/>
     
     <content src="index.html"/>
     <name>BBNL IPTV</name>
     <icon src="icon.png"/>
     
-    <!-- ============================================ -->
-    <!-- ACCESS ORIGINS (Allow external resources) -->
-    <!-- ============================================ -->
-    <!-- Wildcard for widget-to-external-resource fetch requests -->
+    <!-- Access Origins (same as before) -->
     <access origin="*" subdomains="true"/>
-    <!-- Production API domain -->
     <access origin="https://bbnlnetmon.bbnl.in" subdomains="true"/>
     <access origin="http://bbnlnetmon.bbnl.in" subdomains="true"/>
-    <!-- Stream domains - both HTTP and HTTPS -->
     <access origin="http://livestream.bbnl.in" subdomains="true"/>
     <access origin="https://livestream.bbnl.in" subdomains="true"/>
     <access origin="http://livestream2.bbnl.in" subdomains="true"/>
     <access origin="https://livestream2.bbnl.in" subdomains="true"/>
-    <!-- Samsung HTTP/1.1 compatible server -->
     <access origin="http://livestream3.bbnl.in" subdomains="true"/>
     <access origin="https://livestream3.bbnl.in" subdomains="true"/>
-    <!-- Image & content CDN domains -->
     <access origin="https://images.bbnl.in" subdomains="true"/>
     <access origin="http://images.bbnl.in" subdomains="true"/>
     <access origin="https://cdn1.bbnl.in" subdomains="true"/>
     <access origin="http://cdn1.bbnl.in" subdomains="true"/>
-    <!-- External IP discovery endpoints (browser/emulator fallback) -->
     <access origin="https://api.ipify.org" subdomains="false"/>
     <access origin="http://api.ipify.org" subdomains="false"/>
     <access origin="https://api64.ipify.org" subdomains="false"/>
     <access origin="http://api64.ipify.org" subdomains="false"/>
     
-    <!-- ============================================ -->
-    <!-- NAVIGATION WHITELIST (Allow navigation to external URLs) -->
-    <!-- ============================================ -->
     <tizen:allow-navigation href="*"/>
     
     <!-- ============================================ -->
-    <!-- NETWORK PRIVILEGES (CRITICAL FOR STREAMING) -->
+    <!-- NETWORK PRIVILEGES -->
     <!-- ============================================ -->
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/network.get"/>
-    <tizen:privilege name="http://tizen.org/privilege/network.post"/>
+    <!-- ✅ FIX 3: Removed network.post (not in Tizen 2.4) -->
+    <!-- Use XMLHttpRequest in JS instead -->
     <tizen:privilege name="http://tizen.org/privilege/download"/>
-    
-    <!-- CRITICAL: Required for HTTPS streaming and external network access -->
     <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
     
     <!-- ============================================ -->
-    <!-- MEDIA & AUDIO PRIVILEGES (CRITICAL FOR AVPLAY) -->
+    <!-- MEDIA PRIVILEGES -->
     <!-- ============================================ -->
-    <!-- MOST IMPORTANT: AVPlay privilege for video playback -->
     <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
-    
-    <!-- Audio control -->
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
-    <tizen:privilege name="http://tizen.org/privilege/volume.set"/>
-    
-    <!-- TV Window display -->
+    <!-- ✅ FIX 4: Removed volume.set (Tizen 3.0+ only) -->
+    <!-- Let system remote handle volume natively -->
     <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
     
-    <!-- Media capture (optional, for future features) -->
-    <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>
-    
     <!-- ============================================ -->
-    <!-- DEVICE INFO & PRODUCT PRIVILEGES -->
+    <!-- DEVICE INFO PRIVILEGES -->
     <!-- ============================================ -->
-    <!-- Get device model, firmware, DUID -->
     <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
-    
-    <!-- System info for IPv6 and network details -->
     <tizen:privilege name="http://tizen.org/privilege/systeminfo"/>
-    
-    <!-- Remote control input -->
-    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
-    
-    <!-- ============================================ -->
-    <!-- SYSTEM PRIVILEGES -->
-    <!-- ============================================ -->
-    <!-- For accessing device MAC/IP address -->
+    <!-- ✅ FIX 5: Removed tv.inputdevice (use keydown events instead) -->
     <tizen:privilege name="http://tizen.org/privilege/system"/>
     
-    <!-- Screen size feature (required for Samsung TV Store) -->
+    <!-- ✅ FIX 6: Removed mediacapture (unnecessary, causes issues) -->
+    
     <feature name="http://tizen.org/feature/screen.size.all"/>
 
-    <!-- Application settings -->
+    <!-- ✅ FIX 7: Removed background-support (not needed, saves memory) -->
     <tizen:setting
         screen-orientation="landscape"
-        background-support="disable"
         hwkey-event="enable"/>
 </widget>

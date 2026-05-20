@@ -218,7 +218,7 @@ document.addEventListener("keydown", function (e) {
     if (!el) return;
     if (code === 39 && el.classList.contains('submit-btn')) {
         // Find the next focusable that is cancel-btn
-        for (let i = currentFocus + 1; i < focusables.length; i++) {
+        for (var i = currentFocus + 1; i < focusables.length; i++) {
             if (focusables[i].classList.contains('cancel-btn')) {
                 currentFocus = i;
                 focusables[currentFocus].focus();
@@ -229,9 +229,9 @@ document.addEventListener("keydown", function (e) {
     }
     // Custom: Left from cancel-btn moves to submit-btn
     if (code === 37 && el.classList.contains('cancel-btn')) {
-        for (let i = currentFocus - 1; i >= 0; i--) {
-            if (focusables[i].classList.contains('submit-btn')) {
-                currentFocus = i;
+        for (var j = currentFocus - 1; j >= 0; j--) {
+            if (focusables[j].classList.contains('submit-btn')) {
+                currentFocus = j;
                 focusables[currentFocus].focus();
                 break;
             }

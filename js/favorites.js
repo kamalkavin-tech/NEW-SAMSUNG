@@ -241,18 +241,28 @@ function showComingSoonPopup() {
             var closeBtn = document.getElementById('networkCloseBtn');
             if (retry) {
                 retry.addEventListener('click', function () {
-                    // quick connectivity check: try fetch small resource
+                    // quick connectivity check: try XMLHttpRequest to small resource
                     var nNow = getNetworkInfo();
                     var nNowEl = document.getElementById('networkNow');
                     if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow);
-                    // attempt to fetch a small CORS-friendly endpoint to verify
-                    fetch('https://www.google.com/generate_204', { method: 'GET', mode: 'no-cors' }).then(function () {
-                        // cannot read response in no-cors; assume success
-                        try { localStorage.setItem('bbnl_last_network_info', JSON.stringify(nNow)); } catch (e) {}
-                        if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (reachable)';
-                    }).catch(function () {
+                    
+                    // attempt to fetch a small endpoint to verify connectivity
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', 'https://www.google.com/generate_204', true);
+                    xhr.onreadystatechange = function () {
+                        if (xhr.readyState === 4) {
+                            try { localStorage.setItem('bbnl_last_network_info', JSON.stringify(nNow)); } catch (e) {}
+                            if (xhr.status === 204 || xhr.status === 200) {
+                                if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (reachable)';
+                            } else {
+                                if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (unreachable)';
+                            }
+                        }
+                    };
+                    xhr.onerror = function () {
                         if (nNowEl) nNowEl.textContent = 'Current: ' + formatNetworkInfoLabel(nNow) + ' (unreachable)';
-                    });
+                    };
+                    xhr.send();
                 });
             }
             if (closeBtn) {

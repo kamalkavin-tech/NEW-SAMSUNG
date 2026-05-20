@@ -110,34 +110,42 @@ window.onload = function () {
     }
 };
 
-async function initPage() {
+function initPage() {
     try {
         // Fetch Languages
-        const langResponse = await BBNL_API.getLanguageList();
-
-        if (Array.isArray(langResponse) && langResponse.length > 0) {
-            // Sort languages alphabetically by title
-            langResponse.sort(function(a, b) {
-                var nameA = sanitizeLanguageText(a.langtitle || '').toLowerCase();
-                var nameB = sanitizeLanguageText(b.langtitle || '').toLowerCase();
-                // Keep "All" or "Subscribed" at the top
-                if (nameA.includes('all') || nameA.includes('subscribed')) return -1;
-                if (nameB.includes('all') || nameB.includes('subscribed')) return 1;
-                return nameA.localeCompare(nameB);
-            });
-            allLanguages = langResponse;
-            primeLanguageLogos(langResponse, 18);
-            renderLanguages(langResponse);
-        } else {
+        if (typeof BBNL_API === 'undefined' || !BBNL_API.getLanguageList) {
             showError();
+            return;
         }
+        
+        BBNL_API.getLanguageList(function(langResponse) {
+            if (Array.isArray(langResponse) && langResponse.length > 0) {
+                // Sort languages alphabetically by title
+                langResponse.sort(function(a, b) {
+                    var nameA = sanitizeLanguageText(a.langtitle || '').toLowerCase();
+                    var nameB = sanitizeLanguageText(b.langtitle || '').toLowerCase();
+                    // Keep "All" or "Subscribed" at the top
+                    if (nameA.indexOf('all') !== -1 || nameA.indexOf('subscribed') !== -1) return -1;
+                    if (nameB.indexOf('all') !== -1 || nameB.indexOf('subscribed') !== -1) return 1;
+                    return nameA.localeCompare(nameB);
+                });
+                allLanguages = langResponse;
+                primeLanguageLogos(langResponse, 18);
+                renderLanguages(langResponse);
+            } else {
+                showError();
+            }
+
+            // Refresh Focusables
+            refreshFocusables();
+        }, function(error) {
+            console.error("Init Exception:", error);
+            showError();
+        });
     } catch (e) {
         console.error("Init Exception:", e);
         showError();
     }
-
-    // Refresh Focusables
-    refreshFocusables();
 }
 
 // ==========================================
@@ -145,30 +153,31 @@ async function initPage() {
 // ==========================================
 
 function renderLanguages(languages) {
-    const container = document.getElementById('languageGrid');
+    var container = document.getElementById('languageGrid');
     if (!container) return;
 
     container.innerHTML = '';
 
-    languages.forEach(lang => {
-        const langName = sanitizeLanguageText(lang.langtitle || '') || 'Unknown';
-        const langId = lang.langid || '';
-        const langDetails = sanitizeLanguageText(lang.langdetails || '');
-        const langLogo = getLanguageLogoUrl(lang);
+    for (var j = 0; j < languages.length; j++) {
+        var lang = languages[j];
+        var langName = sanitizeLanguageText(lang.langtitle || '') || 'Unknown';
+        var langId = lang.langid || '';
+        var langDetails = sanitizeLanguageText(lang.langdetails || '');
+        var langLogo = getLanguageLogoUrl(lang);
 
         // Create language card
-        const card = document.createElement('div');
+        var card = document.createElement('div');
         card.className = 'language-card focusable';
         card.tabIndex = 0;
         card.dataset.langid = langId;
         card.dataset.langname = langName;
 
         // Language Icon
-        const iconDiv = document.createElement('div');
+        var iconDiv = document.createElement('div');
         iconDiv.className = 'language-icon';
 
-        if (langLogo && !langLogo.includes('noimage')) {
-            const img = document.createElement('img');
+        if (langLogo && langLogo.indexOf('noimage') === -1) {
+            var img = document.createElement('img');
             img.className = 'language-logo';
             img.alt = langName;
             // Load immediately (no lazy loading)
@@ -190,7 +199,7 @@ function renderLanguages(languages) {
             iconDiv.appendChild(img);
         } else {
             // Fallback to text icon
-            const textIcon = document.createElement('div');
+            var textIcon = document.createElement('div');
             textIcon.className = 'language-icon-text';
             textIcon.textContent = getLanguageInitial(langName);
             iconDiv.appendChild(textIcon);
@@ -199,10 +208,10 @@ function renderLanguages(languages) {
         card.appendChild(iconDiv);
 
         // Language Info
-        const infoDiv = document.createElement('div');
+        var infoDiv = document.createElement('div');
         infoDiv.className = 'language-card-info';
 
-        const title = document.createElement('div');
+        var title = document.createElement('div');
         title.className = 'language-card-title';
         title.textContent = langName;
         infoDiv.appendChild(title);
@@ -212,16 +221,28 @@ function renderLanguages(languages) {
         card.appendChild(infoDiv);
 
         // Click Event
-        card.addEventListener('click', () => handleLanguageSelect(langId, langName));
+        (function(langIdClosure, langNameClosure, cardClosure) {
+            cardClosure.addEventListener('click', function() {
+                handleLanguageSelect(langIdClosure, langNameClosure);
+            });
+        })(langId, langName, card);
 
         // Mouse Hover Event
-        card.addEventListener('mouseenter', () => {
-            const idx = Array.from(focusables).indexOf(card);
-            if (idx >= 0) {
-                currentFocus = idx;
-                card.focus();
-            }
-        });
+        (function(cardClosure) {
+            cardClosure.addEventListener('mouseenter', function() {
+                var idx = -1;
+                for (var k = 0; k < focusables.length; k++) {
+                    if (focusables[k] === cardClosure) {
+                        idx = k;
+                        break;
+                    }
+                }
+                if (idx >= 0) {
+                    currentFocus = idx;
+                    cardClosure.focus();
+                }
+            });
+        })(card);
 
         container.appendChild(card);
     });
@@ -294,7 +315,7 @@ function getLanguageInitial(langName) {
  * Show error popup
  */
 function showError() {
-    const container = document.getElementById('languageGrid');
+    var container = document.getElementById('languageGrid');
     if (container) {
         container.innerHTML = '<div class="loading-spinner">Unable to load languages</div>';
     }
@@ -315,8 +336,8 @@ function hideError() {
 function refreshFocusables() {
     focusables = document.querySelectorAll(".focusable");
     if (focusables.length > 0) {
-        let hasFocus = false;
-        for (let i = 0; i < focusables.length; i++) {
+        var hasFocus = false;
+        for (var i = 0; i < focusables.length; i++) {
             if (document.activeElement === focusables[i]) {
                 currentFocus = i;
                 hasFocus = true;
@@ -346,7 +367,7 @@ document.addEventListener("keydown", function (e) {
         e.preventDefault();
     }
 
-    const active = document.activeElement;
+    var active = document.activeElement;
 
     // Compute grid columns dynamically from CSS
     var columnsPerRow = 4;
@@ -379,19 +400,31 @@ document.addEventListener("keydown", function (e) {
 });
 
 function moveFocus(step) {
-    const all = Array.from(document.querySelectorAll(".focusable:not([style*='display: none'])"));
-    const idx = all.indexOf(document.activeElement);
+    var all = document.querySelectorAll(".focusable:not([style*='display: none'])");
+    var allArray = [];
+    for (var m = 0; m < all.length; m++) {
+        allArray.push(all[m]);
+    }
+    var idx = -1;
+    for (var n = 0; n < allArray.length; n++) {
+        if (allArray[n] === document.activeElement) {
+            idx = n;
+            break;
+        }
+    }
 
-    if (idx === -1 && all.length > 0) {
-        all[0].focus();
+    if (idx === -1 && allArray.length > 0) {
+        allArray[0].focus();
         return;
     }
 
-    let next = idx + step;
-    if (next >= 0 && next < all.length) {
-        const target = all[next];
+    var next = idx + step;
+    if (next >= 0 && next < allArray.length) {
+        var target = allArray[next];
         target.focus();
-        target.scrollIntoView({ block: "center", behavior: "auto" });
+        if (target.scrollIntoView) {
+            target.scrollIntoView(false);
+        }
     }
 }
 
@@ -438,7 +471,7 @@ function initDarkMode() {
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', function () {
-    const retryBtn = document.getElementById('retryInternetBtn');
+    var retryBtn = document.getElementById('retryInternetBtn');
     if (retryBtn) {
         retryBtn.addEventListener('click', function () {
             hideError();

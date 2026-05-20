@@ -869,28 +869,36 @@ var AVPlayer = (function () {
             url = fixLocalhostUrl(url);
             _log("[AVPlayer] Testing URL (after localhost fix):", url);
 
-            fetch(url, {
-                method: 'GET',
-                mode: 'cors'
-            })
-                .then(function (response) {
-                    _log("[AVPlayer] ✓ Stream test response:", response.status);
-                    return response.text();
-                })
-                .then(function (data) {
-                    _log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
-                    _log("[AVPlayer] M3U8 content preview:");
-                    _log("[AVPlayer] ========================================");
-                    if (callback) callback(true, data);
-                })
-                .catch(function (error) {
-                    console.error("[AVPlayer] ========================================");
-                    console.error("[AVPlayer] ✗✗✗ STREAM NOT ACCESSIBLE ✗✗✗");
-                    console.error("[AVPlayer] Error:", error.message);
-                    console.error("[AVPlayer] Error details:", error);
-                    console.error("[AVPlayer] ========================================");
-                    if (callback) callback(false, error);
-                });
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 206) {
+                        _log("[AVPlayer] ✓ Stream test response:", xhr.status);
+                        _log("[AVPlayer] ✓✓✓ STREAM IS ACCESSIBLE ✓✓✓");
+                        _log("[AVPlayer] M3U8 content preview:");
+                        _log("[AVPlayer] ========================================");
+                        if (callback) callback(true, xhr.responseText);
+                    } else {
+                        console.error("[AVPlayer] ========================================");
+                        console.error("[AVPlayer] ✗✗✗ STREAM NOT ACCESSIBLE ✗✗✗");
+                        console.error("[AVPlayer] Status:", xhr.status);
+                        console.error("[AVPlayer] ========================================");
+                        if (callback) callback(false, new Error("HTTP " + xhr.status));
+                    }
+                }
+            };
+            
+            xhr.onerror = function () {
+                console.error("[AVPlayer] ========================================");
+                console.error("[AVPlayer] ✗✗✗ STREAM NOT ACCESSIBLE ✗✗✗");
+                console.error("[AVPlayer] Network error");
+                console.error("[AVPlayer] ========================================");
+                if (callback) callback(false, new Error("Network error"));
+            };
+            
+            xhr.send();
         },
 
         /**

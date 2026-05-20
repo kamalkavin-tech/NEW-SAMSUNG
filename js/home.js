@@ -842,11 +842,7 @@ document.addEventListener('keydown', function (e) {
             if (document.activeElement.value.trim() !== '') {
                 document.activeElement.value = '';
             } else {
-                if (typeof BBNL_exitAppPreservingAuth === 'function') {
-                    BBNL_exitAppPreservingAuth();
-                } else {
-                    confirmExit();
-                }
+                showExitConfirmation();
             }
             return;
         }
@@ -912,10 +908,8 @@ document.addEventListener('keydown', function (e) {
             if (document.activeElement && document.activeElement.id === 'searchInput' && document.activeElement.value.trim() !== '') {
                 clearTimeout(homeSearchTimeout);
                 document.activeElement.value = '';
-            } else if (typeof BBNL_exitAppPreservingAuth === 'function') {
-                BBNL_exitAppPreservingAuth();
             } else {
-                confirmExit();
+                showExitConfirmation();
             }
             break;
         case 447: // VolumeUp
