@@ -1290,6 +1290,51 @@ body.light-mode .exit-btn-yes {
     font-weight: 600;
 }
 
+.applock-status {
+    width: 100%;
+    max-width: 430px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    text-align: left;
+}
+
+.applock-status-row {
+    display: grid;
+    grid-template-columns: 94px 1fr;
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 10px;
+}
+
+.applock-status-row:last-of-type {
+    margin-bottom: 0;
+}
+
+.applock-status-label {
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.applock-status-value {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.applock-status-note {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    color: #ffd166;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
 .applock-btn {
     display: flex;
     align-items: center;

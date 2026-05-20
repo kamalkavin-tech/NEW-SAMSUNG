@@ -145,14 +145,16 @@ window.BBNL_setMenubarOpen = setMenubarOpen;
 
 function sortChannelsByNumberAndReset() {
     try {
-        // Choose source list: prefer quick 'all' cache, then currentDisplayedChannels, then masterChannelList
+        // Choose source list: always prefer latest loaded channels for this view,
+        // then currently displayed fallback, then quick cache/master list.
         var source = null;
-        if (Array.isArray(_quickCategoryCache.all) && _quickCategoryCache.all.length > 0) source = _quickCategoryCache.all.slice();
+        if (Array.isArray(allChannels) && allChannels.length > 0) source = allChannels.slice();
         else if (Array.isArray(currentDisplayedChannels) && currentDisplayedChannels.length > 0) source = currentDisplayedChannels.slice();
+        else if (Array.isArray(_quickCategoryCache.all) && _quickCategoryCache.all.length > 0) source = _quickCategoryCache.all.slice();
         else if (Array.isArray(masterChannelList) && masterChannelList.length > 0) source = masterChannelList.slice();
         if (!source || source.length === 0) return;
 
-        // Numeric sort by channel number ascending
+        // Channels page default is "All Channels": keep every channel and sort by channel number.
         source.sort(function(a, b) {
             var an = parseInt(a.channelno || a.urno || a.chno || a.ch_no || 0, 10) || 0;
             var bn = parseInt(b.channelno || b.urno || b.chno || b.ch_no || 0, 10) || 0;
@@ -163,19 +165,14 @@ function sortChannelsByNumberAndReset() {
         allChannels = source;
         renderAllChannels(allChannels);
 
-        // After render, focus first subscribed channel (if any) or first card
+        // After render, focus the first channel in the All Channels list.
         setTimeout(function() {
             var container = document.getElementById('channel-grid-container');
             if (!container) return;
+            try { container.scrollTop = 0; } catch (eScrollTop) {}
             var cards = container.querySelectorAll('.channel-card.focusable');
             if (!cards || cards.length === 0) return;
-            var target = null;
-            for (var i = 0; i < cards.length; i++) {
-                try {
-                    if (cards[i].dataset && (cards[i].dataset.subscribed === '1' || cards[i].dataset.subscribed === 'yes')) { target = cards[i]; break; }
-                } catch (e) {}
-            }
-            if (!target) target = cards[0];
+            var target = cards[0];
             try { target.focus(); scrollCardIntoView(target); } catch (eFocus) {}
         }, 120);
     } catch (eSort) {}
@@ -506,6 +503,19 @@ async function initPage() {
     var urlParams = new URLSearchParams(window.location.search);
     var urlLCN = urlParams.get('lcn');
     var urlLang = urlParams.get('lang');
+
+    // Direct TV Channels entry (for example Home -> TV Channels) has no
+    // language query. Start this page on All Channels regardless of prior
+    // Home/Player language state.
+    if (!urlLang && !urlLCN) {
+        try {
+            sessionStorage.setItem('selectedLanguageId', 'all');
+            sessionStorage.setItem('selectedLanguageName', 'All Channels');
+            sessionStorage.removeItem('bbnl_channels_category_grid');
+            sessionStorage.removeItem('bbnl_channels_category_key');
+        } catch (eDefaultAll) {}
+    }
+
     var selectedLangId = sessionStorage.getItem('selectedLanguageId') || '';
     var selectedLangName = sessionStorage.getItem('selectedLanguageName') || '';
     var normalizedLangId = String(selectedLangId || '').trim().toLowerCase();
@@ -652,6 +662,19 @@ async function loadMasterChannelList() {
 }
 
 function setInitialFocus() {
+    var activeLangId = String(sessionStorage.getItem('selectedLanguageId') || '').trim().toLowerCase();
+    var activeLangName = String(sessionStorage.getItem('selectedLanguageName') || '').trim().toLowerCase();
+    var hasSpecificLanguage = !!activeLangId && activeLangId !== 'all' && activeLangId !== 'all channels' && activeLangId !== 'subs';
+
+    if (hasSpecificLanguage || (activeLangName && activeLangName !== 'all channels' && activeLangName !== 'all' && activeLangName.indexOf('subscribed') === -1)) {
+        var cards = document.querySelectorAll('.channel-card.focusable');
+        if (cards && cards.length > 0) {
+            currentZone = 'cards';
+            try { cards[0].focus(); scrollCardIntoView(cards[0]); } catch (eCardFocus) {}
+            return;
+        }
+    }
+
     // Focus active language pill (or first pill)
     var activePill = document.querySelector('.lang-pill.active');
     if (activePill) {
@@ -1948,7 +1971,7 @@ document.addEventListener("keydown", function (e) {
     getFocusables(); // use cached list (rebuilds only when invalidated)
 
     // Throttle navigation keys to prevent Samsung TV remote flooding
-    var isNav = (code >= 37 && code <= 40) || code === 13;
+    var isNav = (code >= 37 && code <= 40) || code === 13 || code === 427 || code === 428;
     if (isNav) {
         var now = Date.now();
         if (now - _chLastKeyTime < _CH_KEY_THROTTLE_MS) { e.preventDefault(); return; }
@@ -2042,17 +2065,84 @@ document.addEventListener("keydown", function (e) {
         case 38: // UP
             handleUpNavigation();
             break;
+        case 427: // CH+
+            handleChannelStep(1);
+            break;
         case 39: // RIGHT
             handleRightNavigation();
             break;
         case 40: // DOWN
             handleDownNavigation();
             break;
+        case 428: // CH-
+            handleChannelStep(-1);
+            break;
         case 13: // ENTER
             handleEnter(document.activeElement);
             break;
     }
 });
+
+function handleChannelStep(step) {
+    var source = Array.isArray(currentDisplayedChannels) ? currentDisplayedChannels : [];
+    if (source.length === 0) return;
+
+    var cards = getCachedCards();
+    var currentIndex = -1;
+    var active = document.activeElement;
+
+    if (active && active.classList && active.classList.contains('channel-card')) {
+        var activeIdx = parseInt(active.dataset.channelIdx || '', 10);
+        if (!isNaN(activeIdx) && activeIdx >= 0 && activeIdx < source.length) {
+            currentIndex = activeIdx;
+        }
+    }
+
+    if (currentIndex < 0 && cards && cards.length > 0) {
+        for (var i = 0; i < cards.length; i++) {
+            if (cards[i] === active) {
+                var cardIdx = parseInt(cards[i].dataset.channelIdx || '', 10);
+                if (!isNaN(cardIdx) && cardIdx >= 0 && cardIdx < source.length) {
+                    currentIndex = cardIdx;
+                } else {
+                    currentIndex = i;
+                }
+                break;
+            }
+        }
+    }
+
+    if (currentIndex < 0) {
+        currentIndex = 0;
+    }
+
+    var nextIndex = currentIndex + step;
+    if (nextIndex >= source.length) nextIndex = 0;
+    if (nextIndex < 0) nextIndex = source.length - 1;
+
+    var nextChannel = source[nextIndex];
+    if (!nextChannel) return;
+
+    var nextCard = null;
+    if (cards && cards.length > 0) {
+        for (var j = 0; j < cards.length; j++) {
+            if (String(cards[j].dataset.channelIdx || '') === String(nextIndex)) {
+                nextCard = cards[j];
+                break;
+            }
+        }
+    }
+
+    if (nextCard) {
+        nextCard.focus();
+        scrollCardIntoView(nextCard);
+        handleEnter(nextCard);
+        return;
+    }
+
+    if (fastLaunchChannelFromChannels(nextChannel)) return;
+    BBNL_API.playChannel(nextChannel);
+}
 
 // Handle DOWN navigation
 function handleDownNavigation() {
@@ -2276,10 +2366,10 @@ function moveToBackButton() {
 
 // Helper: Move to first category pill
 function moveToFirstCategoryPill() {
-    var firstPill = document.querySelector('.category-pill.focusable');
-    if (firstPill) {
-        firstPill.focus();
-        firstPill.scrollIntoView({ inline: "start", behavior: "auto", block: "nearest" });
+    var targetPill = document.querySelector('.lang-pill.active') || document.querySelector('.category-pill.focusable');
+    if (targetPill) {
+        targetPill.focus();
+        targetPill.scrollIntoView({ inline: "center", behavior: "auto", block: "nearest" });
         currentZone = 'tabs';
     }
 }

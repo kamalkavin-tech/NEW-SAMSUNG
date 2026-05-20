@@ -196,12 +196,23 @@
                 </div>
                 <h1 class="applock-title">Oops! Service Locked</h1>
                 <p class="applock-message">We request you to use <strong>BBNL network</strong> to continue enjoying your favorite content.</p>
-                <button class="applock-btn focusable" id="appLockRetryBtn" tabindex="0" onclick="retryAppLockCheck(); return false;">
+                <div class="applock-status" id="appLockNetworkStatus" style="display: none;">
+                    <div class="applock-status-row">
+                        <span class="applock-status-label">Previous</span>
+                        <span class="applock-status-value" id="appLockPreviousNetwork">Checking...</span>
+                    </div>
+                    <div class="applock-status-row">
+                        <span class="applock-status-label">Current</span>
+                        <span class="applock-status-value" id="appLockCurrentNetwork">Checking...</span>
+                    </div>
+                    <div class="applock-status-note" id="appLockNetworkStatusNote">Checking network status...</div>
+                </div>
+                <button class="applock-btn focusable" id="appLockRetryBtn" tabindex="0">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="1 4 1 10 7 10"></polyline>
                         <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
                     </svg>
-                    Press back to check status
+                    Check Network Status
                 </button>
             </div>
             <!-- Right Side - Error Image from API -->

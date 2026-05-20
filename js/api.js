@@ -2511,6 +2511,152 @@ const DeviceInfo = {
 // ==========================================
 // AUTH API (UNCHANGED - DO NOT MODIFY)
 // ==========================================
+function _extractFoFiLogoPathFromResponse(response) {
+    if (!response) return '';
+    try {
+        if (response.body && !Array.isArray(response.body) && typeof response.body === 'object') {
+            return response.body.logo_path || response.body.logo || response.body.logopath || response.body.path || '';
+        }
+        if (response.body && Array.isArray(response.body) && response.body.length > 0) {
+            var first = response.body[0] || {};
+            return first.logo_path || first.logo || first.logopath || first.path || '';
+        }
+        return response.logo_path || response.logo || response.logopath || response.path || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+function _cacheFoFiLogoForHome(response) {
+    var logoPath = _extractFoFiLogoPathFromResponse(response);
+    if (!logoPath) return;
+
+    var resolvedLogo = getValidatedImageUrl(logoPath) || logoPath;
+    try { sessionStorage.setItem('home_fofi_logo_raw_path', resolvedLogo); } catch (e1) {}
+    try { localStorage.setItem('home_fofi_logo_raw_path', resolvedLogo); } catch (e2) {}
+    try { _preloadImage(resolvedLogo, { priority: true }); } catch (e3) {}
+}
+
+function _getAdImageUrl(ad) {
+    if (!ad) return '';
+    return ad.adpath || ad.ad_path || ad.image || ad.img || ad.url || ad.path || '';
+}
+
+function _cacheHomeAdsForHome(ads) {
+    if (!Array.isArray(ads) || ads.length === 0) return;
+    try { sessionStorage.setItem('home_ads_cache', JSON.stringify(ads)); } catch (e1) {}
+    try { localStorage.setItem('home_ads_cache_persistent', JSON.stringify(ads)); } catch (e2) {}
+
+    var adImages = [];
+    for (var i = 0; i < ads.length && i < 5; i++) {
+        var adUrl = _getAdImageUrl(ads[i]);
+        if (adUrl) adImages.push(adUrl);
+    }
+    if (adImages.length > 0) {
+        try { _preloadImageBatch(adImages, { priority: true }); } catch (e3) {}
+    }
+}
+
+function _getLanguageLogoUrlForPrefetch(lang) {
+    if (!lang) return '';
+    return lang.langlogo || lang.chnllanglogo || lang.logo_url || lang.logo || lang.image || lang.img || '';
+}
+
+function _cacheHomeLanguagesForHome(languages) {
+    if (!Array.isArray(languages) || languages.length === 0) return;
+    try { sessionStorage.setItem('home_languages_cache', JSON.stringify(languages)); } catch (e1) {}
+    try { localStorage.setItem('home_languages_cache_persistent', JSON.stringify(languages)); } catch (e2) {}
+
+    var languageImages = [];
+    for (var i = 0; i < languages.length && i < 14; i++) {
+        var logoUrl = _getLanguageLogoUrlForPrefetch(languages[i]);
+        if (logoUrl) languageImages.push(logoUrl);
+    }
+    if (languageImages.length > 0) {
+        try { _preloadImageBatch(languageImages, { priority: true }); } catch (e3) {}
+    }
+}
+
+function _cacheHomeChannelsForHome(channels) {
+    if (!Array.isArray(channels) || channels.length === 0) return;
+    try { sessionStorage.setItem('home_channels_cache', JSON.stringify(channels)); } catch (e1) {}
+
+    var channelImages = [];
+    for (var i = 0; i < channels.length && i < 24; i++) {
+        var logoUrl = extractChannelLogoUrl(channels[i]);
+        if (logoUrl) channelImages.push(logoUrl);
+    }
+    if (channelImages.length > 0) {
+        try { _preloadImageBatch(channelImages, { priority: true }); } catch (e2) {}
+    }
+}
+
+function _withPrefetchTimeout(promise, timeoutMs) {
+    var ms = Number(timeoutMs || 3500);
+    return new Promise(function (resolve) {
+        var settled = false;
+        var timer = setTimeout(function () {
+            if (settled) return;
+            settled = true;
+            resolve(false);
+        }, ms);
+
+        Promise.resolve(promise).then(function () {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(true);
+        }).catch(function () {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+        });
+    });
+}
+
+function prefetchHomeAssetsAfterLogin(options) {
+    options = options || {};
+    var waitForCompletion = !!options.wait;
+    var timeoutMs = Number(options.timeoutMs || 3500);
+    var alreadyPrefetched = false;
+
+    try {
+        alreadyPrefetched = sessionStorage.getItem('_bbnl_login_home_assets_prefetched') === '1';
+        if (alreadyPrefetched && !waitForCompletion) return Promise.resolve(false);
+        sessionStorage.setItem('_bbnl_login_home_assets_prefetched', '1');
+    } catch (eFlag) {}
+
+    var tasks = [];
+
+    if (typeof FoFiLogoAPI !== 'undefined' && typeof FoFiLogoAPI.getFoFiLogo === 'function') {
+        tasks.push(FoFiLogoAPI.getFoFiLogo().then(function (logoResponse) {
+            _cacheFoFiLogoForHome(logoResponse);
+        }).catch(function () {}));
+    }
+
+    if (typeof AdsAPI !== 'undefined' && typeof AdsAPI.getHomeAds === 'function') {
+        tasks.push(AdsAPI.getHomeAds().then(function (ads) {
+            _cacheHomeAdsForHome(ads);
+        }).catch(function () {}));
+    }
+
+    if (typeof ChannelsAPI !== 'undefined' && typeof ChannelsAPI.getLanguageList === 'function') {
+        tasks.push(ChannelsAPI.getLanguageList().then(function (languages) {
+            _cacheHomeLanguagesForHome(languages);
+        }).catch(function () {}));
+    }
+
+    if (typeof ChannelsAPI !== 'undefined' && typeof ChannelsAPI.getChannelList === 'function') {
+        tasks.push(ChannelsAPI.getChannelList({}).then(function (channels) {
+            _cacheHomeChannelsForHome(channels);
+        }).catch(function () {}));
+    }
+
+    var allTasks = Promise.all(tasks);
+    return waitForCompletion ? _withPrefetchTimeout(allTasks, timeoutMs) : allTasks;
+}
+
 const AuthAPI = {
     requestOTP: async function (mobile) {
         const device = DeviceInfo.getDeviceInfo();
@@ -2618,15 +2764,7 @@ const AuthAPI = {
                 // ✅ CRITICAL: Fetch and cache logo DURING LOGIN
                 // This ensures logo is available immediately on every subsequent app launch
                 // (stored in localStorage like login credentials, not sessionStorage)
-                if (typeof FoFiLogoAPI !== 'undefined' && typeof FoFiLogoAPI.getFoFiLogo === 'function') {
-                    FoFiLogoAPI.getFoFiLogo().then(function(logoResponse) {
-                        // Logo cached automatically by getFoFiLogo() to localStorage
-                        console.log('[AuthAPI] Logo fetched and cached during login');
-                    }).catch(function(err) {
-                        // Fail silently - logo caching is nice-to-have, not critical
-                        console.log('[AuthAPI] Logo fetch during login failed (non-critical):', err);
-                    });
-                }
+                prefetchHomeAssetsAfterLogin();
 
             } catch (quotaErr) {
                 // localStorage full — clear non-login caches to make space, then retry
@@ -2643,13 +2781,7 @@ const AuthAPI = {
                     }
 
                     // ✅ Retry logo fetch after clearing cache
-                    if (typeof FoFiLogoAPI !== 'undefined' && typeof FoFiLogoAPI.getFoFiLogo === 'function') {
-                        FoFiLogoAPI.getFoFiLogo().then(function(logoResponse) {
-                            console.log('[AuthAPI] Logo fetched and cached during login (after cache clear)');
-                        }).catch(function(err) {
-                            console.log('[AuthAPI] Logo fetch after cache clear failed (non-critical):', err);
-                        });
-                    }
+                    prefetchHomeAssetsAfterLogin();
                 } catch (retryErr) {
                     // Last resort — clear everything except login keys, then retry
                     var savedFlag = localStorage.getItem("hasLoggedInOnce");
@@ -3599,6 +3731,15 @@ const AdsAPI = {
             }
         } catch (e) {}
 
+        try {
+            var persistedAds = localStorage.getItem('_iptv_ads_persistent_' + cacheKey);
+            if (persistedAds) {
+                this._iptvAdsCache[cacheKey] = JSON.parse(persistedAds);
+                try { sessionStorage.setItem('_iptv_ads_' + cacheKey, persistedAds); } catch (eSessionPersistedAds) {}
+                return this._iptvAdsCache[cacheKey];
+            }
+        } catch (ePersistedAds) {}
+
         const user = AuthAPI.getUserData();
 
         // Debug: Log user data to see what fields exist
@@ -3680,6 +3821,7 @@ const AdsAPI = {
 
                     this._iptvAdsCache[cacheKey] = data.body;
                     try { sessionStorage.setItem('_iptv_ads_' + cacheKey, JSON.stringify(data.body)); } catch (e) {}
+                    try { localStorage.setItem('_iptv_ads_persistent_' + cacheKey, JSON.stringify(data.body)); } catch (e2) {}
 
                     return data.body;
                 } else {
@@ -4136,6 +4278,63 @@ const NetworkAccessLockAPI = {
         return '';
     },
 
+    _getConnectionTypeName: function (type) {
+        var names = { 0: 'Disconnected', 1: 'WiFi', 2: 'Cellular', 3: 'Ethernet' };
+        return names[Number(type)] || 'Unknown';
+    },
+
+    describeNetworkSignature: function (signature) {
+        var text = String(signature || '').trim();
+        if (!text) {
+            return {
+                raw: '',
+                label: 'Not available',
+                type: 'Unknown',
+                ip: '',
+                gateway: '',
+                dns: ''
+            };
+        }
+
+        var parts = {};
+        text.split('|').forEach(function (part) {
+            var idx = part.indexOf(':');
+            if (idx <= 0) return;
+            parts[part.slice(0, idx)] = part.slice(idx + 1);
+        });
+
+        var typeName = parts.type ? this._getConnectionTypeName(parts.type) : 'Network';
+        var details = [];
+        if (parts.ip) details.push('IP ' + parts.ip);
+        if (parts.gw) details.push('Gateway ' + parts.gw);
+        if (parts.dns) details.push('DNS ' + parts.dns);
+
+        return {
+            raw: text,
+            label: details.length ? (typeName + ' - ' + details.join(', ')) : typeName,
+            type: typeName,
+            ip: parts.ip || '',
+            gateway: parts.gw || '',
+            dns: parts.dns || ''
+        };
+    },
+
+    getStatusDetails: function (options) {
+        var self = this;
+        return this.checkAccess(options || {}).then(function (result) {
+            var allowed = result && result.allowedSignature ? result.allowedSignature : self.getAllowedNetworkSignature();
+            var current = result && result.currentSignature ? result.currentSignature : self._getCurrentNetworkSignature();
+            return {
+                enabled: !!(result && result.enabled),
+                locked: !!(result && result.locked),
+                allowedSignature: allowed || '',
+                currentSignature: current || '',
+                previous: self.describeNetworkSignature(allowed),
+                current: self.describeNetworkSignature(current)
+            };
+        });
+    },
+
     seedAllowedNetworkSignatureFromCurrent: function () {
         if (!this.isEnabled()) return false;
         var current = this._getCurrentNetworkSignature();
@@ -4416,6 +4615,7 @@ const BBNL_API = {
     isAuthenticated: AuthAPI.isAuthenticated.bind(AuthAPI),
     logout: AuthAPI.logout.bind(AuthAPI),
     requireAuth: AuthAPI.requireAuth.bind(AuthAPI),
+    prefetchHomeAssetsAfterLogin: prefetchHomeAssetsAfterLogin,
 
     // Channel Methods
     getCategories: ChannelsAPI.getCategories.bind(ChannelsAPI),
@@ -4459,6 +4659,8 @@ const BBNL_API = {
     seedNetworkAccessLockIp: NetworkAccessLockAPI.seedAllowedNetworkSignatureFromCurrent.bind(NetworkAccessLockAPI),
     isNetworkAccessLockEnabled: NetworkAccessLockAPI.isEnabled.bind(NetworkAccessLockAPI),
     getNetworkAccessLockAllowedIp: NetworkAccessLockAPI.getAllowedNetworkSignature.bind(NetworkAccessLockAPI),
+    getNetworkAccessLockStatusDetails: NetworkAccessLockAPI.getStatusDetails.bind(NetworkAccessLockAPI),
+    describeNetworkAccessLockSignature: NetworkAccessLockAPI.describeNetworkSignature.bind(NetworkAccessLockAPI),
     clearNetworkAccessLockIp: NetworkAccessLockAPI.clearAllowedNetworkSignature.bind(NetworkAccessLockAPI),
 
     // TRP Data Methods
@@ -4901,7 +5103,9 @@ function BBNL_clearAppStatePreservingAuth() {
         hasLoggedInOnce: null,
         bbnl_has_logged_in_once: null,
         fofi_logo_response: null,
-        fofi_logo_raw_path: null
+        fofi_logo_raw_path: null,
+        home_ads_cache_persistent: null,
+        iptv_ads_persistent: {}
     };
 
     try { authSnapshot.bbnl_user = localStorage.getItem('bbnl_user'); } catch (e1) {}
@@ -4911,6 +5115,15 @@ function BBNL_clearAppStatePreservingAuth() {
     // ✅ PRESERVE logo cache (like auth credentials)
     try { authSnapshot.fofi_logo_response = localStorage.getItem('_fofi_logo_response_persistent'); } catch (e9) {}
     try { authSnapshot.fofi_logo_raw_path = localStorage.getItem('home_fofi_logo_raw_path'); } catch (e10) {}
+    try { authSnapshot.home_ads_cache_persistent = localStorage.getItem('home_ads_cache_persistent'); } catch (e12) {}
+    try {
+        for (var lsIdx = 0; lsIdx < localStorage.length; lsIdx++) {
+            var lsKey = localStorage.key(lsIdx);
+            if (lsKey && lsKey.indexOf('_iptv_ads_persistent_') === 0) {
+                authSnapshot.iptv_ads_persistent[lsKey] = localStorage.getItem(lsKey);
+            }
+        }
+    } catch (e13) {}
 
     try { sessionStorage.clear(); } catch (e5) {}
     try { localStorage.clear(); } catch (e6) {}
@@ -4923,6 +5136,15 @@ function BBNL_clearAppStatePreservingAuth() {
         // ✅ Restore logo cache (persists across app exits like auth)
         if (authSnapshot.fofi_logo_response) localStorage.setItem('_fofi_logo_response_persistent', authSnapshot.fofi_logo_response);
         if (authSnapshot.fofi_logo_raw_path) localStorage.setItem('home_fofi_logo_raw_path', authSnapshot.fofi_logo_raw_path);
+        if (authSnapshot.home_ads_cache_persistent) localStorage.setItem('home_ads_cache_persistent', authSnapshot.home_ads_cache_persistent);
+        if (authSnapshot.iptv_ads_persistent) {
+            Object.keys(authSnapshot.iptv_ads_persistent).forEach(function (adKey) {
+                if (authSnapshot.iptv_ads_persistent[adKey]) {
+                    localStorage.setItem(adKey, authSnapshot.iptv_ads_persistent[adKey]);
+                }
+            });
+        }
+        localStorage.setItem('bbnl_force_fofi_autoplay', '1');
     } catch (e7) {}
 
     try { localStorage.removeItem('bbnl_logged_out'); } catch (e8) {}

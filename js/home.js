@@ -330,6 +330,19 @@ var fofiShouldAutoPlay = false;
 
 (function detectFreshLaunch() {
     var fofiPlayed = sessionStorage.getItem('fofi_autoplay_done');
+    var relaunchPending = false;
+    var forceFoFiAutoplay = false;
+    try { relaunchPending = localStorage.getItem('bbnl_relaunch_pending') === '1'; } catch (e) {}
+    try { forceFoFiAutoplay = localStorage.getItem('bbnl_force_fofi_autoplay') === '1'; } catch (eForce) {}
+    if (relaunchPending || forceFoFiAutoplay) {
+        try {
+            sessionStorage.removeItem('fofi_autoplay_done');
+            sessionStorage.removeItem('autoTuneCompleted');
+            sessionStorage.removeItem('home_init_done');
+            localStorage.removeItem('bbnl_force_fofi_autoplay');
+        } catch (eClearLaunchFlags) {}
+        fofiPlayed = null;
+    }
     if (!fofiPlayed) {
         fofiShouldAutoPlay = true;
     } else {
@@ -1686,6 +1699,20 @@ function loadHomeLanguages() {
         }
     } catch (e) {}
 
+    // Fallback for fresh page sessions where login prefetch completed before
+    // navigation but sessionStorage was not restored.
+    try {
+        var persistentLangs = localStorage.getItem('home_languages_cache_persistent');
+        if (persistentLangs) {
+            var persistedLanguages = JSON.parse(persistentLangs);
+            if (persistedLanguages && Array.isArray(persistedLanguages) && persistedLanguages.length > 0) {
+                try { sessionStorage.setItem('home_languages_cache', JSON.stringify(persistedLanguages)); } catch (cacheErr) {}
+                renderLanguagesInHomeGrid(persistedLanguages);
+                return;
+            }
+        }
+    } catch (ePersisted) {}
+
     // Get languages from API
     BBNL_API.getLanguageList()
         .then(function (languages) {
@@ -1694,6 +1721,7 @@ function loadHomeLanguages() {
             if (languages && Array.isArray(languages) && languages.length > 0) {
                 // Cache in sessionStorage
                 try { sessionStorage.setItem('home_languages_cache', JSON.stringify(languages)); } catch (e) {}
+                try { localStorage.setItem('home_languages_cache_persistent', JSON.stringify(languages)); } catch (ePersist) {}
                 renderLanguagesInHomeGrid(languages);
             } else {
                 renderEmptyLanguagesState();
@@ -2391,6 +2419,53 @@ document.addEventListener('DOMContentLoaded', function () {
 
 var appLockActive = false;
 
+function getAppLockNetworkStatusDetails(forceRefresh) {
+    if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.getNetworkAccessLockStatusDetails === 'function') {
+        return BBNL_API.getNetworkAccessLockStatusDetails({ refresh: !!forceRefresh, timeoutMs: 3000 });
+    }
+    if (typeof NetworkAccessLockAPI !== 'undefined' && typeof NetworkAccessLockAPI.getStatusDetails === 'function') {
+        return NetworkAccessLockAPI.getStatusDetails({ refresh: !!forceRefresh, timeoutMs: 3000 });
+    }
+    return Promise.resolve(null);
+}
+
+function updateAppLockNetworkStatus(forceRefresh) {
+    var statusBox = document.getElementById('appLockNetworkStatus');
+    var previousEl = document.getElementById('appLockPreviousNetwork');
+    var currentEl = document.getElementById('appLockCurrentNetwork');
+    var noteEl = document.getElementById('appLockNetworkStatusNote');
+
+    if (statusBox) statusBox.style.display = 'block';
+    if (previousEl) previousEl.textContent = 'Checking...';
+    if (currentEl) currentEl.textContent = 'Checking...';
+    if (noteEl) noteEl.textContent = 'Checking network status...';
+
+    return getAppLockNetworkStatusDetails(forceRefresh)
+        .then(function (details) {
+            if (!details) {
+                if (previousEl) previousEl.textContent = 'Not available';
+                if (currentEl) currentEl.textContent = 'Not available';
+                if (noteEl) noteEl.textContent = 'Network status is not available on this device.';
+                return null;
+            }
+
+            if (previousEl) previousEl.textContent = details.previous && details.previous.label ? details.previous.label : 'Not available';
+            if (currentEl) currentEl.textContent = details.current && details.current.label ? details.current.label : 'Not available';
+            if (noteEl) {
+                noteEl.textContent = details.locked
+                    ? 'Current network does not match the previous BBNL network.'
+                    : 'Current network matches the previous BBNL network.';
+            }
+            return details;
+        })
+        .catch(function () {
+            if (previousEl) previousEl.textContent = 'Not available';
+            if (currentEl) currentEl.textContent = 'Not available';
+            if (noteEl) noteEl.textContent = 'Unable to read network status. Please try again.';
+            return null;
+        });
+}
+
 function getNetworkLockOverlayTitle() {
     return 'Network Changed';
 }
@@ -2599,6 +2674,7 @@ function hideAppLockScreen() {
  * Retry app lock check (triggered by button or BACK key)
  */
 function retryAppLockCheck() {
+    updateAppLockNetworkStatus(true);
     checkAppLockStatus(true);
 }
 
@@ -2951,6 +3027,12 @@ function autoTuneDefaultChannel() {
 
             if (defaultChannel) {
                 sessionStorage.setItem('autoTuneCompleted', 'true');
+                try {
+                    sessionStorage.setItem('bbnl_player_use_first_launch_sidebar', '1');
+                    sessionStorage.removeItem('selectedLanguageId');
+                    sessionStorage.removeItem('selectedLanguageName');
+                    sessionStorage.removeItem('player_menubar_open');
+                } catch (eDefaultSidebar) {}
                 BBNL_API.playChannel(defaultChannel);
             } else {
                 sessionStorage.setItem('autoTuneCompleted', 'true');
@@ -3085,7 +3167,13 @@ function playFoFiChannel() {
             // NO FALLBACK: Only play FoFi channel, never fall back to other channels
             if (fofiChannel) {
                 // Play FoFi channel on app launch - NO subscription restriction for FoFi
-                try { sessionStorage.setItem('fofi_autoplay_done', 'true'); } catch (e) {}
+                try {
+                    sessionStorage.setItem('fofi_autoplay_done', 'true');
+                    sessionStorage.setItem('bbnl_player_use_first_launch_sidebar', '1');
+                    sessionStorage.removeItem('selectedLanguageId');
+                    sessionStorage.removeItem('selectedLanguageName');
+                    sessionStorage.removeItem('player_menubar_open');
+                } catch (e) {}
                 BBNL_API.playChannel(fofiChannel);
             } else {
                 try { sessionStorage.setItem('fofi_autoplay_done', 'true'); } catch (e) {}
