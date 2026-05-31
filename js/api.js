@@ -235,9 +235,30 @@ function getImagePlaceholderUrl() {
     return '';
 }
 
+function getPopupImageFallbackUrl(key) {
+    var normalizedKey = String(key || '').toUpperCase();
+    var color = '#10b981';
+    var iconPath = '<path d="M12 2 3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4z"/><path d="M9 12l2 2 4-5"/>';
+
+    if (normalizedKey.indexOf('LOCK') !== -1 || normalizedKey.indexOf('LOGIN') !== -1 || normalizedKey.indexOf('SUBSCRIPTION') !== -1) {
+        color = '#ff6b6b';
+        iconPath = '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>';
+    } else if (normalizedKey.indexOf('NETWORK') !== -1 || normalizedKey.indexOf('INTERNET') !== -1 || normalizedKey.indexOf('SIGNAL') !== -1 || normalizedKey.indexOf('PLAYBACK') !== -1) {
+        color = '#f5a623';
+        iconPath = '<path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5 12a10 10 0 0 1 14 0"/><path d="M8.5 15.2a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.5"/>';
+    } else if (normalizedKey.indexOf('CHANNEL') !== -1) {
+        color = '#60a5fa';
+        iconPath = '<rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 18v2"/>';
+    }
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)"/>' + iconPath + '</svg>';
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
 function _isMalformedImageUrl(url) {
     var val = String(url || '').trim();
     if (!val) return true;
+    if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);/i.test(val)) return false;
     if (/^(javascript|vbscript):/i.test(val)) return true;
     if (/^[a-z]+:/i.test(val) && !/^https?:/i.test(val)) return true;
     return false;
@@ -249,6 +270,10 @@ function getValidatedImageUrl(rawUrl) {
     }
 
     var original = String(rawUrl || '').trim();
+    if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);/i.test(original)) {
+        return original;
+    }
+
     var resolved = resolveAssetUrl(original);
     if (_isMalformedImageUrl(resolved)) {
         return '';
@@ -426,12 +451,34 @@ function setImageSource(imgEl, rawUrl, options) {
     var finalUrl = freshUrl || '';
 
     if (!imgEl) return finalUrl;
+    options = options || {};
+    var fallbackUrl = options.fallbackUrl || imgEl.getAttribute('data-fallback-src') || '';
+    if (!fallbackUrl && imgEl.id && String(imgEl.id).indexOf('errorImg_') === 0) {
+        fallbackUrl = getPopupImageFallbackUrl(imgEl.id);
+    }
 
     // Check if this URL is known to have failed before.
     var isKnownFailed = _imageFailedUrls[finalUrl];
     var retryAllowed = _isRetryCooldownPassed(finalUrl);
 
     var prevOnError = imgEl.onerror;
+
+    function applyFallback() {
+        if (!fallbackUrl) return false;
+        var validatedFallback = getValidatedImageUrl(fallbackUrl) || fallbackUrl;
+        if (!validatedFallback || validatedFallback === imgEl.src) return false;
+        imgEl.onerror = null;
+        imgEl.style.display = '';
+        imgEl.src = validatedFallback;
+        return true;
+    }
+
+    function fallbackOrPreviousError(evt) {
+        if (applyFallback()) return;
+        if (typeof prevOnError === 'function') {
+            try { prevOnError.call(imgEl, evt); } catch (e) {}
+        }
+    }
 
     imgEl.onerror = function (evt) {
         // Browser/non-file path quick retry guard: retry up to 2 times before persisting failure.
@@ -449,10 +496,8 @@ function setImageSource(imgEl, rawUrl, options) {
 
         // Record failure in persistent cache after retries are exhausted.
         _recordImageFailure(finalUrl);
-        
-        if (typeof prevOnError === 'function') {
-            try { prevOnError.call(imgEl, evt); } catch (e) {}
-        }
+
+        fallbackOrPreviousError(evt);
     };
 
     if (finalUrl) {
@@ -464,6 +509,7 @@ function setImageSource(imgEl, rawUrl, options) {
 
         // Cooldown active: avoid repeated network retries and show fallback immediately.
         if (isKnownFailed && !retryAllowed) {
+            if (applyFallback()) return finalUrl;
             if (typeof prevOnError === 'function') {
                 try { prevOnError.call(imgEl); } catch (e) {}
             }
@@ -496,7 +542,7 @@ function setImageSource(imgEl, rawUrl, options) {
             var job = {
                 url: finalUrl,
                 el: imgEl,
-                onErr: prevOnError,
+                onErr: fallbackOrPreviousError,
                 options: { retryAttempt: 0 }
             };
             if (options && options.priority) {
@@ -510,6 +556,7 @@ function setImageSource(imgEl, rawUrl, options) {
             imgEl.setAttribute('src', finalUrl);
         }
     } else {
+        if (applyFallback()) return fallbackUrl;
         if (typeof prevOnError === 'function') {
             try { prevOnError.call(imgEl); } catch (e) {}
         }
@@ -2580,6 +2627,7 @@ function _cacheHomeLanguagesForHome(languages) {
 function _cacheHomeChannelsForHome(channels) {
     if (!Array.isArray(channels) || channels.length === 0) return;
     try { sessionStorage.setItem('home_channels_cache', JSON.stringify(channels)); } catch (e1) {}
+    try { localStorage.setItem('home_channels_cache_persistent', JSON.stringify(channels)); } catch (ePersist) {}
 
     var channelImages = [];
     for (var i = 0; i < channels.length && i < 24; i++) {
@@ -3158,6 +3206,11 @@ const ChannelsAPI = {
     },
 
     getChannelData: async function (options = {}) {
+        if (options === true) {
+            options = { forceRefresh: true };
+        }
+        options = options || {};
+
         const user = AuthAPI.getUserData();
         const device = DeviceInfo.getDeviceInfo();
 
@@ -3178,6 +3231,11 @@ const ChannelsAPI = {
         // No background refresh — data stays until explicit logout clears cache.
         // Also check stale cache (ignoreExpiry) for relaunch scenarios.
         // ==========================================
+
+        if (options.forceRefresh === true || options.refresh === true) {
+            try { CacheManager.remove(CacheManager.KEYS.CHANNEL_LIST); } catch (eForceClear) {}
+            try { CacheManager.remove(CacheManager.KEYS.EXPIRING_CHANNELS); } catch (eForceClear2) {}
+        }
 
         var cachedChannels = CacheManager.get(CacheManager.KEYS.CHANNEL_LIST);
 
@@ -4548,7 +4606,32 @@ const ErrorImagesAPI = {
         var cachedUrl = this._cache[key];
         var resolved = getValidatedImageUrl(cachedUrl || "");
         var source = cachedUrl ? "localStorage-cache" : "empty";
-        return resolved;
+        if (resolved && _imageFailedUrls[resolved] && !_isRetryCooldownPassed(resolved)) {
+            return getPopupImageFallbackUrl(key);
+        }
+        return resolved || getPopupImageFallbackUrl(key);
+    },
+
+    getFallbackImageUrl: function (key) {
+        return getPopupImageFallbackUrl(key);
+    },
+
+    setImageElement: function (imgEl, key, options) {
+        if (!imgEl) return '';
+        var opts = options || {};
+        opts.fallbackUrl = opts.fallbackUrl || getPopupImageFallbackUrl(key);
+        var url = this.getImageUrl(key);
+        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+            return BBNL_API.setImageSource(imgEl, url, opts);
+        }
+        imgEl.onerror = function () {
+            imgEl.onerror = null;
+            imgEl.style.display = '';
+            imgEl.src = opts.fallbackUrl;
+        };
+        imgEl.style.display = '';
+        imgEl.src = url || opts.fallbackUrl;
+        return imgEl.src;
     },
 
     /**
@@ -4672,6 +4755,8 @@ const BBNL_API = {
     // Error Images Methods
     errorImages: ErrorImagesAPI,
     getErrorImageUrl: ErrorImagesAPI.getImageUrl.bind(ErrorImagesAPI),
+    getErrorImageFallbackUrl: ErrorImagesAPI.getFallbackImageUrl.bind(ErrorImagesAPI),
+    setErrorImageElement: ErrorImagesAPI.setImageElement.bind(ErrorImagesAPI),
     resolveAssetUrl: resolveAssetUrl,
     getValidatedImageUrl: getValidatedImageUrl,
     extractChannelLogoUrl: extractChannelLogoUrl,

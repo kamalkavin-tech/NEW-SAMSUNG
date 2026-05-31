@@ -1561,6 +1561,7 @@ function showAppLockScreen(customMessage) {
 
         overlay.style.display = 'flex';
         appLockActive = true;
+        updateAppLockNetworkStatus(true);
 
         try {
             if (typeof AVPlayer !== 'undefined' && typeof AVPlayer.stop === 'function') {
@@ -1575,18 +1576,18 @@ function showAppLockScreen(customMessage) {
 
         var img = document.getElementById('errorImg_serviceLocked');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'));
+            if (typeof ErrorImagesAPI.setImageElement === 'function') {
+                ErrorImagesAPI.setImageElement(img, 'SERVICE_LOCKED', { priority: true });
+            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'), {
+                    priority: true,
+                    fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl('SERVICE_LOCKED') : ''
+                });
             } else {
                 img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
             }
         }
 
-        var retryBtn = document.getElementById('appLockRetryBtn');
-        if (retryBtn) {
-            retryBtn.focus();
-            retryBtn.onclick = retryAppLockCheck;
-        }
     }
 }
 
@@ -1614,8 +1615,9 @@ function hideAppLockScreen() {
 }
 
 function retryAppLockCheck() {
-    updateAppLockNetworkStatus(true);
-    checkAppLockStatus(true);
+    updateAppLockNetworkStatus(true).then(function () {
+        checkAppLockStatus(true);
+    });
 }
 
 // The canonical implementation of startPlayerNetworkWatchdog
@@ -1920,10 +1922,21 @@ function showPlayerErrorPopup(title, message) {
                     img.style.display = '';
                 };
                 img.onerror = function () {
-                    img.style.display = 'none';
+                    if (ErrorImagesAPI.getFallbackImageUrl) {
+                        img.onerror = null;
+                        img.style.display = '';
+                        img.src = ErrorImagesAPI.getFallbackImageUrl(key);
+                    } else {
+                        img.style.display = 'none';
+                    }
                 };
-                if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                    BBNL_API.setImageSource(img, imgUrl);
+                if (typeof ErrorImagesAPI.setImageElement === 'function') {
+                    ErrorImagesAPI.setImageElement(img, key, { priority: true });
+                } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, imgUrl, {
+                        priority: true,
+                        fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl(key) : ''
+                    });
                 } else {
                     img.src = imgUrl;
                 }
@@ -4298,6 +4311,9 @@ var _lastSelectedCategoryIndex = -1; // -1 means flat list (All/Subscribed), 0+ 
 var _hasExplicitPreferredLanguage = false;
 
 var _sidebarChannelsHydrationPromise = null;
+var _sidebarMenuDataReadyPromise = null;
+var _sidebarMenuDataPreparedOnce = false;
+var _sidebarOpenRequestToken = 0;
 var _sidebarFilteredChannelsCache = {};
 var _sidebarBuiltCategoriesCache = {};
 
@@ -4922,6 +4938,60 @@ function isAllSidebarContext() {
     return String(lang.code || '').toLowerCase() === 'all';
 }
 
+function isSidebarMenuDataReadyForOpen() {
+    return !!(
+        sidebarState &&
+        Array.isArray(sidebarState.allChannelsCache) &&
+        sidebarState.allChannelsCache.length > 0 &&
+        Array.isArray(sidebarState.languages) &&
+        sidebarState.languages.length > 2 &&
+        Array.isArray(sidebarState.apiCategories) &&
+        sidebarState.apiCategories.length > 0
+    );
+}
+
+function ensureSidebarMenuDataReadyForOpen() {
+    if (_sidebarMenuDataPreparedOnce && isSidebarMenuDataReadyForOpen()) {
+        return Promise.resolve(true);
+    }
+
+    if (_sidebarMenuDataReadyPromise) return _sidebarMenuDataReadyPromise;
+
+    _sidebarMenuDataReadyPromise = Promise.resolve()
+        .then(function () {
+            return hydrateSidebarAllChannelsCache();
+        })
+        .then(function () {
+            return loadLanguagesFromChannels();
+        })
+        .then(function () {
+            return loadSidebarCategoriesFromApi();
+        })
+        .then(function () {
+            ensureSidebarAllChannelsCache();
+            applyPreferredSidebarLanguage();
+            buildCategoriesForLanguage();
+            _sidebarMenuDataPreparedOnce = true;
+            return true;
+        })
+        .catch(function () {
+            ensureSidebarAllChannelsCache();
+            applyPreferredSidebarLanguage();
+            buildCategoriesForLanguage();
+            _sidebarMenuDataPreparedOnce = true;
+            return false;
+        })
+        .then(function (result) {
+            _sidebarMenuDataReadyPromise = null;
+            return result;
+        }, function (err) {
+            _sidebarMenuDataReadyPromise = null;
+            throw err;
+        });
+
+    return _sidebarMenuDataReadyPromise;
+}
+
 function findSidebarLanguageIndexByCode(targetCode) {
     if (!Array.isArray(sidebarState.languages) || !targetCode) return -1;
     var normalizedTarget = String(targetCode).trim().toLowerCase();
@@ -5075,9 +5145,8 @@ function buildCategoriesForLanguage() {
     var categoriesSection = document.getElementById('sidebarCategoriesSection');
     var channelsSection = document.getElementById('sidebarChannelsSection');
 
-    // "All Channels" stays as a flat list (no category grouping). Subscribed
-    // Channels now groups its subscribed-only channel list into categories so
-    // the tab visually matches how language tabs render — explicit user request.
+    // All Channels is intentionally a flat list. Only specific language and
+    // subscribed tabs show API category/subcategory rows.
     if (currentLang && currentLang.code === 'all') {
         sidebarState.categories = [];
         sidebarState.categoryIndex = 0;
@@ -5085,12 +5154,6 @@ function buildCategoriesForLanguage() {
         sidebarState.channels = filteredChannels.slice();
         if (isAllSidebarContext() || isSubscribedSidebarContext()) applySidebarChannelSort();
 
-        // FIX (All Channels / Subscribed reopen focus): always align to the
-        // currently-playing channel, not to whatever row the user last scrolled
-        // to. Category-grouped tabs already get this via the
-        // getCurrentPlayingCategoryIndex block in openSidebar — that path is
-        // skipped here because categories.length is 0 in flat-list mode, so
-        // we do the equivalent search inline.
         var _flatPlayingIdx = findCurrentChannelInSidebar();
         if (_flatPlayingIdx >= 0) {
             sidebarState.channelIndex = _flatPlayingIdx;
@@ -5105,13 +5168,9 @@ function buildCategoriesForLanguage() {
         renderCategoriesList();
         renderChannelsList();
 
-        // CRITICAL: For sticky-tab modes, explicitly set focus to the first valid channel
-        // This prevents focus from getting stuck or defaulting to an unresponsive element
         if (sidebarState.channels && sidebarState.channels.length > 0 && sidebarState.isOpen) {
             setTimeout(function () {
                 if (sidebarState.isOpen) {
-                    // Re-resolve playing channel here too, in case state shifted
-                    // between sync and async render (e.g. CH+/CH- mid-render).
                     var _flatPlayingIdx2 = findCurrentChannelInSidebar();
                     if (_flatPlayingIdx2 >= 0) {
                         sidebarState.channelIndex = _flatPlayingIdx2;
@@ -5172,7 +5231,11 @@ function buildCategoriesForLanguage() {
 
                 var grid = getApiCategoryGrid(cat);
                 var normalizedName = normalizeCategoryName(name);
-                var count = grid ? (countByGrid[grid] || 0) : (countByNameNormalized[normalizedName] || 0);
+                var count = grid ? (countByGrid[grid] || 0) : 0;
+                if (count <= 0) count = countByNameNormalized[normalizedName] || 0;
+                if (count <= 0) {
+                    count = Number(cat.count || cat.channel_count || cat.channelCount || cat.total || cat.chcount || 0);
+                }
                 if (count <= 0) return;
 
                 if (!byName[lower]) {
@@ -6225,6 +6288,15 @@ function toggleSidebar() {
 function openSidebar() {
     var sidebar = document.getElementById('playerSidebar');
     if (!sidebar) return;
+
+    if (!_sidebarMenuDataPreparedOnce) {
+        var openToken = ++_sidebarOpenRequestToken;
+        ensureSidebarMenuDataReadyForOpen().then(function () {
+            if (openToken !== _sidebarOpenRequestToken) return;
+            openSidebar();
+        });
+        return;
+    }
 
     var hasSidebarCache = ensureSidebarAllChannelsCache();
 

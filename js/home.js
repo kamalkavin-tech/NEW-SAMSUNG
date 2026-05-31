@@ -513,8 +513,14 @@ function handlePostPaymentSubscriptionRefresh() {
     });
 }
 
-// Initialize on page load
-window.onload = function () {
+// Initialize on page load. Samsung TV can delay window.onload while images
+// finish, so DOMContentLoaded also starts this through a guarded fallback.
+var _homeRuntimeStartupStarted = false;
+
+function startHomeRuntimeStartup() {
+    if (_homeRuntimeStartupStarted || _homePageInitialized) return;
+    _homeRuntimeStartupStarted = true;
+
     // ✅ FIX ISSUE #1: Check if user just returned from payment
     var checkPaymentFlag = false;
     try {
@@ -544,7 +550,10 @@ window.onload = function () {
     runInitializeHomePage();
 }
 
+window.onload = startHomeRuntimeStartup;
+
 function runInitializeHomePage() {
+    if (_homePageInitialized) return;
 
     if (typeof AppPerformanceCache !== 'undefined' && AppPerformanceCache.primeAfterLogin) {
         AppPerformanceCache.primeAfterLogin(false);
@@ -554,28 +563,12 @@ function runInitializeHomePage() {
     if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.startBackgroundRefresh) {
         ChannelsAPI.startBackgroundRefresh();
     }
-    // Also trigger one immediate safe refresh on app launch so relaunch picks up
-    // subscription/category updates without waiting for the interval tick.
-    // After fresh data lands, invalidate the derived sessionStorage caches
-    // and re-render the home channel grid + language tiles so the new
-    // subscription state is visible without needing another relaunch.
+    // Defer heavy forced refresh until after first paint so Home appears instantly.
+    // Subscription changes are still handled by the post-payment path above.
     if (typeof ChannelsAPI !== 'undefined' && ChannelsAPI.forceSubscriptionRefresh) {
-        ChannelsAPI.forceSubscriptionRefresh().then(function () {
-            try {
-                if (typeof BBNLSubscriptionSync !== 'undefined' && BBNLSubscriptionSync.clearChannelDerivedCaches) {
-                    BBNLSubscriptionSync.clearChannelDerivedCaches();
-                } else {
-                    sessionStorage.removeItem('home_channels_cache');
-                    sessionStorage.removeItem('home_languages_cache');
-                }
-            } catch (eClr) {}
-            if (typeof loadHomeChannels === 'function') {
-                try { loadHomeChannels(); } catch (eLh) {}
-            }
-            if (typeof loadHomeLanguages === 'function') {
-                try { loadHomeLanguages(); } catch (eLl) {}
-            }
-        }).catch(function () {});
+        setTimeout(function () {
+            ChannelsAPI.forceSubscriptionRefresh().catch(function () {});
+        }, 7000);
     }
 
     // Get all focusable elements
@@ -1512,6 +1505,20 @@ function loadHomeChannels() {
         }
     } catch (e) {}
 
+    // Fallback cache for fresh app relaunch where sessionStorage is empty.
+    try {
+        var persistentChannels = localStorage.getItem('home_channels_cache_persistent');
+        if (persistentChannels) {
+            var persistedChannelList = JSON.parse(persistentChannels);
+            if (persistedChannelList && Array.isArray(persistedChannelList) && persistedChannelList.length > 0) {
+                try { sessionStorage.setItem('home_channels_cache', JSON.stringify(persistedChannelList)); } catch (cacheErr) {}
+                var persistedFirstThree = persistedChannelList.slice(0, 3);
+                renderChannelsInHomeGrid(persistedFirstThree);
+                return;
+            }
+        }
+    } catch (ePersisted) {}
+
     // Get channels from API
     BBNL_API.getChannelList()
         .then(function (channels) {
@@ -1520,6 +1527,7 @@ function loadHomeChannels() {
             if (channels && Array.isArray(channels) && channels.length > 0) {
                 // Cache in sessionStorage
                 try { sessionStorage.setItem('home_channels_cache', JSON.stringify(channels)); } catch (e) {}
+                try { localStorage.setItem('home_channels_cache_persistent', JSON.stringify(channels)); } catch (ePersist) {}
                 // Take first 3 channels (+ View All = 4 cards total)
                 var firstThreeChannels = channels.slice(0, 3);
                 renderChannelsInHomeGrid(firstThreeChannels);
@@ -2397,9 +2405,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (exitYesBtn) exitYesBtn.addEventListener('click', confirmExit);
     if (exitNoBtn) exitNoBtn.addEventListener('click', cancelExit);
 
-    var appLockRetryBtn = document.getElementById('appLockRetryBtn');
-    if (appLockRetryBtn) appLockRetryBtn.addEventListener('click', retryAppLockCheck);
-
     var appUpdateOkBtn = document.getElementById('appUpdateOkBtn');
     if (appUpdateOkBtn) {
         appUpdateOkBtn.addEventListener('click', function () {
@@ -2485,19 +2490,22 @@ function showNetworkLockScreen() {
     if (titleEl) titleEl.innerText = getNetworkLockOverlayTitle();
     if (messageEl) messageEl.innerHTML = getNetworkLockOverlayMessage();
     if (img) {
-        var imageUrl = 'images/error-network.png';
-        if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-            BBNL_API.setImageSource(img, imageUrl);
+        if (typeof ErrorImagesAPI !== 'undefined' && typeof ErrorImagesAPI.setImageElement === 'function') {
+            ErrorImagesAPI.setImageElement(img, 'NO_INTERNET_CONNECTION', { priority: true });
         } else {
-            img.src = imageUrl;
+            var imageUrl = 'images/error-network.png';
+            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, imageUrl);
+            } else {
+                img.src = imageUrl;
+            }
         }
     }
 
     overlay.style.display = 'flex';
     appLockActive = true;
+    updateAppLockNetworkStatus(true);
 
-    var retryBtn = document.getElementById('appLockRetryBtn');
-    if (retryBtn) retryBtn.focus();
 }
 
 function checkNetworkAccessLockStatus(forceRefresh) {
@@ -2629,6 +2637,7 @@ function showAppLockScreen(customMessage) {
 
         overlay.style.display = 'flex';
         appLockActive = true;
+        updateAppLockNetworkStatus(true);
 
         // Stop any background playback since the app is locked
         try {
@@ -2645,16 +2654,17 @@ function showAppLockScreen(customMessage) {
         // Set error image from API
         var img = document.getElementById('errorImg_serviceLocked');
         if (img && typeof ErrorImagesAPI !== 'undefined') {
-            if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'));
+            if (typeof ErrorImagesAPI.setImageElement === 'function') {
+                ErrorImagesAPI.setImageElement(img, 'SERVICE_LOCKED', { priority: true });
+            } else if (typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('SERVICE_LOCKED'), {
+                    priority: true,
+                    fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl('SERVICE_LOCKED') : ''
+                });
             } else {
                 img.src = ErrorImagesAPI.getImageUrl('SERVICE_LOCKED');
             }
         }
-
-        // Focus on retry button
-        var retryBtn = document.getElementById('appLockRetryBtn');
-        if (retryBtn) retryBtn.focus();
 
     }
 }
@@ -2674,8 +2684,9 @@ function hideAppLockScreen() {
  * Retry app lock check (triggered by button or BACK key)
  */
 function retryAppLockCheck() {
-    updateAppLockNetworkStatus(true);
-    checkAppLockStatus(true);
+    updateAppLockNetworkStatus(true).then(function () {
+        checkAppLockStatus(true);
+    });
 }
 
 // ==========================================
@@ -2758,22 +2769,37 @@ function showHomeErrorPopup(type) {
         if (typeof ErrorImagesAPI !== 'undefined') {
             if (type === 'failedLoad') {
                 var img = document.getElementById('errorImg_failedLoad');
-                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION'));
+                if (img && typeof ErrorImagesAPI.setImageElement === 'function') {
+                    ErrorImagesAPI.setImageElement(img, 'NO_INTERNET_CONNECTION', { priority: true });
+                } else if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION'), {
+                        priority: true,
+                        fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl('NO_INTERNET_CONNECTION') : ''
+                    });
                 } else if (img) {
                     img.src = ErrorImagesAPI.getImageUrl('NO_INTERNET_CONNECTION');
                 }
             } else if (type === 'loginRequired') {
                 var img = document.getElementById('errorImg_loginRequired');
-                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED'));
+                if (img && typeof ErrorImagesAPI.setImageElement === 'function') {
+                    ErrorImagesAPI.setImageElement(img, 'LOGIN_REQUIRED', { priority: true });
+                } else if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED'), {
+                        priority: true,
+                        fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl('LOGIN_REQUIRED') : ''
+                    });
                 } else if (img) {
                     img.src = ErrorImagesAPI.getImageUrl('LOGIN_REQUIRED');
                 }
             } else if (type === 'noChannels') {
                 var img = document.getElementById('errorImg_noChannels');
-                if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
-                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE'));
+                if (img && typeof ErrorImagesAPI.setImageElement === 'function') {
+                    ErrorImagesAPI.setImageElement(img, 'NO_CHANNELS_AVAILABLE', { priority: true });
+                } else if (img && typeof BBNL_API !== 'undefined' && BBNL_API.setImageSource) {
+                    BBNL_API.setImageSource(img, ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE'), {
+                        priority: true,
+                        fallbackUrl: ErrorImagesAPI.getFallbackImageUrl ? ErrorImagesAPI.getFallbackImageUrl('NO_CHANNELS_AVAILABLE') : ''
+                    });
                 } else if (img) {
                     img.src = ErrorImagesAPI.getImageUrl('NO_CHANNELS_AVAILABLE');
                 }
@@ -2811,6 +2837,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize UI features immediately
     initDarkMode();
     initNetworkStatus();
+
+    // Start runtime startup immediately so focus/remote/navigation are ready at first paint.
+    try { startHomeRuntimeStartup(); } catch (eStartupFallback) {}
 
     // ✅ NEW: Recover failed images from previous sessions
     // If images disappeared after app restart, retry them now

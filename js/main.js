@@ -890,14 +890,12 @@ function handleOK() {
                 // Ensure backup is also set immediately via setSession logic
                 // No manual backup needed here as AuthAPI.setSession already manages it properly
                 window.__BBNL_NAVIGATING = true;
-                var homePrefetch = (typeof BBNL_API !== 'undefined' && typeof BBNL_API.prefetchHomeAssetsAfterLogin === 'function')
-                    ? BBNL_API.prefetchHomeAssetsAfterLogin({ wait: true, timeoutMs: 4500 })
-                    : Promise.resolve(false);
-                homePrefetch.then(function () {
-                    window.location.replace("home.html");
-                }).catch(function () {
-                    window.location.replace("home.html");
-                });
+                // Navigate immediately for instant first paint on Home.
+                // Keep asset prefetch in the background so it does not block navigation.
+                if (typeof BBNL_API !== 'undefined' && typeof BBNL_API.prefetchHomeAssetsAfterLogin === 'function') {
+                    BBNL_API.prefetchHomeAssetsAfterLogin({ wait: false }).catch(function () {});
+                }
+                window.location.replace("home.html");
             } else {
                 otpVerifyInProgress = false;
                 btn.innerText = "Verify";
