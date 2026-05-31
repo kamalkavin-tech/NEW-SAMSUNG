@@ -1335,6 +1335,29 @@ body.light-mode .exit-btn-yes {
     line-height: 1.35;
 }
 
+.applock-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 36px;
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+    color: #000;
+    border: none;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+    min-height: 52px;
+}
+
+.applock-btn:hover,
+.applock-btn:focus {
+    border: 2px solid #FFFFFF;
+    box-shadow: none;
+    outline: none;
+}
+
 .applock-right {
     display: flex;
     align-items: center;
